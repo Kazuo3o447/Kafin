@@ -5,7 +5,11 @@
   - ✅ Finnhub Modul
   - ✅ FMP Modul
   - ✅ FRED Modul
-- [ ] **PHASE 2 - Audit-Report-Pipeline**
+- [x] **PHASE 2 - Audit-Report-Pipeline**
+  - ✅ Watchlist-Management
+  - ✅ Scoring-Engine (Opportunity/Torpedo)
+  - ✅ Report-Generator (DeepSeek Prompting)
+  - ✅ E-Mail Versand
 - [ ] **PHASE 3 - News-Pipeline & Alerts**
 - [ ] **PHASE 3b - Bitcoin-Modul**
 - [ ] **PHASE 4 - Feedback-Loop**

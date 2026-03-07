@@ -93,4 +93,108 @@ async def api_macro():
     logger.info(f"API Call: macro snapshot")
     return await get_macro_snapshot()
 
+from backend.app.memory.watchlist import (
+    get_watchlist, add_ticker, remove_ticker, update_ticker, get_earnings_this_week
+)
+from pydantic import BaseModel
+from typing import Optional, List
+
+# Watchlist Router
+watchlist_router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
+
+class WatchlistItemCreate(BaseModel):
+    ticker: str
+    company_name: str
+    sector: str
+    notes: Optional[str] = ""
+    cross_signals: Optional[List[str]] = []
+
+class WatchlistItemUpdate(BaseModel):
+    company_name: Optional[str] = None
+    sector: Optional[str] = None
+    notes: Optional[str] = None
+    cross_signals: Optional[List[str]] = None
+
+@watchlist_router.get("")
+async def api_get_watchlist():
+    logger.info("API Call: get-watchlist")
+    return await get_watchlist()
+
+@watchlist_router.post("")
+async def api_add_watchlist_item(item: WatchlistItemCreate):
+    logger.info(f"API Call: add-watchlist-item {item.ticker}")
+    return await add_ticker(
+        item.ticker, item.company_name, item.sector, item.notes, item.cross_signals
+    )
+
+@watchlist_router.get("/earnings-this-week")
+async def api_watchlist_earnings_this_week():
+    logger.info("API Call: watchlist-earnings-this-week")
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    end_of_week = now + timedelta(days=7)
+    from_date = now.strftime("%Y-%m-%d")
+    to_date = end_of_week.strftime("%Y-%m-%d")
+    
+    cal = await get_earnings_calendar(from_date, to_date)
+    wl = await get_watchlist()
+    return await get_earnings_this_week(wl, cal)
+
+@watchlist_router.put("/{ticker}")
+async def api_update_watchlist_item(ticker: str, item: WatchlistItemUpdate):
+    logger.info(f"API Call: update-watchlist-item {ticker}")
+    update_data = {k: v for k, v in item.dict().items() if v is not None}
+    return await update_ticker(ticker, **update_data)
+
+@watchlist_router.delete("/{ticker}")
+async def api_remove_watchlist_item(ticker: str):
+    logger.info(f"API Call: remove-watchlist-item {ticker}")
+    success = await remove_ticker(ticker)
+    if success:
+         return {"status": "success"}
+    return {"status": "error"}
+
+from backend.app.analysis.report_generator import generate_audit_report, generate_sunday_report
+
+# Report Router
+reports_router = APIRouter(prefix="/api/reports", tags=["reports"])
+
+# In-Memory latest report for the mocked endpoint
+_latest_report = ""
+
+@reports_router.post("/generate/{ticker}")
+async def api_generate_report(ticker: str):
+    logger.info(f"API Call: generate-report for {ticker}")
+    global _latest_report
+    report_text = await generate_audit_report(ticker)
+    _latest_report = report_text
+    return {"status": "success", "report": report_text}
+
+@reports_router.post("/generate-sunday")
+async def api_generate_sunday_report():
+    logger.info("API Call: generate-sunday-report")
+    wl = await get_watchlist()
+    tickers = [item["ticker"] for item in wl]
+    
+    global _latest_report
+    report_text = await generate_sunday_report(tickers)
+    _latest_report = report_text
+    
+    # Fire and forget email logic (to be implemented)
+    import asyncio
+    try:
+        from backend.app.alerts.email import send_sunday_report
+        asyncio.create_task(send_sunday_report(report_text))
+    except ImportError:
+        logger.warning("Email module not yet implemented.")
+        
+    return {"status": "success", "report": report_text}
+
+@reports_router.get("/latest")
+async def api_get_latest_report():
+    logger.info("API Call: get-latest-report")
+    return {"report": _latest_report}
+
 app.include_router(data_router)
+app.include_router(watchlist_router)
+app.include_router(reports_router)

@@ -59,7 +59,9 @@ ADMIN_HTML = """
         <div class="max-w-6xl mx-auto flex justify-between items-center">
             <h1 class="text-xl font-bold text-blue-400">Antigravity Admin Panel</h1>
             <div class="flex space-x-1">
-                <button onclick="switchTab('settings')" id="btn-settings" class="tab-btn active px-4 py-2 hover:bg-gray-700 rounded transition">Einstellungen</button>
+                <button onclick="switchTab('reports')" id="btn-reports" class="tab-btn active px-4 py-2 hover:bg-gray-700 rounded transition">Reports</button>
+                <button onclick="switchTab('watchlist')" id="btn-watchlist" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Watchlist</button>
+                <button onclick="switchTab('settings')" id="btn-settings" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Einstellungen</button>
                 <button onclick="switchTab('logs')" id="btn-logs" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Logs</button>
                 <button onclick="switchTab('status')" id="btn-status" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Status</button>
             </div>
@@ -68,8 +70,104 @@ ADMIN_HTML = """
 
     <main class="max-w-6xl mx-auto p-6 mt-4">
         
+        <!-- REPORTS TAB -->
+        <div id="tab-reports" class="tab-content active space-y-8">
+            <section class="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-lg font-semibold text-white">Report Generator</h2>
+                    <button id="btn-sunday-report" onclick="generateSundayReport()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded transition font-medium shadow-lg flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"></path></svg>
+                        Sonntags-Report generieren
+                    </button>
+                </div>
+                
+                <div class="mb-6">
+                    <h3 class="text-sm font-medium text-gray-400 mb-2">Einzelne Audit-Reports (aus Watchlist)</h3>
+                    <div id="report-ticker-list" class="flex flex-wrap gap-2">
+                        <!-- Loaded via JS -->
+                        <span class="text-gray-500 text-sm">Lade Watchlist...</span>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 h-[500px] flex flex-col relative">
+                    <div id="report-status-overlay" class="absolute inset-0 bg-gray-900/80 backdrop-blur-sm hidden flex flex-col items-center justify-center rounded-lg z-10 transition-all">
+                        <svg class="animate-spin w-10 h-10 text-blue-500 mb-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <span id="report-status-text" class="text-white font-medium">Generiere Report...</span>
+                    </div>
+                    
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="text-sm font-medium text-gray-300">Letzter Report Output</h4>
+                        <button onclick="copyReport()" class="text-xs text-blue-400 hover:text-blue-300">In Zwischenablage kopieren</button>
+                    </div>
+                    <textarea id="report-output-area" readonly class="w-full flex-1 bg-black text-gray-300 font-mono text-sm p-4 rounded border border-gray-800 resize-none focus:outline-none"></textarea>
+                </div>
+            </section>
+        </div>
+
+        <!-- WATCHLIST TAB -->
+        <div id="tab-watchlist" class="tab-content space-y-8">
+            <section class="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-white">Watchlist</h2>
+                    <button onclick="loadWatchlist()" class="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-white transition">Aktualisieren</button>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-900 border-b border-gray-700">
+                                <th class="p-3 text-sm font-semibold text-gray-300">Ticker</th>
+                                <th class="p-3 text-sm font-semibold text-gray-300">Name</th>
+                                <th class="p-3 text-sm font-semibold text-gray-300">Sektor</th>
+                                <th class="p-3 text-sm font-semibold text-gray-300">Notizen</th>
+                                <th class="p-3 text-sm font-semibold text-gray-300">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="watchlist-table-body" class="divide-y divide-gray-700">
+                            <!-- Loaded via JS -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <hr class="border-gray-700 my-6">
+                
+                <h3 class="text-md font-medium text-gray-300 mb-3">Ticker hinzufügen</h3>
+                <form id="watchlist-form" class="flex items-end space-x-3">
+                    <div class="w-24">
+                        <label class="block text-xs text-gray-400 mb-1">Ticker</label>
+                        <input type="text" id="wl-ticker" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white uppercase" placeholder="AAPL">
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-xs text-gray-400 mb-1">Company Name</label>
+                        <input type="text" id="wl-name" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white" placeholder="Apple Inc.">
+                    </div>
+                    <div class="w-48">
+                        <label class="block text-xs text-gray-400 mb-1">Sektor</label>
+                        <select id="wl-sector" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white">
+                            <option value="Technology">Technology</option>
+                            <option value="Healthcare">Healthcare</option>
+                            <option value="Financials">Financials</option>
+                            <option value="Consumer Discretionary">Consumer Disc.</option>
+                            <option value="Communication Services">Comm. Services</option>
+                            <option value="Industrials">Industrials</option>
+                            <option value="Consumer Staples">Consumer Staples</option>
+                            <option value="Energy">Energy</option>
+                            <option value="Utilities">Utilities</option>
+                            <option value="Real Estate">Real Estate</option>
+                            <option value="Materials">Materials</option>
+                        </select>
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-xs text-gray-400 mb-1">Notizen</label>
+                        <input type="text" id="wl-notes" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white" placeholder="Optionale Notiz...">
+                    </div>
+                    <button type="button" onclick="addWatchlistItem()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded transition font-medium mb-[1px]">Hinzufügen</button>
+                </form>
+            </section>
+        </div>
+
         <!-- SETTINGS TAB -->
-        <div id="tab-settings" class="tab-content active space-y-8">
+        <div id="tab-settings" class="tab-content space-y-8">
             <section class="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
                 <h2 class="text-lg font-semibold mb-4 text-white">App Einstellungen (settings.yaml)</h2>
                 <form id="settings-form" class="space-y-4">
@@ -209,6 +307,160 @@ ADMIN_HTML = """
             }
             
             if(tabId === 'settings') loadSettings();
+            if(tabId === 'watchlist') loadWatchlist();
+            if(tabId === 'reports') {
+                loadWatchlist(); // For the ticker buttons
+                loadLatestReport();
+            }
+        }
+
+        // --- REPORTS ---
+        async function loadLatestReport() {
+            try {
+                const res = await fetch('/api/reports/latest');
+                const data = await res.json();
+                document.getElementById('report-output-area').value = data.report || "Kein Report im Speicher.";
+            } catch(e) { console.error('Error loading latest report', e); }
+        }
+        
+        async function generateAuditReport(ticker) {
+            const overlay = document.getElementById('report-status-overlay');
+            const statusText = document.getElementById('report-status-text');
+            const output = document.getElementById('report-output-area');
+            
+            overlay.classList.remove('hidden');
+            statusText.textContent = `Generiere Audit-Report für ${ticker}... (kann dauern)`;
+            
+            try {
+                const res = await fetch(`/api/reports/generate/${ticker}`, {method: 'POST'});
+                const data = await res.json();
+                if(res.ok) {
+                    output.value = data.report;
+                    showToast(`Report für ${ticker} fertig!`);
+                } else {
+                    showToast('Fehler bei der Generierung', 'error');
+                }
+            } catch(e) {
+                showToast('Verbindungsfehler', 'error');
+            } finally {
+                overlay.classList.add('hidden');
+            }
+        }
+        
+        async function generateSundayReport() {
+            const overlay = document.getElementById('report-status-overlay');
+            const statusText = document.getElementById('report-status-text');
+            const output = document.getElementById('report-output-area');
+            
+            overlay.classList.remove('hidden');
+            statusText.textContent = `Erstelle Sonntags-Report... (Makro + Watchlist)`;
+            
+            try {
+                const res = await fetch(`/api/reports/generate-sunday`, {method: 'POST'});
+                const data = await res.json();
+                if(res.ok) {
+                    output.value = data.report;
+                    showToast(`Sonntags-Report fertig und per E-Mail versendet!`);
+                } else {
+                    showToast('Fehler bei der Generierung', 'error');
+                }
+            } catch(e) {
+                showToast('Verbindungsfehler', 'error');
+            } finally {
+                overlay.classList.add('hidden');
+            }
+        }
+        
+        function copyReport() {
+            const text = document.getElementById('report-output-area').value;
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('Kopiert!');
+            });
+        }
+
+        // --- WATCHLIST ---
+        async function loadWatchlist() {
+            try {
+                const res = await fetch('/api/watchlist');
+                const data = await res.json();
+                
+                // Update table
+                const tbody = document.getElementById('watchlist-table-body');
+                tbody.innerHTML = '';
+                
+                // Update report buttons
+                const repList = document.getElementById('report-ticker-list');
+                repList.innerHTML = '';
+                
+                if(data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">Watchlist ist leer</td></tr>';
+                    repList.innerHTML = '<span class="text-gray-500 text-sm">Keine Ticker auf der Watchlist.</span>';
+                    return;
+                }
+                
+                data.forEach(item => {
+                    // Populate Table
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-800 transition">
+                            <td class="p-3 font-mono font-medium text-blue-400">${item.ticker}</td>
+                            <td class="p-3 font-medium">${item.company_name}</td>
+                            <td class="p-3 text-sm text-gray-400">${item.sector || '-'}</td>
+                            <td class="p-3 text-sm text-gray-400">${item.notes || '-'}</td>
+                            <td class="p-3 text-sm text-right">
+                                <button onclick="removeWatchlistItem('${item.ticker}')" class="text-red-400 hover:text-red-300 px-2 py-1 bg-red-400/10 hover:bg-red-400/20 rounded transition">Löschen</button>
+                            </td>
+                        </tr>
+                    `;
+                    
+                    // Populate Report Buttons
+                    repList.innerHTML += `
+                        <button onclick="generateAuditReport('${item.ticker}')" class="bg-gray-700 hover:bg-gray-600 text-gray-100 text-sm px-3 py-1.5 rounded transition border border-gray-600">
+                            ${item.ticker}
+                        </button>
+                    `;
+                });
+            } catch(e) { console.error('Error loading watchlist', e); showToast('Fehler beim Laden', 'error'); }
+        }
+        
+        async function addWatchlistItem() {
+            const payload = {
+                ticker: document.getElementById('wl-ticker').value.toUpperCase(),
+                company_name: document.getElementById('wl-name').value,
+                sector: document.getElementById('wl-sector').value,
+                notes: document.getElementById('wl-notes').value
+            };
+            
+            if(!payload.ticker || !payload.company_name) {
+                showToast('Ticker und Name erforderlich', 'error');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/watchlist', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                
+                if(res.ok) {
+                    showToast(`${payload.ticker} hinzugefügt`);
+                    document.getElementById('wl-ticker').value = '';
+                    document.getElementById('wl-name').value = '';
+                    document.getElementById('wl-notes').value = '';
+                    loadWatchlist();
+                } else showToast('Fehler', 'error');
+            } catch(e) { showToast('Fehler', 'error'); }
+        }
+        
+        async function removeWatchlistItem(ticker) {
+            if(!confirm(`${ticker} wirklich löschen?`)) return;
+            try {
+                const res = await fetch(`/api/watchlist/${ticker}`, {method: 'DELETE'});
+                if(res.ok) {
+                    showToast(`${ticker} gelöscht`);
+                    loadWatchlist();
+                } else showToast('Fehler beim Löschen', 'error');
+            } catch(e) { showToast('Fehler', 'error'); }
         }
 
         // Toast Notification
@@ -410,7 +662,8 @@ ADMIN_HTML = """
         }
 
         // Init
-        loadSettings();
+        loadWatchlist();
+        loadLatestReport();
         // prefill status grid with basic info initially
         fetch('/api/status/check', {method: 'POST'}).then(r=>r.json()).then(renderStatusGrid);
     </script>

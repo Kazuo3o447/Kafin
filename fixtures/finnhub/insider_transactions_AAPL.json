@@ -1,0 +1,35 @@
+{
+    "data": [
+        {
+            "name": "COOK TIMOTHY D",
+            "share": -50000,
+            "transactionDate": "2026-02-20",
+            "transactionPrice": 185.50
+        },
+        {
+            "name": "WILLIAMS JEFFREY E",
+            "share": -20000,
+            "transactionDate": "2026-02-15",
+            "transactionPrice": 182.25
+        },
+        {
+            "name": "ADAMS KATHERINE L",
+            "share": 1000,
+            "transactionDate": "2026-02-10",
+            "transactionPrice": 180.00
+        },
+        {
+            "name": "BORED MEMBER A",
+            "share": 500,
+            "transactionDate": "2026-02-05",
+            "transactionPrice": 175.00
+        },
+        {
+            "name": "BORED MEMBER B",
+            "share": 1500,
+            "transactionDate": "2026-02-04",
+            "transactionPrice": 174.50
+        }
+    ],
+    "symbol": "AAPL"
+}

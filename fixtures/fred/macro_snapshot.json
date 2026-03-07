@@ -1,0 +1,9 @@
+{
+    "fed_funds_rate": 5.33,
+    "vix": 14.5,
+    "high_yield_spread": 3.4,
+    "yield_spread_10y_2y": -0.35,
+    "dxy": 103.5,
+    "yield_curve": "inverted",
+    "regime": "Risk On"
+}

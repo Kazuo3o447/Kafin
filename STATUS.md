@@ -2,6 +2,9 @@
 
 ## Projekt-Phasen
 - [x] **PHASE 1 - Daten-Fundament** (Aktuell: Grundgerüst und Admin-Panel implementiert)
+  - ✅ Finnhub Modul
+  - ✅ FMP Modul
+  - ✅ FRED Modul
 - [ ] **PHASE 2 - Audit-Report-Pipeline**
 - [ ] **PHASE 3 - News-Pipeline & Alerts**
 - [ ] **PHASE 3b - Bitcoin-Modul**

@@ -1,3 +1,172 @@
 """
 finnhub — Datenabruf von Finnhub API
 """
+import httpx
+import json
+import os
+import time
+from typing import List
+from datetime import datetime
+
+from backend.app.config import settings
+from backend.app.logger import get_logger
+from backend.app.rate_limiter import rate_limit
+from schemas.earnings import EarningsExpectation
+from schemas.sentiment import NewsBulletPoint, ShortInterestData, InsiderActivity
+
+logger = get_logger(__name__)
+
+FIXTURES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "fixtures", "finnhub")
+
+def load_mock_data(filename: str):
+    path = os.path.join(FIXTURES_DIR, filename)
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+@rate_limit("finnhub")
+async def get_earnings_calendar(from_date: str, to_date: str) -> List[EarningsExpectation]:
+    if settings.use_mock_data:
+        data = load_mock_data("earnings_calendar.json")
+        return [EarningsExpectation(**item) for item in data]
+    
+    url = f"https://finnhub.io/api/v1/calendar/earnings?from={from_date}&to={to_date}&token={settings.finnhub_api_key}"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        data = response.json().get("earningsCalendar", [])
+        return [
+            EarningsExpectation(
+                ticker=item.get("symbol"),
+                date=item.get("date"),
+                eps_estimate=item.get("epsEstimate"),
+                eps_consensus=item.get("epsActual"),
+                revenue_estimate=item.get("revenueEstimate"),
+                revenue_consensus=item.get("revenueActual")
+            ) for item in data if item.get("symbol")
+        ]
+
+@rate_limit("finnhub")
+async def get_company_news(ticker: str, from_date: str, to_date: str) -> List[NewsBulletPoint]:
+    if settings.use_mock_data:
+        try:
+            data = load_mock_data(f"company_news_{ticker}.json")
+            return [NewsBulletPoint(**item) for item in data]
+        except Exception:
+            return []
+            
+    url = f"https://finnhub.io/api/v1/company-news?symbol={ticker}&from={from_date}&to={to_date}&token={settings.finnhub_api_key}"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        data = response.json()
+        return [
+            NewsBulletPoint(
+                headline=item.get("headline"),
+                summary=item.get("summary"),
+                category=item.get("category"),
+                url=item.get("url"),
+                timestamp=datetime.fromtimestamp(item.get("datetime")) if item.get("datetime") else None
+            ) for item in data
+        ]
+
+@rate_limit("finnhub")
+async def get_short_interest(ticker: str) -> ShortInterestData:
+    if settings.use_mock_data:
+        try:
+            data = load_mock_data(f"short_interest_{ticker}.json")
+            return ShortInterestData(**data)
+        except Exception:
+            return ShortInterestData(ticker=ticker, short_interest=0, days_to_cover=0, trend="stable", squeeze_risk="low")
+            
+    url = f"https://finnhub.io/api/v1/stock/short-interest?symbol={ticker}&token={settings.finnhub_api_key}"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        data = response.json()
+        
+        info = data.get("data", [])
+        if not info:
+             return ShortInterestData(ticker=ticker, short_interest=0, days_to_cover=0, trend="stable", squeeze_risk="low")
+
+        latest = info[0]
+        short_interest = latest.get("shortInterest", 0)
+        avg_volume = latest.get("volume", 1)
+        days_to_cover = short_interest / avg_volume if avg_volume > 0 else 0
+        
+        trend = "stable"
+        if len(info) >= 4:
+            if info[0].get("shortInterest", 0) > info[3].get("shortInterest", 0):
+                trend = "increasing"
+            elif info[0].get("shortInterest", 0) < info[3].get("shortInterest", 0):
+                trend = "decreasing"
+                
+        percent_of_float = latest.get("shortPercentOfFloat", 0)
+        if percent_of_float > 20:
+            sq_risk = "high"
+        elif percent_of_float >= 10:
+            sq_risk = "medium"
+        else:
+            sq_risk = "low"
+        
+        return ShortInterestData(
+            ticker=ticker,
+            short_interest=short_interest,
+            days_to_cover=days_to_cover,
+            trend=trend,
+            squeeze_risk=sq_risk
+        )
+
+@rate_limit("finnhub")
+async def get_insider_transactions(ticker: str) -> InsiderActivity:
+    if settings.use_mock_data:
+        try:
+            data = load_mock_data(f"insider_transactions_{ticker}.json")
+            return InsiderActivity(**data)
+        except Exception:
+            return InsiderActivity(ticker=ticker, is_cluster_buy=False, is_cluster_sell=False, buy_volume_90d=0, sell_volume_90d=0)
+            
+    url = f"https://finnhub.io/api/v1/stock/insider-transactions?symbol={ticker}&token={settings.finnhub_api_key}"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        data = response.json()
+        txs = data.get("data", [])
+        
+        now_ts = time.time()
+        days_90_ts = now_ts - (90 * 24 * 3600)
+        
+        buy_vol = 0
+        sell_vol = 0
+        insiders_bought = set()
+        insiders_sold = set()
+        
+        for tx in txs:
+           tx_date_str = tx.get("transactionDate")
+           if tx_date_str:
+               # e.g. "2021-03-01"
+               try:
+                   tx_ts = datetime.strptime(tx_date_str, "%Y-%m-%d").timestamp()
+                   if tx_ts >= days_90_ts:
+                       shares = tx.get("share", 0)
+                       name = tx.get("name")
+                       if shares > 0:
+                           buy_vol += shares
+                           insiders_bought.add(name)
+                       elif shares < 0:
+                           sell_vol += abs(shares)
+                           insiders_sold.add(name)
+               except ValueError:
+                   pass
+                       
+        # 3+ Insider innerhalb der letzten Zeit
+        is_cluster_buy = len(insiders_bought) >= 3
+        is_cluster_sell = len(insiders_sold) >= 3
+        
+        return InsiderActivity(
+             ticker=ticker,
+             is_cluster_buy=is_cluster_buy,
+             is_cluster_sell=is_cluster_sell,
+             buy_volume_90d=buy_vol,
+             sell_volume_90d=sell_vol
+        )
+

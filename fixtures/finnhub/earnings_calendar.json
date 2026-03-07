@@ -1,0 +1,42 @@
+[
+    {
+        "symbol": "AAPL",
+        "date": "2026-04-30",
+        "epsEstimate": 1.55,
+        "epsActual": null,
+        "revenueEstimate": 90500000000,
+        "revenueActual": null
+    },
+    {
+        "symbol": "MSFT",
+        "date": "2026-04-25",
+        "epsEstimate": 2.80,
+        "epsActual": null,
+        "revenueEstimate": 61000000000,
+        "revenueActual": null
+    },
+    {
+        "symbol": "GOOGL",
+        "date": "2026-04-26",
+        "epsEstimate": 1.75,
+        "epsActual": null,
+        "revenueEstimate": 85000000000,
+        "revenueActual": null
+    },
+    {
+        "symbol": "AMZN",
+        "date": "2026-04-28",
+        "epsEstimate": 0.95,
+        "epsActual": null,
+        "revenueEstimate": 145000000000,
+        "revenueActual": null
+    },
+    {
+        "symbol": "NVDA",
+        "date": "2026-05-20",
+        "epsEstimate": 5.50,
+        "epsActual": null,
+        "revenueEstimate": 24000000000,
+        "revenueActual": null
+    }
+]

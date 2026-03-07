@@ -1,0 +1,26 @@
+[
+    {
+        "symbol": "AAPL",
+        "date": "2026-06-30",
+        "estimatedRevenueLow": 80000000000,
+        "estimatedRevenueHigh": 92000000000,
+        "estimatedRevenueAvg": 88000000000,
+        "estimatedEbitdaLow": 25000000000,
+        "estimatedEbitdaHigh": 32000000000,
+        "estimatedEbitdaAvg": 29000000000,
+        "estimatedEbitLow": 23000000000,
+        "estimatedEbitHigh": 30000000000,
+        "estimatedEbitAvg": 27000000000,
+        "estimatedNetIncomeLow": 18000000000,
+        "estimatedNetIncomeHigh": 22000000000,
+        "estimatedNetIncomeAvg": 20000000000,
+        "estimatedSgaExpenseLow": 5000000000,
+        "estimatedSgaExpenseHigh": 6000000000,
+        "estimatedSgaExpenseAvg": 5500000000,
+        "estimatedEpsAvg": 1.65,
+        "estimatedEpsHigh": 1.70,
+        "estimatedEpsLow": 1.50,
+        "numberAnalystEstimatedRevenue": 20,
+        "numberAnalystsEstimatedEps": 22
+    }
+]

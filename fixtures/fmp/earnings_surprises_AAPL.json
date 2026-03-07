@@ -1,0 +1,50 @@
+[
+    {
+        "date": "2026-01-31",
+        "symbol": "AAPL",
+        "actualEarningResult": 2.18,
+        "estimatedEarning": 2.10
+    },
+    {
+        "date": "2025-10-31",
+        "symbol": "AAPL",
+        "actualEarningResult": 1.46,
+        "estimatedEarning": 1.39
+    },
+    {
+        "date": "2025-07-31",
+        "symbol": "AAPL",
+        "actualEarningResult": 1.26,
+        "estimatedEarning": 1.19
+    },
+    {
+        "date": "2025-04-30",
+        "symbol": "AAPL",
+        "actualEarningResult": 1.52,
+        "estimatedEarning": 1.43
+    },
+    {
+        "date": "2025-01-31",
+        "symbol": "AAPL",
+        "actualEarningResult": 1.88,
+        "estimatedEarning": 1.94
+    },
+    {
+        "date": "2024-10-31",
+        "symbol": "AAPL",
+        "actualEarningResult": 1.29,
+        "estimatedEarning": 1.27
+    },
+    {
+        "date": "2024-07-31",
+        "symbol": "AAPL",
+        "actualEarningResult": 1.20,
+        "estimatedEarning": 1.16
+    },
+    {
+        "date": "2024-04-30",
+        "symbol": "AAPL",
+        "actualEarningResult": 1.52,
+        "estimatedEarning": 1.41
+    }
+]

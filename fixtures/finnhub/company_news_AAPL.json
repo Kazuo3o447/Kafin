@@ -1,0 +1,24 @@
+[
+    {
+        "category": "technology",
+        "datetime": 1718000000,
+        "headline": "Apple announces new AI features for iOS",
+        "id": 123456,
+        "image": "https://example.com/image.jpg",
+        "related": "AAPL",
+        "source": "TechCrunch",
+        "summary": "Apple has officially entered the AI race with new features baked into the upcoming iOS release.",
+        "url": "https://example.com/news/1"
+    },
+    {
+        "category": "business",
+        "datetime": 1717900000,
+        "headline": "Apple Sales Grow in Key Markets",
+        "id": 123457,
+        "image": "https://example.com/image2.jpg",
+        "related": "AAPL",
+        "source": "Bloomberg",
+        "summary": "Despite global economic headwinds, Apple saw a resurgence in hardware sales across Asia.",
+        "url": "https://example.com/news/2"
+    }
+]

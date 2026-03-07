@@ -1,0 +1,8 @@
+# Allgemeine App-Einstellungen
+app:
+  name: "Antigravity Trading Platform"
+  env: "dev"
+
+# Feature Flags
+flags:
+  use_mock_data: true # Wenn true: Lade Daten aus fixtures/ statt echte API-Calls

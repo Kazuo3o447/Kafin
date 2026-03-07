@@ -1,0 +1,13 @@
+[
+  {
+    "date": "2026-03-09",
+    "epsActual": 1.25,
+    "epsEstimate": 1.10,
+    "hour": "amc",
+    "quarter": 1,
+    "revenueActual": 500000000,
+    "revenueEstimate": 480000000,
+    "symbol": "AAPL",
+    "year": 2026
+  }
+]

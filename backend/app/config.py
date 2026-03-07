@@ -3,27 +3,29 @@ config — Zentrale Konfiguration der Anwendung
 
 Input:  Environment Variables (.env) und config/settings.yaml
 Output: Settings-Objekt (Pydantic Model)
-Deps:   pydantic_settings, yaml
+Deps:   pydantic_settings, yaml, python-dotenv
 Config: Keine
 API:    Keine
 """
 import os
 import yaml
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 def load_yaml_config(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
-# Optional: Laden der settings.yaml (Fallback auf leeres Dict, falls nicht vorhanden)
-yaml_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "settings.yaml")
-yaml_data = load_yaml_config(yaml_path) if os.path.exists(yaml_path) else {}
+YAML_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "settings.yaml")
+ENV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
 
 class Settings(BaseSettings):
     # App Settings
-    app_name: str = yaml_data.get("app", {}).get("name", "Antigravity")
-    environment: str = yaml_data.get("app", {}).get("env", "dev")
-    use_mock_data: bool = yaml_data.get("flags", {}).get("use_mock_data", False)
+    app_name: str = "Antigravity"
+    environment: str = "development"
+    use_mock_data: bool = False
+    log_level: str = "INFO"
+    report_language: str = "de"
     
     # API Keys (werden via .env überschrieben)
     finnhub_api_key: str = ""
@@ -42,9 +44,19 @@ class Settings(BaseSettings):
     telegram_chat_id: str = ""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_PATH,
         env_file_encoding="utf-8",
         extra="ignore"
     )
+    
+    def reload_from_yaml(self):
+         """Reloads configuration dynamically from YAML"""
+         yaml_data = load_yaml_config(YAML_PATH) if os.path.exists(YAML_PATH) else {}
+         self.environment = yaml_data.get("app", {}).get("env", self.environment)
+         self.app_name = yaml_data.get("app", {}).get("name", self.app_name)
+         self.use_mock_data = yaml_data.get("flags", {}).get("use_mock_data", self.use_mock_data)
+         self.log_level = yaml_data.get("admin", {}).get("log_level", self.log_level)
+         self.report_language = yaml_data.get("admin", {}).get("report_language", self.report_language)
 
 settings = Settings()
+settings.reload_from_yaml()

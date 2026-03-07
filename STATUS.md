@@ -1,7 +1,7 @@
 # STATUS
 
 ## Projekt-Phasen
-- [ ] **PHASE 1 - Daten-Fundament** (Aktuell)
+- [x] **PHASE 1 - Daten-Fundament** (Aktuell: Grundgerüst und Admin-Panel implementiert)
 - [ ] **PHASE 2 - Audit-Report-Pipeline**
 - [ ] **PHASE 3 - News-Pipeline & Alerts**
 - [ ] **PHASE 3b - Bitcoin-Modul**

@@ -16,4 +16,4 @@
 - [ ] **PHASE 5 - Web-Dashboard**
 
 ## Aktuelle Abhängigkeiten / Blocker
-- (Keine) - Wir starten gerade mit Phase 1.
+- (Keine) - Phase 2 ist vollständig integriert. Wir sind bereit für Phase 3 (News-Pipeline).

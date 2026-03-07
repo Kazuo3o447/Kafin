@@ -26,6 +26,13 @@ def _read_prompt(path: str) -> tuple[str, str]:
     return system_prompt, user_prompt
 
 async def generate_macro_header() -> str:
+    """
+    Generiert den wöchentlichen Makro-Lagebericht basierend auf aktuellen FRED-Daten
+    und dem DeepSeek-Modell.
+    
+    Returns:
+        str: Der generierte Markdown-Text für den Makro-Report.
+    """
     logger.info("Generating Macro Header")
     macro = await get_macro_snapshot()
     
@@ -43,6 +50,17 @@ async def generate_macro_header() -> str:
     return result
 
 async def generate_audit_report(ticker: str) -> str:
+    """
+    Generiert einen detaillierten, unternehmensspezifischen Audit-Report,
+    indem Daten aus Finnhub, FMP und eigenen Scores aggregiert und 
+    via DeepSeek im Fließtext formuliert werden.
+    
+    Args:
+        ticker (str): Das zu untersuchende Aktiensymbol.
+        
+    Returns:
+        str: Der voll ausgeschriebene Audit-Report als Markdown.
+    """
     logger.info(f"Generating Audit Report for {ticker}")
     
     # 1. Fetch data
@@ -83,11 +101,11 @@ async def generate_audit_report(ticker: str) -> str:
     
     user_prompt = user_tmpl \
         .replace("{{ticker}}", ticker) \
-        .replace("{{company_name}}", estimates.company_name if hasattr(estimates, "company_name") else ticker) \
-        .replace("{{report_date}}", str(estimates.date)) \
+        .replace("{{company_name}}", getattr(estimates, "company_name", ticker)) \
+        .replace("{{report_date}}", str(getattr(estimates, "date", "Unknown"))) \
         .replace("{{report_timing}}", "Unknown") \
-        .replace("{{eps_consensus}}", str(estimates.eps_consensus)) \
-        .replace("{{revenue_consensus}}", str(estimates.revenue_consensus)) \
+        .replace("{{eps_consensus}}", str(getattr(estimates, "eps_consensus", "0.0"))) \
+        .replace("{{revenue_consensus}}", str(getattr(estimates, "revenue_consensus", "0.0"))) \
         .replace("{{quarters_beat}}", str(history.quarters_beat)) \
         .replace("{{total_quarters}}", str(history.quarters_beat + history.quarters_missed)) \
         .replace("{{avg_surprise}}", str(history.avg_surprise_percent)) \
@@ -131,6 +149,16 @@ async def generate_audit_report(ticker: str) -> str:
     return result
 
 async def generate_sunday_report(tickers: list[str]) -> str:
+    """
+    Erstellt den wöchentlichen kompletten Sunday-Report, der den 
+    Makro-Header sowie die Audit-Reports der abgefragten Ticker aggregiert.
+    
+    Args:
+        tickers (list[str]): Eine Liste von Tickern, die im Report enthalten sein sollen.
+        
+    Returns:
+        str: Der Gesamtbericht als zusammenhängender Markdown-Text.
+    """
     logger.info(f"Generating Sunday Report for {len(tickers)} tickers")
     
     header = await generate_macro_header()

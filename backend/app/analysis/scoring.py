@@ -12,6 +12,16 @@ def _load_weights() -> dict:
         return yaml.safe_load(f)["weights"]
 
 async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunityScore:
+    """
+    Berechnet den Opportunity-Score basierend auf positiven Katalysatoren.
+    
+    Args:
+        ticker (str): Das Tickersymbol der Aktie.
+        data (dict): Das gesammelte Daten-Dictionary (Earnings, Valuation, Short Interest, etc.).
+        
+    Returns:
+        OpportunityScore: Ein Pydantic Model mit dem Total Score und den einzelnen Faktoren.
+    """
     weights = _load_weights()["opportunity"]
     factors = {}
     
@@ -75,11 +85,21 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     # options_flow
     factors["options_flow"] = 5.0
 
-    total_score = sum(factors[k] * weights.get(k, 0) for k in factors)
+    total_score = float(sum(factors[k] * weights.get(k, 0) for k in factors))
     
     return OpportunityScore(total_score=round(total_score, 2), factors=factors)
 
 async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
+    """
+    Berechnet den Torpedo-Score basierend auf negativen Risikofaktoren.
+    
+    Args:
+        ticker (str): Das Tickersymbol der Aktie.
+        data (dict): Das gesammelte Daten-Dictionary (Valuation, Insider, Macro, etc.).
+        
+    Returns:
+        TorpedoScore: Ein Pydantic Model mit dem Total Score und den einzelnen Faktoren.
+    """
     weights = _load_weights()["torpedo"]
     factors = {}
     
@@ -122,11 +142,21 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
     else: mh = 5.0
     factors["macro_headwinds"] = mh
 
-    total_score = sum(factors[k] * weights.get(k, 0) for k in factors)
+    total_score = float(sum(factors[k] * weights.get(k, 0) for k in factors))
     
     return TorpedoScore(total_score=round(total_score, 2), factors=factors)
 
 async def get_recommendation(opportunity: OpportunityScore, torpedo: TorpedoScore) -> AuditRecommendation:
+    """
+    Kombiniert Opportunity- und Torpedo-Scores in eine finale Empfehlung (Buy, Hold, Short etc.).
+    
+    Args:
+        opportunity (OpportunityScore): Der berechnete Opportunity-Score.
+        torpedo (TorpedoScore): Der berechnete Torpedo-Score.
+        
+    Returns:
+        AuditRecommendation: Empfehlungstext inkl. kurzer Begründung.
+    """
     # Basic Threshold config mock (todo: move to scoring.yaml)
     opp = opportunity.total_score
     torp = torpedo.total_score

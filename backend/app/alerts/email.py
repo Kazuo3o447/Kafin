@@ -9,7 +9,14 @@ logger = get_logger(__name__)
 
 async def send_sunday_report(report_markdown: str, subject: str = "Kafin — Wöchentlicher Report") -> bool:
     """
-    Sendet den generierten Report als formatierte HTML-Email.
+    Sendet den generierten Markdown-Report als formatierte HTML-Email über den konfigurierten SMTP Server.
+    
+    Args:
+        report_markdown (str): Der Report im Markdown-Format.
+        subject (str): Der Betreff der E-Mail.
+        
+    Returns:
+        bool: True, wenn erfolgreich gesendet, False bei einem Fehler.
     """
     smtp_server = os.getenv("SMTP_SERVER")
     smtp_port = os.getenv("SMTP_PORT")
@@ -21,6 +28,13 @@ async def send_sunday_report(report_markdown: str, subject: str = "Kafin — Wö
     if not all([smtp_server, smtp_port, smtp_user, smtp_pass, smtp_to]):
         logger.warning("SMTP credentials incomplete in .env. Skipping email report.")
         return False
+        
+    smtp_server = str(smtp_server)
+    smtp_port = str(smtp_port)
+    smtp_user = str(smtp_user)
+    smtp_pass = str(smtp_pass)
+    smtp_to = str(smtp_to)
+    smtp_from = str(smtp_from)
 
     try:
         # Konvertiere Markdown zu HTML

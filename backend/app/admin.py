@@ -12,6 +12,7 @@ from pydantic import BaseModel
 import httpx
 import yaml
 import dotenv
+import os
 from datetime import datetime
 from typing import Dict, Any
 
@@ -719,9 +720,9 @@ async def update_yaml_settings(payload: YamlSettingsPayload):
     # Read existing or create new
     if os.path.exists(YAML_PATH):
         with open(YAML_PATH, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
+            data: dict = yaml.safe_load(f) or {}
     else:
-        data = {}
+        data: dict = {}
         
     if "app" not in data: data["app"] = {}
     if "flags" not in data: data["flags"] = {}

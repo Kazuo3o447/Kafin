@@ -1,0 +1,3 @@
+# Finnhub API
+
+Dokumentation folgt.

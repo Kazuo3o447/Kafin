@@ -1,0 +1,6 @@
+# Alerts Configuration
+telegram:
+  enabled: true
+email:
+  enabled: true
+# ...

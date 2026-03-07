@@ -1,0 +1,3 @@
+# CoinGlass API
+
+Dokumentation folgt.

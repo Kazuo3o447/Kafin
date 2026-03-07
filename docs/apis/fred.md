@@ -1,0 +1,3 @@
+# FRED API
+
+Dokumentation folgt.

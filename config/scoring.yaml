@@ -1,0 +1,20 @@
+# Scoring Configuration
+weights:
+  opportunity:
+    earnings_momentum: 0.15
+    whisper_delta: 0.15
+    regime_valuation: 0.15
+    forward_guidance: 0.15
+    technical_setup: 0.10
+    sector_regime: 0.10
+    short_squeeze: 0.10
+    insider_activity: 0.05
+    options_flow: 0.05
+  torpedo:
+    valuation_fall_height: 0.20
+    expectation_gap: 0.20
+    insider_selling: 0.15
+    guidance_slowdown: 0.15
+    leadership_instability: 0.10
+    technical_downtrend: 0.10
+    macro_headwinds: 0.10

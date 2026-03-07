@@ -1,0 +1,3 @@
+# Supabase API
+
+Dokumentation folgt.

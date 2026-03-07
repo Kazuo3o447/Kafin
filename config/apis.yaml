@@ -1,0 +1,9 @@
+# APIs Settings Configuration
+finnhub:
+  rate_limit: 30
+fmp:
+  rate_limit: 10
+deepseek:
+  base_url: "https://api.deepseek.com/v1"
+kimi:
+  base_url: "https://api.kimi.ai/v1"

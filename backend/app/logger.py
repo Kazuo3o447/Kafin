@@ -1,34 +1,32 @@
 """
-logger — Zentraler Logger der Anwendung
+logger — Zentraler Logger der Anwendung (mit structlog)
 
 Input:  Log-Messages und Level
-Output: Standardausgabe (Stdout) mit Formatierung
-Deps:   logging
+Output: Standardausgabe (Stdout) mit strukturierter Formatierung
+Deps:   structlog
 Config: environment (aus config)
 API:    Keine
 """
+import structlog
 import logging
 import sys
-from backend.app.config import settings
 
-def get_logger(name: str) -> logging.Logger:
-    logger = logging.getLogger(name)
-    
-    # Verhindere doppelte Handler
-    if not logger.handlers:
-        level = logging.DEBUG if settings.environment == "dev" else logging.INFO
-        logger.setLevel(level)
+def setup_logging():
+    structlog.configure(
+        processors=[
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            structlog.dev.ConsoleRenderer()
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
 
-        formatter = logging.Formatter(
-            fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S"
-        )
-        
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        
-    return logger
+setup_logging()
 
-# Beispiel-Initialisierung
+def get_logger(name: str):
+    return structlog.get_logger(name)
+
 logger = get_logger(__name__)

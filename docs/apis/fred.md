@@ -6,6 +6,9 @@ Rate-Limit: 120 Requests/Minute
 Docs: https://fred.stlouisfed.org/docs/api/fred/
 Kostenlos, API-Key erforderlich: https://fred.stlouisfed.org/docs/api/api_key.html
 
+## Konfiguration
+- FRED_API_KEY: b1ebff9d70c86afe6611df19acb06484
+
 ## Genutzter Endpoint
 
 ### Series Observations

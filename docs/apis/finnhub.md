@@ -69,3 +69,20 @@ Response:
 - o (float): Open
 - pc (float): Previous Close
 - dp (float): Percent Change
+
+### Economic Calendar (NEU)
+GET /calendar/economic?from={YYYY-MM-DD}&to={YYYY-MM-DD}&token={key}
+
+Response-Feld: `economicCalendar` (Array)
+Jedes Element:
+- event (str): Event-Name (z.B. "US CPI MoM")
+- country (str): Land (z.B. "US")
+- date (str): Datum YYYY-MM-DD
+- time (str): Zeitpunkt
+- impact (str): Impact-Level ("low", "medium", "high")
+- estimate (float|null): Erwartungswert
+- actual (float|null): Tatsächlicher Wert
+- unit (str): Einheit (z.B. "%", "K")
+
+Filter: Nur `impact == "high"` und `country == "US"` werden verarbeitet.
+Gespeichert unter Pseudo-Ticker `GENERAL_MACRO` im Short-Term Memory.

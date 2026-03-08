@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from backend.app.logger import get_logger
-from backend.app.data.finnhub import get_company_news, get_short_interest, get_insider_transactions
+from backend.app.data.finnhub import get_company_news, get_short_interest, get_insider_transactions, get_economic_calendar
 from backend.app.data.fmp import get_company_profile, get_analyst_estimates, get_earnings_history, get_key_metrics
 from backend.app.data.fred import get_macro_snapshot
 from backend.app.data.yfinance_data import get_technical_setup
@@ -28,11 +28,28 @@ def _read_prompt(path: str) -> tuple[str, str]:
 
 async def generate_macro_header() -> str:
     """
-    Generiert den wöchentlichen Makro-Lagebericht basierend auf aktuellen FRED-Daten
-    und dem DeepSeek-Modell.
+    Generiert den wöchentlichen Makro-Lagebericht basierend auf aktuellen FRED-Daten,
+    dem Wirtschaftskalender und dem DeepSeek-Modell.
     """
     logger.info("Generating Macro Header")
     macro = await get_macro_snapshot()
+    
+    # Wirtschaftskalender: Nächste 7 Tage
+    try:
+        calendar_events = await get_economic_calendar(days_back=0, days_forward=7)
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen des Wirtschaftskalenders: {e}")
+        calendar_events = []
+    
+    # Top-3 Events formatieren
+    upcoming_str = "Keine anstehenden Events bekannt."
+    if calendar_events:
+        top_events = calendar_events[:3]
+        lines = []
+        for ev in top_events:
+            est_str = f" (Erwartung: {ev.get('estimate', 'N/A')}{ev.get('unit', '')})" if ev.get('estimate') is not None else ""
+            lines.append(f"- {ev.get('date', '?')}: {ev.get('event', '?')}{est_str}")
+        upcoming_str = "\n".join(lines)
     
     sys_prompt, user_tmpl = _read_prompt(MACRO_PROMPT_PATH)
     
@@ -42,7 +59,8 @@ async def generate_macro_header() -> str:
         .replace("{{vix}}", str(getattr(macro, "vix", "N/A"))) \
         .replace("{{credit_spread}}", str(getattr(macro, "credit_spread_bps", "N/A"))) \
         .replace("{{yield_spread}}", str(getattr(macro, "yield_curve_10y_2y", "N/A"))) \
-        .replace("{{dxy}}", str(getattr(macro, "dxy", "N/A")))
+        .replace("{{dxy}}", str(getattr(macro, "dxy", "N/A"))) \
+        .replace("{{upcoming_events}}", upcoming_str)
         
     result = await call_deepseek(sys_prompt, user_prompt)
     return result
@@ -190,6 +208,12 @@ async def generate_weekly_summary() -> str:
         cutoff = (datetime.now() - timedelta(days=7)).isoformat()
         recent = [b for b in bullets if str(b.get("date", "")) >= str(cutoff)]
         all_bullets.extend(recent)
+
+    # GENERAL_MACRO: Globale Wirtschaftsevents immer einbeziehen
+    macro_bullets = await get_bullet_points("GENERAL_MACRO")
+    cutoff_macro = (datetime.now() - timedelta(days=7)).isoformat()
+    macro_recent = [b for b in macro_bullets if str(b.get("date", "")) >= str(cutoff_macro)]
+    all_bullets.extend(macro_recent)
 
     if not all_bullets:
         return "Keine bemerkenswerten Events in dieser Woche."

@@ -161,7 +161,7 @@ async def api_remove_watchlist_item(ticker: str):
          return {"status": "success"}
     return {"status": "error"}
 
-from backend.app.data.news_processor import run_news_pipeline, process_news_for_ticker
+from backend.app.data.news_processor import run_news_pipeline, process_news_for_ticker, process_macro_calendar
 from backend.app.data.sec_edgar import scan_filings_for_watchlist
 
 news_router = APIRouter(prefix="/api/news", tags=["news"])
@@ -197,6 +197,13 @@ async def api_sec_scan():
     tickers = [item["ticker"] for item in wl]
     filings = await scan_filings_for_watchlist(tickers)
     return {"status": "success", "filings_found": len(filings), "filings": filings}
+
+@news_router.post("/macro-scan")
+async def api_macro_calendar_scan():
+    """Scannt den Finnhub Wirtschaftskalender und speichert High-Impact Events unter GENERAL_MACRO."""
+    logger.info("API Call: macro-calendar-scan")
+    stats = await process_macro_calendar()
+    return {"status": "success", "stats": stats}
 
 app.include_router(news_router)
 

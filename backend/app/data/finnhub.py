@@ -6,7 +6,7 @@ import json
 import os
 import time
 from typing import List
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from backend.app.config import settings
 from backend.app.logger import get_logger
@@ -17,6 +17,54 @@ from schemas.sentiment import NewsBulletPoint, ShortInterestData, InsiderActivit
 logger = get_logger(__name__)
 
 FIXTURES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "fixtures", "finnhub")
+
+
+@rate_limit("finnhub")
+async def get_economic_calendar(days_back: int = 7, days_forward: int = 7) -> list[dict]:
+    """
+    Ruft den globalen Wirtschaftskalender von Finnhub ab.
+    Filtert auf High-Impact Events (impact == 'high') für die Region US.
+    
+    Returns: Liste von Dicts mit event, date, estimate, actual, unit, impact, country.
+    """
+    now = datetime.now()
+    from_date = (now - timedelta(days=days_back)).strftime("%Y-%m-%d")
+    to_date = (now + timedelta(days=days_forward)).strftime("%Y-%m-%d")
+
+    if settings.use_mock_data:
+        logger.debug("Mock: Wirtschaftskalender wird simuliert")
+        return [
+            {"event": "US CPI MoM", "date": from_date, "estimate": 0.3, "actual": 0.4, "unit": "%", "impact": "high", "country": "US"},
+            {"event": "US Nonfarm Payrolls", "date": to_date, "estimate": 200, "actual": None, "unit": "K", "impact": "high", "country": "US"},
+            {"event": "US Initial Jobless Claims", "date": from_date, "estimate": 220, "actual": 215, "unit": "K", "impact": "high", "country": "US"},
+        ]
+
+    url = f"https://finnhub.io/api/v1/calendar/economic?from={from_date}&to={to_date}&token={settings.finnhub_api_key}"
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        data = response.json()
+
+    events_raw = data.get("economicCalendar", [])
+
+    # Filter: Nur High-Impact US Events
+    filtered = []
+    for ev in events_raw:
+        impact = str(ev.get("impact", "")).lower()
+        country = str(ev.get("country", "")).upper()
+        if impact == "high" and country == "US":
+            filtered.append({
+                "event": ev.get("event", "Unknown"),
+                "date": ev.get("time", ev.get("date", "")),
+                "estimate": ev.get("estimate"),
+                "actual": ev.get("actual"),
+                "unit": ev.get("unit", ""),
+                "impact": "high",
+                "country": "US"
+            })
+
+    logger.info(f"Wirtschaftskalender: {len(filtered)} High-Impact US Events von {len(events_raw)} total")
+    return filtered
 
 def load_mock_data(filename: str):
     path = os.path.join(FIXTURES_DIR, filename)

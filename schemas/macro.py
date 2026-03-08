@@ -10,12 +10,17 @@ class MacroSnapshot(BaseModel):
     """Wöchentlicher Makro-Snapshot."""
     date: Optional[datetime] = None
     fed_rate: Optional[float] = None
+    fed_rate_date: Optional[str] = None
     fed_expectation: Optional[str] = None
     vix: Optional[float] = None
+    vix_date: Optional[str] = None
     credit_spread_bps: Optional[float] = None
+    credit_spread_date: Optional[str] = None
     yield_curve_10y_2y: Optional[float] = None
+    yield_curve_date: Optional[str] = None
     yield_curve: str = "positive"
     dxy: Optional[float] = None
+    dxy_date: Optional[str] = None
     regime: str = "cautious"
     index_shorts_recommended: bool = False
     instrument_suggestions: Optional[str] = None

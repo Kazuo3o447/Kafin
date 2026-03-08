@@ -80,11 +80,11 @@ async def generate_macro_header() -> str:
     
     # Replace placeholders
     user_prompt = user_tmpl \
-        .replace("{{fed_rate}}", str(getattr(macro, "fed_rate", "N/A"))) \
-        .replace("{{vix}}", str(getattr(macro, "vix", "N/A"))) \
-        .replace("{{credit_spread}}", str(getattr(macro, "credit_spread_bps", "N/A"))) \
-        .replace("{{yield_spread}}", str(getattr(macro, "yield_curve_10y_2y", "N/A"))) \
-        .replace("{{dxy}}", str(getattr(macro, "dxy", "N/A"))) \
+        .replace("{{fed_rate}}", f"{getattr(macro, 'fed_rate', 'N/A')} (Stand: {getattr(macro, 'fed_rate_date', 'N/A')})") \
+        .replace("{{vix}}", f"{getattr(macro, 'vix', 'N/A')} (Stand: {getattr(macro, 'vix_date', 'N/A')})") \
+        .replace("{{credit_spread}}", f"{getattr(macro, 'credit_spread_bps', 'N/A')} (Stand: {getattr(macro, 'credit_spread_date', 'N/A')})") \
+        .replace("{{yield_spread}}", f"{getattr(macro, 'yield_curve_10y_2y', 'N/A')} (Stand: {getattr(macro, 'yield_curve_date', 'N/A')})") \
+        .replace("{{dxy}}", f"{getattr(macro, 'dxy', 'N/A')} (Stand: {getattr(macro, 'dxy_date', 'N/A')})") \
         .replace("{{upcoming_events}}", upcoming_str) \
         .replace("{{macro_bullets}}", macro_bullets_str)
         

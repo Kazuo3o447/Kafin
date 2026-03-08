@@ -112,10 +112,15 @@ async def get_macro_snapshot() -> MacroSnapshot:
         
     return MacroSnapshot(
         fed_rate=fed_funds,
+        fed_rate_date=fed_date,
         vix=vix,
+        vix_date=vix_date,
         credit_spread_bps=high_yield,
+        credit_spread_date=hy_date,
         yield_curve_10y_2y=yield_spread,
+        yield_curve_date=ys_date,
         dxy=dxy,
+        dxy_date=dxy_date,
         yield_curve=curve_status,
         regime=regime
     )

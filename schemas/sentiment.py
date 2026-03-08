@@ -18,6 +18,13 @@ class NewsBulletPoint(BaseModel):
     url: Optional[str] = None
     timestamp: Optional[datetime] = None
     is_material: bool = False
+    
+    # Narrative Intelligence (Phase 3A Extension)
+    is_narrative_shift: bool = False
+    shift_type: Optional[str] = None # "Market-Expansion" | "Strategic-Partnership" | "Strategic-Downsizing" | "None"
+    shift_confidence: Optional[float] = None # 0.0 - 1.0
+    shift_reasoning: Optional[str] = None # Max 15 words
+    
     model_config = ConfigDict(from_attributes=True)
 
 

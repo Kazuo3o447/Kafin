@@ -28,7 +28,11 @@ async def save_bullet_points(
     sentiment_score: float,
     category: str = "general",
     url: str = "",
-    is_material: bool = False
+    is_material: bool = False,
+    is_narrative_shift: bool = False,
+    shift_type: Optional[str] = None,
+    shift_confidence: Optional[float] = None,
+    shift_reasoning: Optional[str] = None
 ) -> bool:
     """Speichert News-Stichpunkte im Kurzzeit-Gedächtnis."""
     quarter = f"Q{(date.month - 1) // 3 + 1}_{date.year}" if isinstance(date, datetime) else "Q1_2026"
@@ -42,7 +46,11 @@ async def save_bullet_points(
         "category": category,
         "quarter": quarter,
         "is_material": is_material,
-        "url": url
+        "url": url,
+        "is_narrative_shift": is_narrative_shift,
+        "shift_type": shift_type,
+        "shift_confidence": shift_confidence,
+        "shift_reasoning": shift_reasoning
     }
 
     if settings.use_mock_data:

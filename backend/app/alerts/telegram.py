@@ -61,3 +61,21 @@ def format_torpedo_alert(ticker: str, score: float, reasons: List[str]) -> str:
         alert_text += f"• {reason}\n"
         
     return alert_text
+
+def format_narrative_shift_alert(ticker: str, shift_type: str, reasoning: str, headline: str, url: str) -> str:
+    """Formatiert einen priorisierten Alert für einen fundamentalen Narrative Shift."""
+    if shift_type == "Strategic-Downsizing":
+        alert_text = f"🚨 <b>TORPEDO-ALERT: INVESTITIONS-RÜCKBAU</b> 🚨\n"
+        alert_text += f"Ticker: <b>{ticker}</b>\n\n"
+    else:
+        alert_text = f"🌀 <b>NARRATIVE SHIFT ERKANNT</b> 🌀\n"
+        alert_text += f"Ticker: <b>{ticker}</b> | Typ: <i>{shift_type}</i>\n\n"
+        
+    alert_text += f"<b>Headline:</b> {headline}\n"
+    if reasoning:
+        alert_text += f"<b>KI Analyse:</b> <i>{reasoning}</i>\n"
+        
+    if url:
+        alert_text += f"\n<a href='{url}'>Zur Meldung</a>"
+        
+    return alert_text

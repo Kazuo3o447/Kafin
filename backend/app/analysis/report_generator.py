@@ -84,7 +84,8 @@ async def generate_audit_report(ticker: str) -> str:
         "short_interest": short_interest.dict() if short_interest else {},
         "insider_activity": insiders.dict() if insiders else {},
         "macro": macro.dict() if macro else {},
-        "technicals": technicals.dict() if technicals else {}
+        "technicals": technicals.dict() if technicals else {},
+        "news_memory": news_memory if news_memory else []
     }
     
     # 2. Scores

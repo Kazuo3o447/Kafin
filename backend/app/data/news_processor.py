@@ -16,9 +16,13 @@ from backend.app.data.finnhub import get_company_news
 from backend.app.analysis.finbert import analyze_sentiment_batch
 from backend.app.analysis.deepseek import call_deepseek
 from backend.app.memory.short_term import save_bullet_points, get_existing_urls
-from backend.app.alerts.telegram import send_telegram_alert
+from backend.app.alerts.telegram import send_telegram_alert, format_narrative_shift_alert
 
 logger = get_logger(__name__)
+
+# Rate Limiting für DeepSeek (Phase 3A Extension)
+_DEEPSEEK_CALLS: dict[str, list[datetime]] = {}
+_SPIKE_ALERTS_SENT: set[str] = set()
 
 
 def _load_torpedo_keywords() -> list[str]:
@@ -107,10 +111,50 @@ async def process_news_for_ticker(ticker: str) -> dict:
             stats["alerts_sent"] += 1
 
     # STUFE 3: DeepSeek extrahiert Stichpunkte
+    now_dt = datetime.now()
+    cutoff = now_dt - timedelta(hours=1)
+    
+    if ticker not in _DEEPSEEK_CALLS:
+        _DEEPSEEK_CALLS[ticker] = []
+        
+    # Cleanup alter Calls
+    _DEEPSEEK_CALLS[ticker] = [t for t in _DEEPSEEK_CALLS[ticker] if t > cutoff]
+
     for news_item, score in relevant_news:
+        # Rate Limiting: Max 5 Calls pro Stunde
+        if len(_DEEPSEEK_CALLS[ticker]) >= 5:
+            logger.warning(f"Rate Limit erreicht für {ticker}: >5 DeepSeek-Calls in der letzten Stunde.")
+            if ticker not in _SPIKE_ALERTS_SENT:
+                alert_text = f"⚙️ <b>NEWS SPIKE ALERT: {ticker}</b>\n\nMehr als 5 relevante Nachrichten in 1h. DeepSeek-Extraktion für diesen Zyklus pausiert (Kostenbremse)."
+                await send_telegram_alert(alert_text)
+                _SPIKE_ALERTS_SENT.add(ticker)
+            break
+            
+        _SPIKE_ALERTS_SENT.discard(ticker) # Reset bei normalem Volumen
+        _DEEPSEEK_CALLS[ticker].append(datetime.now())
+        
         try:
-            bullet_points = await _extract_bullet_points(ticker, news_item)
+            extracted_data = await _extract_bullet_points(ticker, news_item)
+            bullet_points = extracted_data.get("bullet_points", [])
             category = _categorize_news(news_item.headline, news_item.summary)
+
+            is_torpedo_kw = bool([kw for kw in TORPEDO_KEYWORDS if kw.lower() in f"{news_item.headline} {news_item.summary}".lower()])
+            
+            # Narrative Intelligence Check
+            is_narrative_shift = extracted_data.get("is_narrative_shift", False)
+            shift_type = extracted_data.get("shift_type", "None")
+            shift_reasoning = extracted_data.get("shift_reasoning", "")
+            
+            if is_narrative_shift and shift_type != "None":
+                alert_text = format_narrative_shift_alert(
+                    ticker=ticker,
+                    shift_type=shift_type,
+                    reasoning=shift_reasoning,
+                    headline=news_item.headline,
+                    url=getattr(news_item, "url", "")
+                )
+                await send_telegram_alert(alert_text)
+                stats["alerts_sent"] += 1
 
             await save_bullet_points(
                 ticker=ticker,
@@ -120,14 +164,18 @@ async def process_news_for_ticker(ticker: str) -> dict:
                 sentiment_score=score,
                 category=category,
                 url=getattr(news_item, "url", ""),
-                is_material=bool([kw for kw in TORPEDO_KEYWORDS if kw.lower() in f"{news_item.headline} {news_item.summary}".lower()])
+                is_material=is_torpedo_kw,
+                is_narrative_shift=is_narrative_shift,
+                shift_type=shift_type,
+                shift_confidence=extracted_data.get("shift_confidence"),
+                shift_reasoning=shift_reasoning
             )
             stats["bullets_saved"] += 1
 
         except Exception as e:
             logger.error(f"Fehler bei Stichpunkt-Extraktion für {ticker}: {e}")
 
-    # Bei stark negativen News (< -0.5): Alert
+    # Bei stark negativen News (< -0.5): Alert (ohne Fallback aus Extraktion)
     for news_item, score in relevant_news:
         if score < -0.5:
             alert_text = (
@@ -152,27 +200,41 @@ async def process_news_for_ticker(ticker: str) -> dict:
     return stats
 
 
-async def _extract_bullet_points(ticker: str, news_item) -> list[str]:
-    """Nutzt DeepSeek um 3-5 Stichpunkte aus einer Nachricht zu extrahieren."""
-    system_prompt = (
-        "Du bist ein Finanzanalyst. Extrahiere die 3-5 wichtigsten Stichpunkte aus dieser Nachricht. "
-        "Antworte NUR mit den Stichpunkten als JSON-Array. Keine Erklärungen. Auf Deutsch. "
-        'Format: ["Stichpunkt 1", "Stichpunkt 2", "Stichpunkt 3"]'
-    )
-    user_prompt = f"Ticker: {ticker}\nHeadline: {news_item.headline}\nText: {news_item.summary}"
+async def _extract_bullet_points(ticker: str, news_item) -> dict:
+    """Nutzt DeepSeek um Stichpunkte und Narrative Shifts aus einer Nachricht zu extrahieren."""
+    import os
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    PROMPT_PATH = os.path.join(ROOT_DIR, "prompts", "news_extraction.md")
+    
+    try:
+        with open(PROMPT_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+        parts = content.split("SYSTEM:")
+        subparts = parts[1].split("USER_TEMPLATE:")
+        system_prompt = subparts[0].strip()
+        user_tmpl = subparts[1].strip()
+        user_prompt = user_tmpl.replace("{{ticker}}", ticker).replace("{{headline}}", news_item.headline).replace("{{summary}}", news_item.summary)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden des news_extraction Prompts: {e}")
+        return {"bullet_points": [news_item.headline]}
 
     result = await call_deepseek(system_prompt, user_prompt)
 
     try:
         import json
         clean = result.strip().replace("```json", "").replace("```", "").strip()
-        bullets = json.loads(clean)
-        if isinstance(bullets, list):
-            return bullets[:5]
+        data = json.loads(clean)
+        
+        if isinstance(data, dict) and "bullet_points" in data:
+            data["bullet_points"] = data["bullet_points"][:5]
+            return data
+        elif isinstance(data, list):
+            return {"bullet_points": data[:5]}
+            
     except (json.JSONDecodeError, Exception) as e:
         logger.warning(f"DeepSeek JSON-Parse-Fehler: {e}. Nutze Headline als Fallback.")
 
-    return [news_item.headline]
+    return {"bullet_points": [news_item.headline]}
 
 
 def _categorize_news(headline: str, summary: str) -> str:

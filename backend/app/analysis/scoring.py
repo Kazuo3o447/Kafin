@@ -41,6 +41,16 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
         elif pe > sector_pe * 2.0: vr = 0.0
         else: vr = 5.0
 
+    # Narrative Intelligence: Positive Regime Shifts
+    news_memory = data.get("news_memory", [])
+    for news in news_memory:
+        shift_type = news.get("shift_type", "None")
+        if getattr(news, "is_narrative_shift", False) or news.get("is_narrative_shift", False):
+            if shift_type in ["Market-Expansion", "Strategic-Partnership", "Disruptive Pivot"]:
+                vr = min(10.0, vr + 2.0)
+                logger.debug(f"[{ticker}] Positive Narrative Shift erkannt ({shift_type}). Valuation Regime +2.0 auf {vr}")
+                break
+
     # guidance_trend
     guidance_trend = 5.0
 
@@ -139,6 +149,17 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
     if vix > 30: mh = 10.0
     elif vix < 15: mh = 0.0
     else: mh = 5.0
+
+    # Narrative Intelligence: Torpedo Signals via Downsizing
+    news_memory = data.get("news_memory", [])
+    for news in news_memory:
+        shift_type = news.get("shift_type", "None")
+        if getattr(news, "is_narrative_shift", False) or news.get("is_narrative_shift", False):
+            if shift_type == "Strategic-Downsizing":
+                guidance_deceleration = min(10.0, guidance_deceleration + 2.0)
+                expectation_gap = min(10.0, expectation_gap + 2.0)
+                logger.warning(f"[{ticker}] 🚨 Negative Narrative Shift erkannt ({shift_type}). Torpedo-Scores erhöht!")
+                break
 
     total_score = (
         vd * weights.get("valuation_downside", 0) +

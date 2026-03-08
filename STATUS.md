@@ -16,11 +16,11 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 *   **DeepSeek**: KI-Anbindung (`deepseek-chat`) für automatisierte Analysen erfolgreich getestet.
 *   **Telegram**: Bot-Integration (Token + Chat-ID) inklusive automatischer Chat-ID Ermittlung und Versandtest abgeschlossen.
 
-### 3. Admin Panel & Backend-Logik
-*   **API-Status-Check**: Erweiterte Übersicht im Admin-Portal, ob alle Keys korrekt konfiguriert sind.
-*   **Einzeltests**: Implementierung von "Test"-Buttons für jede API einzeln, um Netzwerk-Störungen gezielt zu debuggen.
-*   **Logging-Infrastruktur**: Fix des `structlog` Caching-Bugs. Logs fließen nun in Echtzeit in das Admin-Panel.
-*   **Report-Versand**: Umstellung von E-Mail (SMTP) auf Telegram-Direktnachricht (mit automatischem Chunking bei langen Berichten).
+### 4. Sonntags-Report Stabilität & Korrekturen
+*   **FRED Fallback**: 10-Tage Lookback-Logik für lückenlose Makro-Daten inklusive Datumsstempel-Injektion.
+*   **Platzhalter-Fixes**: Dynamische Befüllung von `{{upcoming_events}}` (Earnings) und `{{macro_bullets}}` (KI-Gedächtnis).
+*   **Anti-Index-Short-Regel**: Strenges Verbot von breiten Index-Shorts im Prompt-Template v0.2 zur Optimierung des Risk/Reward.
+*   **Error-Handling**: Try-Except Absicherung für jeden Audit-Report; der Gesamt-Report bricht bei Einzelfehlern nicht mehr ab.
 
 ## ✅ Phase 3: Real-Time Monitoring & Alerts
 - [x] **Phase 3A:** Implementierung von FinBERT für Sentiment-Analyse.
@@ -35,6 +35,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 - [x] **Phase 3B:** Torpedo Monitor (Material News detection).
 - [x] **Phase 3B:** Makro-News (Global Macro Intelligence / DeepSeek Summary).
 - [x] **Phase 3B:** Options- & Social-Sentiment Analyse (Zero-Cost via yfinance/Finnhub).
+- [x] **Stabilität:** 5 kritische Fixes für Makro-Daten und Prompt-Resilience abgeschlossen.
 
 ## 🚀 Nächste Schritte (Phase 4 / UI)
 - UI/Frontend mit React und Tailwind gestalten.

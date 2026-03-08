@@ -213,4 +213,14 @@ async def run_news_pipeline(tickers: list[str]) -> list[dict]:
     total_alerts = sum(r["alerts_sent"] for r in results)
 
     logger.info(f"News-Pipeline abgeschlossen: {total_fetched} geholt, {total_relevant} relevant, {total_alerts} Alerts")
+    
+    # -------------------------------------------------------------
+    # TORPEDO-MONITOR: Prüft bestehende Empfehlungen
+    # -------------------------------------------------------------
+    try:
+        from backend.app.analysis.torpedo_monitor import check_torpedo_updates
+        await check_torpedo_updates()
+    except Exception as e:
+        logger.error(f"Fehler im Torpedo-Monitor: {e}")
+        
     return results

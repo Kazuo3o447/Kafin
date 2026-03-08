@@ -200,6 +200,14 @@ async def api_sec_scan():
 
 app.include_router(news_router)
 
+from backend.app.n8n_setup import setup_workflows
+
+@app.post("/api/n8n/setup")
+async def api_n8n_setup():
+    """Erstellt die n8n-Workflows automatisch."""
+    await setup_workflows()
+    return {"status": "success", "message": "n8n Workflows wurden erstellt"}
+
 from backend.app.analysis.report_generator import generate_audit_report, generate_sunday_report
 
 # Report Router

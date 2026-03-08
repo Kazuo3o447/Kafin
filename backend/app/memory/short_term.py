@@ -12,7 +12,7 @@ import json
 from datetime import datetime
 from typing import Optional
 from backend.app.config import settings
-from backend.app.db import get_supabase
+from backend.app.db import get_supabase_client
 from backend.app.logger import get_logger
 
 logger = get_logger(__name__)
@@ -51,7 +51,7 @@ async def save_bullet_points(
         return True
 
     try:
-        db = get_supabase()
+        db = get_supabase_client()
         if db is None:
             _mock_memory.append(record)
             return True
@@ -75,7 +75,7 @@ async def get_bullet_points(ticker: str, quarter: Optional[str] = None) -> list[
         return sorted(results, key=lambda x: x["date"], reverse=True)
 
     try:
-        db = get_supabase()
+        db = get_supabase_client()
         if db is None:
             return [m for m in _mock_memory if m["ticker"] == ticker]
 
@@ -95,7 +95,7 @@ async def get_existing_urls(ticker: str) -> set[str]:
         return {m.get("url", "") for m in _mock_memory if m["ticker"] == ticker}
 
     try:
-        db = get_supabase()
+        db = get_supabase_client()
         if db is None:
             return {m.get("url", "") for m in _mock_memory if m["ticker"] == ticker}
         result = db.table("short_term_memory").select("url").eq("ticker", ticker).execute()
@@ -111,7 +111,7 @@ async def get_material_news(ticker: str) -> list[dict]:
         return [m for m in _mock_memory if m["ticker"] == ticker and m.get("is_material")]
 
     try:
-        db = get_supabase()
+        db = get_supabase_client()
         if db is None:
             return [m for m in _mock_memory if m["ticker"] == ticker and m.get("is_material")]
         result = db.table("short_term_memory").select("*").eq("ticker", ticker).eq("is_material", True).order("date", desc=True).execute()

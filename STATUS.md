@@ -22,10 +22,19 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 *   **Logging-Infrastruktur**: Fix des `structlog` Caching-Bugs. Logs fließen nun in Echtzeit in das Admin-Panel.
 *   **Report-Versand**: Umstellung von E-Mail (SMTP) auf Telegram-Direktnachricht (mit automatischem Chunking bei langen Berichten).
 
-## 🚀 Nächste Schritte (Phase 3)
-*   [x] **Finnhub News-Pipeline**: Implementierung des Scrapers zum Speichern von Nachrichten in Supabase (inklusive FinBERT Sentiment).
-*   [x] **SEC EDGAR Scanner**: Automatisierte Überwachung von 8-K und Form 4 Filings.
-*   [x] **Alerting-Engine**: Logik für "Torpedo-Warnungen" bei negativen News-Events.
+## ✅ Phase 3: Real-Time Monitoring & Alerts
+- [x] **Phase 3A:** Implementierung von FinBERT für Sentiment-Analyse.
+- [x] **Phase 3A:** News Pipeline inkl. Watchlist-Scanning, FinBERT-Filterung, und DeepSeek Stichpunktextraktion.
+- [x] **Phase 3A:** Kurzzeit-Speicher (Supabase) für die gewonnenen News-Stichpunkte.
+- [x] **Phase 3A:** SEC Edgar Scanner (Form 8-K / 4) für Insider-Trades.
+- [x] **Phase 3A:** Admin Panel Updates für FinBERT und News/SEC Control.
+- [x] **Phase 3B:** Automatisierte Scheduling-Workflows mit n8n für News/SEC und Reports.
+- [x] **Phase 3B:** Weekly Summary im Sonntags-Report.
+- [x] **Phase 3B:** Torpedo Monitor (Material News detection).
+
+## 🚀 Nächste Schritte (Phase 4 / UI)
+- UI/Frontend mit React und Tailwind gestalten.
+- Auswertung der Alert-Qualität im Produktivbetrieb über die Zeit.
 
 ## 🛠️ System-Hinweis
 *   **Docker**: Backend, Redis und n8n laufen stabil im Verbund.

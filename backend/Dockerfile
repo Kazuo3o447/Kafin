@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN python -c "from transformers import AutoModelForSequenceClassification, AutoTokenizer; AutoModelForSequenceClassification.from_pretrained('ProsusAI/finbert'); AutoTokenizer.from_pretrained('ProsusAI/finbert')"
 
 # Anwendung
+ARG CACHEBUST=1
 COPY backend/app /app/backend/app
 COPY schemas /app/schemas
 

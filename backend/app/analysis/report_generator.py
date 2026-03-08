@@ -171,6 +171,52 @@ async def generate_audit_report(ticker: str) -> str:
         
     return result
 
+async def generate_weekly_summary() -> str:
+    """
+    Generiert eine Zusammenfassung der wichtigsten Events der Woche.
+    Basiert auf allen News-Stichpunkten im Kurzzeit-Gedächtnis der letzten 7 Tage.
+    """
+    from backend.app.memory.short_term import get_bullet_points
+    from backend.app.memory.watchlist import get_watchlist
+
+    wl = await get_watchlist()
+    tickers = [item["ticker"] for item in wl]
+
+    all_bullets = []
+    for ticker in tickers:
+        bullets = await get_bullet_points(ticker)
+        from datetime import timedelta
+        cutoff = (datetime.now() - timedelta(days=7)).isoformat()
+        recent = [b for b in bullets if str(b.get("date", "")) >= str(cutoff)]
+        all_bullets.extend(recent)
+
+    if not all_bullets:
+        return "Keine bemerkenswerten Events in dieser Woche."
+
+    # Sortiere: Material-Events zuerst, dann nach absolutem Sentiment
+    all_bullets.sort(key=lambda x: (
+        -int(x.get("is_material", False)),
+        -abs(float(x.get("sentiment_score", 0)))
+    ))
+
+    events_text = "\n".join([
+        f"- [{b.get('ticker', '?')}] ({b.get('category', 'general')}) Sentiment {float(b.get('sentiment_score', 0)):.2f}: " +
+        (" | ".join(b["bullet_points"]) if isinstance(b.get("bullet_points"), list) else str(b.get("bullet_points", "")))
+        for b in all_bullets[:30]
+    ])
+
+    system_prompt = (
+        "Du bist ein Finanzanalyst und erstellst eine Wochenzusammenfassung auf Deutsch. "
+        "Fasse die wichtigsten Events der Woche zusammen. Priorisiere nach Marktrelevanz. "
+        "Gruppiere nach Themen (z.B. Earnings, Regulatorisches, Makro). "
+        "Maximal 10-15 Sätze. Sei direkt und konkret."
+    )
+
+    user_prompt = f"Hier sind die wichtigsten Nachrichten-Stichpunkte der letzten 7 Tage:\n\n{events_text}\n\nErstelle eine kompakte Wochenzusammenfassung auf Deutsch."
+
+    result = await call_deepseek(system_prompt, user_prompt)
+    return result
+
 async def generate_sunday_report(tickers: list[str]) -> str:
     """
     Erstellt den wöchentlichen kompletten Sunday-Report, der den 
@@ -178,14 +224,22 @@ async def generate_sunday_report(tickers: list[str]) -> str:
     """
     logger.info(f"Generating Sunday Report for {len(tickers)} tickers")
     
+    # 1. Makro-Header
     header = await generate_macro_header()
     
+    # 2. Wochenzusammenfassung (NEU)
+    weekly = await generate_weekly_summary()
+    
+    # 3. Audit-Reports
     reports = []
     for t in tickers:
         r = await generate_audit_report(t)
         reports.append(r)
         
-    full_report = f"# KAFIN SUNDAY REPORT\n\n{header}\n\n---\n\n"
+    full_report = f"# KAFIN SONNTAGS-REPORT\n\n"
+    full_report += f"## MAKRO-REGIME\n\n{header}\n\n---\n\n"
+    full_report += f"## WOCHENZUSAMMENFASSUNG\n\n{weekly}\n\n---\n\n"
+    full_report += f"## AUDIT-REPORTS\n\n"
     full_report += "\n\n---\n\n".join(reports)
     
     return full_report

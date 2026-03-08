@@ -335,6 +335,19 @@ ADMIN_HTML = """
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="status-grid">
                  <!-- Loaded via JS -->
             </div>
+            
+            <hr class="border-gray-700 my-8">
+            
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg mt-6">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-md font-medium text-gray-300">n8n Automatisierungen (Scheduling)</h3>
+                    <button onclick="setupN8n()" id="btn-n8n-setup" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded transition flex items-center shadow">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        n8n Workflows einrichten
+                    </button>
+                </div>
+                <p class="text-xs text-gray-500 mb-4">Erstellt die Workflows für News-Pipeline, SEC-Scanner und Sonntags-Report via n8n REST API.</p>
+            </div>
         </div>
 
     </main>
@@ -566,6 +579,24 @@ ADMIN_HTML = """
             } catch(e) { showToast('Verbindungsfehler', 'error'); }
             finally {
                 btn.innerHTML = 'SEC-Scan starten';
+                btn.disabled = false;
+            }
+        }
+        
+        async function setupN8n() {
+            const btn = document.getElementById('btn-n8n-setup');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = `<svg class="animate-spin w-4 h-4 mr-2 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Einrichten...`;
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/n8n/setup', {method: 'POST'});
+                const data = await res.json();
+                if(res.ok) {
+                    showToast('n8n Workflows erfolgreich erstellt!');
+                } else showToast('Fehler beim n8n Setup: ' + (data.detail || 'Unbekannt'), 'error');
+            } catch(e) { showToast('Verbindungsfehler', 'error'); }
+            finally {
+                btn.innerHTML = originalHtml;
                 btn.disabled = false;
             }
         }
@@ -1049,93 +1080,14 @@ async def run_status_check(api: str = None):
              logger.error(f"FinBERT Status Check Error: {e}")
              checks["finbert"] = "error"
 
-    return {
-        "status": "success",
-        "keys": keys,
-        "api_checks": checks,
-        "settings": {
-            "use_mock_data": settings.use_mock_data
-        }
-    }
-
-            if has_keys["fmp"]:
-                if settings.use_mock_data:
-                    api_checks["fmp"] = "ok"
-                else:
-                    try:
-                        res = await client.get(f"https://financialmodelingprep.com/stable/search-symbol?query=AAPL&apikey={settings.fmp_api_key}")
-                        api_checks["fmp"] = "ok" if res.status_code == 200 else "error"
-                    except Exception as e:
-                        logger.error(f"Status check failed for FMP: {str(e)}")
-                        api_checks["fmp"] = "error"
-            else:
-                 api_checks["fmp"] = "warning"
-
-        # FRED
-        if "fred" in targets or not api:
-            if has_keys["fred"]:
-                if settings.use_mock_data:
-                    api_checks["fred"] = "ok"
-                else:
-                    try:
-                        res = await client.get(f"https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&api_key={settings.fred_api_key}&sort_order=desc&limit=1&file_type=json")
-                        api_checks["fred"] = "ok" if res.status_code == 200 else "error"
-                    except Exception as e:
-                        logger.error(f"Status check failed for FRED: {str(e)}")
-                        api_checks["fred"] = "error"
-            else:
-                 api_checks["fred"] = "warning"
-
-        # DEEPSEEK
-        if "deepseek" in targets or not api:
-            if has_keys["deepseek"]:
-                if settings.use_mock_data:
-                    api_checks["deepseek"] = "ok"
-                else:
-                    try:
-                        res = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization": f"Bearer {settings.deepseek_api_key}"}, json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "Ping"}], "max_tokens": 5})
-                        api_checks["deepseek"] = "ok" if res.status_code == 200 else "error"
-                    except Exception as e:
-                        logger.error(f"Status check failed for DeepSeek: {str(e)}")
-                        api_checks["deepseek"] = "error"
-            else:
-                 api_checks["deepseek"] = "warning"
-
-        # TELEGRAM
-        if "telegram" in targets or not api:
-            if has_keys["telegram"]:
-                if settings.use_mock_data:
-                    api_checks["telegram"] = "ok"
-                else:
-                    try:
-                        res = await client.get(f"https://api.telegram.org/bot{telegram_token}/getMe")
-                        api_checks["telegram"] = "ok" if res.status_code == 200 else "error"
-                    except Exception as e:
-                        logger.error(f"Status check failed for Telegram: {str(e)}")
-                        api_checks["telegram"] = "error"
-            else:
-                 api_checks["telegram"] = "warning"
-
-        # Mock others for now since they are not fully wired up
-        for k in ["coinglass", "kimi"]:
-            if k in targets or not api:
-                if has_keys.get(k, False):
-                    api_checks[k] = "ok" # We assume it works if we have the key for the MVP Status Check
-                else:
-                    api_checks[k] = "warning"
-
-    # Fill up the rest with defaults if a single specific API was queried
-    for k in has_keys:
-        if k not in api_checks:
-            api_checks[k] = "ok" if has_keys[k] else "warning"
-
+    from datetime import datetime
     return {
         "status": "success",
         "timestamp": datetime.utcnow().isoformat(),
-        "keys": has_keys,
-        "api_checks": api_checks,
+        "keys": keys,
+        "api_checks": checks,
         "settings": {
-              "use_mock_data": settings.use_mock_data,
-              "environment": settings.environment
+            "use_mock_data": settings.use_mock_data,
+            "environment": getattr(settings, "environment", "development")
         }
     }

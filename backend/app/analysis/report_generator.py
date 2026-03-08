@@ -34,22 +34,47 @@ async def generate_macro_header() -> str:
     logger.info("Generating Macro Header")
     macro = await get_macro_snapshot()
     
-    # Wirtschaftskalender: Nächste 7 Tage
-    try:
-        calendar_events = await get_economic_calendar(days_back=0, days_forward=7)
-    except Exception as e:
-        logger.error(f"Fehler beim Abrufen des Wirtschaftskalenders: {e}")
-        calendar_events = []
+    # Wirtschaftskalender: Nächste 7 Tage (Earnings)
+    from backend.app.data.finnhub import get_earnings_calendar
+    from datetime import timedelta
     
-    # Top-3 Events formatieren
-    upcoming_str = "Keine anstehenden Events bekannt."
-    if calendar_events:
-        top_events = calendar_events[:3]
-        lines = []
-        for ev in top_events:
-            est_str = f" (Erwartung: {ev.get('estimate', 'N/A')}{ev.get('unit', '')})" if ev.get('estimate') is not None else ""
-            lines.append(f"- {ev.get('date', '?')}: {ev.get('event', '?')}{est_str}")
-        upcoming_str = "\n".join(lines)
+    now = datetime.now()
+    next_week = (now + timedelta(days=7)).strftime("%Y-%m-%d")
+    today = now.strftime("%Y-%m-%d")
+
+    try:
+        calendar = await get_earnings_calendar(today, next_week)
+        # Filtere auf bekannte/große Unternehmen (Market Cap > 50 Mrd oder Watchlist)
+        from backend.app.memory.watchlist import get_watchlist
+        wl = await get_watchlist()
+        wl_tickers = {item["ticker"] for item in wl}
+
+        upcoming_str = ""
+        shown = 0
+        for event in calendar:
+            if shown >= 5:
+                break
+            ticker = getattr(event, "ticker", getattr(event, "symbol", ""))
+            if ticker in wl_tickers:
+                date = getattr(event, "report_date", getattr(event, "date", ""))
+                upcoming_str += f"- {ticker}: Earnings am {date}\n"
+                shown += 1
+
+        if not upcoming_str:
+            upcoming_str = "Keine Watchlist-Earnings in der kommenden Woche."
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Earnings-Kalender-Vorschau: {e}")
+        upcoming_str = "Earnings-Kalender konnte nicht geladen werden."
+        
+    # GENERAL_MACRO Stichpunkte
+    from backend.app.memory.short_term import get_bullet_points
+    macro_bullets_raw = await get_bullet_points("GENERAL_MACRO")
+    macro_bullets_str = "\n".join([
+        " | ".join(b["bullet_points"]) if isinstance(b.get("bullet_points"), list) else str(b.get("bullet_points", ""))
+        for b in macro_bullets_raw[:10]
+    ])
+    if not macro_bullets_str:
+        macro_bullets_str = "Keine Makro-Stichpunkte verfügbar."
     
     sys_prompt, user_tmpl = _read_prompt(MACRO_PROMPT_PATH)
     
@@ -60,7 +85,8 @@ async def generate_macro_header() -> str:
         .replace("{{credit_spread}}", str(getattr(macro, "credit_spread_bps", "N/A"))) \
         .replace("{{yield_spread}}", str(getattr(macro, "yield_curve_10y_2y", "N/A"))) \
         .replace("{{dxy}}", str(getattr(macro, "dxy", "N/A"))) \
-        .replace("{{upcoming_events}}", upcoming_str)
+        .replace("{{upcoming_events}}", upcoming_str) \
+        .replace("{{macro_bullets}}", macro_bullets_str)
         
     result = await call_deepseek(sys_prompt, user_prompt)
     return result
@@ -211,11 +237,22 @@ async def generate_weekly_summary() -> str:
     from backend.app.memory.short_term import get_bullet_points
     from backend.app.memory.watchlist import get_watchlist
     from datetime import timedelta
+    from dateutil.parser import parse as parse_date
+
+    cutoff_dt = datetime.now() - timedelta(days=7)
 
     # 1. GENERAL_MACRO: Globale Wirtschaftsevents ganz oben (als Kontext priorisiert)
     macro_bullets = await get_bullet_points("GENERAL_MACRO")
-    cutoff_macro = (datetime.now() - timedelta(days=7)).isoformat()
-    macro_recent = [b for b in macro_bullets if str(b.get("date", "")) >= str(cutoff_macro)]
+    macro_recent = []
+    for b in macro_bullets:
+        try:
+            bullet_date = parse_date(str(b.get("date", "2000-01-01")))
+            if bullet_date.tzinfo:
+                bullet_date = bullet_date.replace(tzinfo=None)
+            if bullet_date >= cutoff_dt:
+                macro_recent.append(b)
+        except Exception:
+            pass
 
     # 2. Watchlist Ticker
     wl = await get_watchlist()
@@ -224,8 +261,16 @@ async def generate_weekly_summary() -> str:
     ticker_bullets = []
     for ticker in tickers:
         bullets = await get_bullet_points(ticker)
-        cutoff = (datetime.now() - timedelta(days=7)).isoformat()
-        recent = [b for b in bullets if str(b.get("date", "")) >= str(cutoff)]
+        recent = []
+        for b in bullets:
+            try:
+                bullet_date = parse_date(str(b.get("date", "2000-01-01")))
+                if bullet_date.tzinfo:
+                    bullet_date = bullet_date.replace(tzinfo=None)
+                if bullet_date >= cutoff_dt:
+                    recent.append(b)
+            except Exception:
+                pass
         ticker_bullets.extend(recent)
 
     # Sortiere NUR die Ticker-Events nach Material/Sentiment
@@ -238,13 +283,32 @@ async def generate_weekly_summary() -> str:
     all_bullets = macro_recent + ticker_bullets
 
     if not all_bullets:
-        return "Keine bemerkenswerten Events in dieser Woche."
+        # Fallback: Direkt Finnhub-News der letzten 7 Tage holen
+        logger.info("Kurzzeit-Gedächtnis leer, hole Finnhub-News direkt als Fallback")
+        from backend.app.data.finnhub import get_company_news
+        
+        fallback_news = []
+        cutoff_str = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+        today_str = datetime.now().strftime("%Y-%m-%d")
 
-    events_text = "\n".join([
-        f"- [{b.get('ticker', '?')}] ({b.get('category', 'general')}) Sentiment {float(b.get('sentiment_score', 0)):.2f}: " +
-        (" | ".join(b["bullet_points"]) if isinstance(b.get("bullet_points"), list) else str(b.get("bullet_points", "")))
-        for b in all_bullets[:30]
-    ])
+        for ticker in tickers[:10]:  # Maximal 10 Ticker
+            try:
+                news = await get_company_news(ticker, cutoff_str, today_str)
+                for n in (news or [])[:3]:  # Top 3 pro Ticker
+                    fallback_news.append(f"- [{ticker}] {n.headline}")
+            except Exception:
+                pass
+
+        if fallback_news:
+            events_text = "\n".join(fallback_news[:20])
+        else:
+            return "News-Pipeline noch nicht aktiv. Keine Daten für Wochenzusammenfassung verfügbar."
+    else:
+        events_text = "\n".join([
+            f"- [{b.get('ticker', '?')}] ({b.get('category', 'general')}) Sentiment {float(b.get('sentiment_score', 0)):.2f}: " +
+            (" | ".join(b["bullet_points"]) if isinstance(b.get("bullet_points"), list) else str(b.get("bullet_points", "")))
+            for b in all_bullets[:30]
+        ])
 
     system_prompt = (
         "Du bist ein Finanzanalyst und erstellst eine Wochenzusammenfassung auf Deutsch. "
@@ -263,7 +327,10 @@ async def generate_sunday_report(tickers: list[str]) -> str:
     Erstellt den wöchentlichen kompletten Sunday-Report, der den 
     Makro-Header sowie die Audit-Reports der abgefragten Ticker aggregiert.
     """
-    logger.info(f"Generating Sunday Report for {len(tickers)} tickers")
+    logger.info(f"Sunday Report: {len(tickers)} Ticker erhalten: {tickers}")
+    
+    if not tickers:
+        logger.warning("Keine Ticker für Audit-Reports. Prüfe Watchlist.")
     
     # 1. Makro-Header
     header = await generate_macro_header()
@@ -274,8 +341,12 @@ async def generate_sunday_report(tickers: list[str]) -> str:
     # 3. Audit-Reports
     reports = []
     for t in tickers:
-        r = await generate_audit_report(t)
-        reports.append(r)
+        try:
+            r = await generate_audit_report(t)
+            reports.append(r)
+        except Exception as e:
+            logger.error(f"Audit-Report für {t} fehlgeschlagen: {e}")
+            reports.append(f"## {t}\n\nReport-Generierung fehlgeschlagen: {str(e)}")
         
     full_report = f"# KAFIN SONNTAGS-REPORT\n\n"
     full_report += f"## MAKRO-REGIME\n\n{header}\n\n---\n\n"

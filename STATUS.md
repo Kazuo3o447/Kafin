@@ -11,6 +11,7 @@
   - ✅ Report-Generator (DeepSeek Prompting)
   - ✅ E-Mail Versand
 - [ ] **PHASE 3 - News-Pipeline & Alerts**
+  - ✅ Supabase-Datenbank-Integration (Tabellen angelegt, Verbindung getestet)
 - [ ] **PHASE 3b - Bitcoin-Modul**
 - [ ] **PHASE 4 - Feedback-Loop**
 - [ ] **PHASE 5 - Web-Dashboard**

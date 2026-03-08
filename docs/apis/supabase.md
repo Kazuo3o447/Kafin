@@ -5,8 +5,8 @@ Docs: https://supabase.com/docs
 Python-Client: `supabase-py` (bereits in requirements.txt)
 
 ## Konfiguration
-- SUPABASE_URL: Projekt-URL (z.B. https://xxxx.supabase.co)
-- SUPABASE_KEY: anon/public Key oder service_role Key
+- SUPABASE_URL: https://knelzvalqagxxjkxnxug.supabase.co
+- SUPABASE_KEY: sb_publishable_JgKKKZ1o5z53Ispk0KVQcg_uba_EnhH
 - SUPABASE_PASSWORD: `Glurak.1944!` (Projekt-Passwort)
 
 ## Python-Client Nutzung

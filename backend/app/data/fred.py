@@ -22,16 +22,19 @@ def load_mock_data(filename: str):
         return json.load(f)
 
 async def _fetch_fred_series(client: httpx.AsyncClient, series_id: str) -> Optional[float]:
-    url = f"https://api.stlouisfed.org/fred/series/observations?series_id={series_id}&api_key={settings.fred_api_key}&sort_order=desc&limit=1&file_type=json"
+    url = f"https://api.stlouisfed.org/fred/series/observations?series_id={series_id}&api_key={settings.fred_api_key}&sort_order=desc&limit=5&file_type=json"
     try:
         response = await client.get(url)
         response.raise_for_status()
         data = response.json()
         observations = data.get("observations", [])
-        if observations:
-            val = observations[0].get("value")
+        
+        for obs in observations:
+            val = obs.get("value")
             if val and val != ".":
                 return float(val)
+                
+        logger.warning(f"Kein gültiger Wert in den letzten 5 Tagen für FRED series {series_id} gefunden.")
     except Exception as e:
         logger.error(f"Error fetching FRED series {series_id}: {e}")
     return None

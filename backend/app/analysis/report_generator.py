@@ -197,32 +197,35 @@ async def generate_weekly_summary() -> str:
     """
     from backend.app.memory.short_term import get_bullet_points
     from backend.app.memory.watchlist import get_watchlist
+    from datetime import timedelta
 
-    wl = await get_watchlist()
-    tickers = [item["ticker"] for item in wl]
-
-    all_bullets = []
-    for ticker in tickers:
-        bullets = await get_bullet_points(ticker)
-        from datetime import timedelta
-        cutoff = (datetime.now() - timedelta(days=7)).isoformat()
-        recent = [b for b in bullets if str(b.get("date", "")) >= str(cutoff)]
-        all_bullets.extend(recent)
-
-    # GENERAL_MACRO: Globale Wirtschaftsevents immer einbeziehen
+    # 1. GENERAL_MACRO: Globale Wirtschaftsevents ganz oben (als Kontext priorisiert)
     macro_bullets = await get_bullet_points("GENERAL_MACRO")
     cutoff_macro = (datetime.now() - timedelta(days=7)).isoformat()
     macro_recent = [b for b in macro_bullets if str(b.get("date", "")) >= str(cutoff_macro)]
-    all_bullets.extend(macro_recent)
 
-    if not all_bullets:
-        return "Keine bemerkenswerten Events in dieser Woche."
+    # 2. Watchlist Ticker
+    wl = await get_watchlist()
+    tickers = [item["ticker"] for item in wl]
 
-    # Sortiere: Material-Events zuerst, dann nach absolutem Sentiment
-    all_bullets.sort(key=lambda x: (
+    ticker_bullets = []
+    for ticker in tickers:
+        bullets = await get_bullet_points(ticker)
+        cutoff = (datetime.now() - timedelta(days=7)).isoformat()
+        recent = [b for b in bullets if str(b.get("date", "")) >= str(cutoff)]
+        ticker_bullets.extend(recent)
+
+    # Sortiere NUR die Ticker-Events nach Material/Sentiment
+    ticker_bullets.sort(key=lambda x: (
         -int(x.get("is_material", False)),
         -abs(float(x.get("sentiment_score", 0)))
     ))
+
+    # Füge zusammen: Macro immer zuerst, dann die sortierten Ticker-News
+    all_bullets = macro_recent + ticker_bullets
+
+    if not all_bullets:
+        return "Keine bemerkenswerten Events in dieser Woche."
 
     events_text = "\n".join([
         f"- [{b.get('ticker', '?')}] ({b.get('category', 'general')}) Sentiment {float(b.get('sentiment_score', 0)):.2f}: " +

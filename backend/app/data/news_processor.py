@@ -280,8 +280,9 @@ async def run_news_pipeline(tickers: list[str]) -> list[dict]:
     # MAKRO-KALENDER: Globale Events unter GENERAL_MACRO speichern
     # -------------------------------------------------------------
     try:
-        macro_stats = await process_macro_calendar()
-        logger.info(f"Makro-Kalender: {macro_stats['events_saved']} Events gespeichert")
+        from backend.app.data.macro_processor import fetch_global_macro_events
+        macro_stats = await fetch_global_macro_events()
+        logger.info(f"Makro-Kalender: {macro_stats.get('events_saved', 0)} Events gespeichert")
     except Exception as e:
         logger.error(f"Fehler beim Makro-Kalender: {e}")
 
@@ -297,56 +298,4 @@ async def run_news_pipeline(tickers: list[str]) -> list[dict]:
     return results
 
 
-async def process_macro_calendar() -> dict:
-    """
-    Ruft den Wirtschaftskalender ab und speichert High-Impact Events
-    unter dem Pseudo-Ticker GENERAL_MACRO im Kurzzeit-Gedächtnis.
-    """
-    from backend.app.data.finnhub import get_economic_calendar
-    
-    stats = {"events_fetched": 0, "events_saved": 0}
-    
-    try:
-        events = await get_economic_calendar(days_back=7, days_forward=7)
-        stats["events_fetched"] = len(events)
-    except Exception as e:
-        logger.error(f"Fehler beim Abrufen des Wirtschaftskalenders: {e}")
-        return stats
-    
-    if not events:
-        logger.info("Keine High-Impact Makro-Events gefunden")
-        return stats
-    
-    # Deduplizierung: Prüfe ob URLs/Events schon gespeichert
-    existing_urls = await get_existing_urls("GENERAL_MACRO")
-    
-    for ev in events:
-        event_id = f"macro_{ev.get('event', '')}_{ev.get('date', '')}"
-        if event_id in existing_urls:
-            continue
-        
-        actual = ev.get("actual")
-        estimate = ev.get("estimate")
-        unit = ev.get("unit", "")
-        
-        if actual is not None and estimate is not None:
-            bullet = f"{ev['event']}: Actual {actual}{unit} vs. Est. {estimate}{unit}"
-        elif estimate is not None:
-            bullet = f"{ev['event']}: Erwartung {estimate}{unit} (noch ausstehend)"
-        else:
-            bullet = f"{ev['event']}: {ev.get('date', '?')}"
-        
-        await save_bullet_points(
-            ticker="GENERAL_MACRO",
-            date=datetime.now(),
-            source="finnhub_calendar",
-            bullet_points=[bullet],
-            sentiment_score=0.0,
-            category="macro",
-            url=event_id,
-            is_material=True
-        )
-        stats["events_saved"] += 1
-    
-    logger.info(f"Makro-Kalender: {stats['events_saved']} neue Events unter GENERAL_MACRO gespeichert")
-    return stats
+

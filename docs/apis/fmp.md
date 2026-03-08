@@ -5,6 +5,9 @@ Auth: Query-Parameter `apikey={FMP_API_KEY}`
 Rate-Limit: 300 Calls/Minute (Starter)
 Docs: https://site.financialmodelingprep.com/developer/docs
 
+## Konfiguration
+- FMP_API_KEY: cNGraOdMmoW2sCXBhUbvzN4suozg7oWi
+
 ## Genutzte Endpoints
 
 ### Company Profile

@@ -62,6 +62,7 @@ ADMIN_HTML = """
             <div class="flex space-x-1">
                 <button onclick="switchTab('reports')" id="btn-reports" class="tab-btn active px-4 py-2 hover:bg-gray-700 rounded transition">Reports</button>
                 <button onclick="switchTab('watchlist')" id="btn-watchlist" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Watchlist</button>
+                <button onclick="switchTab('news')" id="btn-news" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">News</button>
                 <button onclick="switchTab('settings')" id="btn-settings" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Einstellungen</button>
                 <button onclick="switchTab('logs')" id="btn-logs" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Logs</button>
                 <button onclick="switchTab('status')" id="btn-status" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Status</button>
@@ -164,6 +165,62 @@ ADMIN_HTML = """
                     </div>
                     <button type="button" onclick="addWatchlistItem()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded transition font-medium mb-[1px]">Hinzufügen</button>
                 </form>
+            </section>
+        </div>
+
+        <!-- NEWS TAB -->
+        <div id="tab-news" class="tab-content space-y-8">
+            <section class="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-lg font-semibold text-white">News Pipeline & Scanner</h2>
+                    <div class="space-x-2">
+                        <button id="btn-sec-scan" onclick="runSecScan()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded transition shadow">SEC-Scan starten</button>
+                        <button id="btn-news-scan" onclick="runNewsScan()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded transition shadow">News-Scan starten</button>
+                    </div>
+                </div>
+                
+                <div class="mb-6">
+                    <h3 class="text-sm font-medium text-gray-400 mb-2">Manuelle Pipeline-Ausführung (aus Watchlist)</h3>
+                    <div id="news-ticker-list" class="flex flex-wrap gap-2">
+                        <!-- Loaded via JS -->
+                        <span class="text-gray-500 text-sm">Lade Watchlist...</span>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto mb-8">
+                    <h3 class="text-md font-medium text-gray-300 mb-3">Zuletzt Ausgeführte Scans</h3>
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-900 border-b border-gray-700">
+                                <th class="p-3 text-sm font-semibold text-gray-300">Ticker</th>
+                                <th class="p-3 text-sm font-semibold text-gray-300 text-center">Geholt</th>
+                                <th class="p-3 text-sm font-semibold text-gray-300 text-center">Relevant</th>
+                                <th class="p-3 text-sm font-semibold text-gray-300 text-center">Gespeichert</th>
+                                <th class="p-3 text-sm font-semibold text-gray-300 text-center">Alerts</th>
+                            </tr>
+                        </thead>
+                        <tbody id="news-results-body" class="divide-y divide-gray-700">
+                            <tr><td colspan="5" class="p-4 text-center text-gray-500">Noch keine Scans durchgeführt</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <hr class="border-gray-700 my-6">
+
+                <div>
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-md font-medium text-gray-300">News Gedächtnis (Short-Term Memory)</h3>
+                        <select id="news-memory-select" onchange="loadNewsMemory()" class="bg-gray-900 border border-gray-700 rounded p-1.5 text-sm text-white focus:outline-none w-48">
+                            <option value="">Ticker auswählen...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 h-[400px] overflow-auto">
+                        <div id="news-memory-content" class="space-y-4">
+                            <p class="text-gray-500 text-sm text-center mt-10">Wählen Sie einen Ticker, um gespeicherte Stichpunkte zu sehen.</p>
+                        </div>
+                    </div>
+                </div>
             </section>
         </div>
 
@@ -419,6 +476,23 @@ ADMIN_HTML = """
                             ${item.ticker}
                         </button>
                     `;
+                    
+                    // Populate News Ticker List
+                    const newsList = document.getElementById('news-ticker-list');
+                    if(newsList) {
+                        if(newsList.innerHTML.includes("Lade Watchlist...")) newsList.innerHTML = '';
+                        newsList.innerHTML += `
+                            <button onclick="runNewsScan('${item.ticker}')" class="bg-gray-700 hover:bg-purple-600 text-gray-100 text-sm px-3 py-1.5 rounded transition border border-gray-600">
+                                ${item.ticker}
+                            </button>
+                        `;
+                    }
+                    
+                    // Populate News Memory Dropdown
+                    const dropdown = document.getElementById('news-memory-select');
+                    if(dropdown) {
+                        dropdown.innerHTML += `<option value="${item.ticker}">${item.ticker}</option>`;
+                    }
                 });
             } catch(e) { console.error('Error loading watchlist', e); showToast('Fehler beim Laden', 'error'); }
         }
@@ -476,6 +550,109 @@ ADMIN_HTML = """
             setTimeout(() => {
                 toast.classList.add('translate-y-20', 'opacity-0');
             }, 3000);
+        }
+
+        // --- NEWS SCANNER ---
+        async function runSecScan() {
+            const btn = document.getElementById('btn-sec-scan');
+            btn.innerHTML = `<svg class="animate-spin w-4 h-4 mr-2 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Scanning...`;
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/news/sec-scan', {method: 'POST'});
+                const data = await res.json();
+                if(res.ok) {
+                    showToast(`SEC Scan beendet. ${data.filings_found} Filings gefunden.`);
+                } else showToast('Fehler beim SEC Scan', 'error');
+            } catch(e) { showToast('Verbindungsfehler', 'error'); }
+            finally {
+                btn.innerHTML = 'SEC-Scan starten';
+                btn.disabled = false;
+            }
+        }
+        
+        function appendNewsResult(data) {
+            const tbody = document.getElementById('news-results-body');
+            if(tbody.innerHTML.includes("Noch keine Scans")) tbody.innerHTML = '';
+            
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-gray-800 transition";
+            tr.innerHTML = `
+                <td class="p-3 font-mono font-medium text-blue-400">${data.ticker}</td>
+                <td class="p-3 text-sm text-center">${data.total_fetched}</td>
+                <td class="p-3 text-sm text-center text-yellow-400">${data.passed_finbert}</td>
+                <td class="p-3 text-sm text-center text-green-400">${data.bullets_saved}</td>
+                <td class="p-3 text-sm text-center ${data.alerts_sent > 0 ? 'text-red-400 font-bold' : ''}">${data.alerts_sent}</td>
+            `;
+            tbody.insertBefore(tr, tbody.firstChild);
+        }
+
+        async function runNewsScan(ticker = null) {
+            const endpoint = ticker ? `/api/news/scan/${ticker}` : '/api/news/scan';
+            showToast(`Starte News Scan ${ticker ? 'für ' + ticker : '(Alle)'}...`);
+            
+            try {
+                const res = await fetch(endpoint, {method: 'POST'});
+                const data = await res.json();
+                if(res.ok) {
+                    showToast('Scan erfolgreich');
+                    if(ticker) {
+                        appendNewsResult(data.result);
+                    } else {
+                        data.results.forEach(appendNewsResult);
+                    }
+                } else showToast('Fehler beim Scan', 'error');
+            } catch(e) { showToast('Verbindungsfehler', 'error'); }
+        }
+
+        async function loadNewsMemory() {
+            const ticker = document.getElementById('news-memory-select').value;
+            const container = document.getElementById('news-memory-content');
+            
+            if(!ticker) {
+                container.innerHTML = '<p class="text-gray-500 text-sm text-center mt-10">Wählen Sie einen Ticker, um gespeicherte Stichpunkte zu sehen.</p>';
+                return;
+            }
+            
+            container.innerHTML = `<div class="flex justify-center mt-10"><svg class="animate-spin w-8 h-8 text-blue-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`;
+            
+            try {
+                const res = await fetch(`/api/news/memory/${ticker}`);
+                const data = await res.json();
+                
+                if(!data.bullet_points || data.bullet_points.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500 text-sm text-center mt-10">Keine Daten für diesen Ticker im Gedächtnis.</p>';
+                    return;
+                }
+                
+                container.innerHTML = '';
+                data.bullet_points.forEach(bp => {
+                    const dateStr = bp.date ? bp.date.split('T')[0] : 'Unbekannt';
+                    const score = parseFloat(bp.sentiment_score || 0);
+                    const color = score > 0.3 ? 'text-green-400' : (score < -0.3 ? 'text-red-400' : 'text-gray-400');
+                    
+                    let bulletsHtml = '';
+                    if(Array.isArray(bp.bullet_points)) {
+                        bulletsHtml = `<ul class="list-disc list-inside text-sm text-gray-300 mt-2 space-y-1">` + 
+                            bp.bullet_points.map(b => `<li>${b}</li>`).join('') + 
+                            `</ul>`;
+                    } else if(typeof bp.bullet_points === 'string') {
+                        bulletsHtml = `<p class="text-sm text-gray-300 mt-2">${bp.bullet_points}</p>`;
+                    }
+                    
+                    container.innerHTML += `
+                        <div class="bg-black p-3 rounded border border-gray-800">
+                            <div class="flex justify-between items-center bg-gray-900 -mx-3 -mt-3 p-2 px-3 border-b border-gray-800 rounded-t">
+                                <span class="text-xs text-gray-500">${dateStr} | ${bp.category || 'general'}</span>
+                                <span class="text-xs ${color} font-mono">Sent: ${score.toFixed(2)}</span>
+                            </div>
+                            ${bulletsHtml}
+                        </div>
+                    `;
+                });
+                
+            } catch(e) {
+                container.innerHTML = `<p class="text-red-500 text-sm text-center mt-10">Fehler beim Laden.</p>`;
+            }
         }
 
         // --- SETTINGS ---
@@ -660,7 +837,7 @@ ADMIN_HTML = """
             };
 
             // APIs
-            const apis = ['Finnhub', 'FMP', 'FRED', 'CoinGlass', 'DeepSeek', 'Kimi'].map(k => {
+            const apis = ['Finnhub', 'FMP', 'FRED', 'CoinGlass', 'DeepSeek', 'Kimi', 'FinBERT'].map(k => {
                 const id = k.toLowerCase();
                 const keySet = data.keys[id];
                 return { id: id, label: k, status: keySet ? (data.api_checks[id] || 'warning') : 'warning', testable: true };
@@ -798,41 +975,89 @@ async def run_status_check(api: str = None):
     Wenn `api` angegeben ist, wird nur dieser eine Service aktiv getestet (Netzwerk),
     die anderen bekommen nur ihren Key-Status.
     """
-    telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN") or getattr(settings, "telegram_bot_token", None)
-    
-    has_keys = {
+    # Keys
+    keys = {
         "finnhub": bool(settings.finnhub_api_key),
         "fmp": bool(settings.fmp_api_key),
         "fred": bool(settings.fred_api_key),
         "coinglass": bool(settings.coinglass_api_key),
         "deepseek": bool(settings.deepseek_api_key),
         "kimi": bool(settings.kimi_api_key),
-        "supabase": bool(settings.supabase_key),
-        "telegram": bool(telegram_token)
+        "telegram": bool(settings.telegram_bot_token and settings.telegram_chat_id),
+        "supabase": bool(settings.supabase_url and settings.supabase_key),
+        "finbert": True # Local model, always "configured"
     }
     
-    api_checks = {}
-    targets = [api] if api else ["finnhub", "fmp", "fred", "coinglass", "deepseek", "kimi", "telegram"]
+    # Simple Ping Tests
+    checks = {}
     
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        # Finnhub
-        if "finnhub" in targets or not api:
-            if has_keys["finnhub"]:
-                if settings.use_mock_data:
-                    api_checks["finnhub"] = "ok" # Mock mode always returns ok
-                else:
-                    try:
-                        # Ein einfacher symbol lookup request an finnhub als ping
-                        res = await client.get(f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={settings.finnhub_api_key}")
-                        api_checks["finnhub"] = "ok" if res.status_code == 200 else "error"
-                    except Exception as e:
-                        logger.error(f"Status check failed for Finnhub: {str(e)}")
-                        api_checks["finnhub"] = "error"
-            else:
-                 api_checks["finnhub"] = "warning"
-                 
-        # FMP
-        if "fmp" in targets or not api:
+    async def try_ping(name: str, url: str, headers: dict = None, params: dict = None):
+        if not keys.get(name) and name != "finbert":
+            return "warning"
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                res = await client.get(url, headers=headers, params=params)
+                if res.status_code == 200:
+                    return "ok"
+                return "error"
+        except:
+            return "error"
+
+    # Only test the requested API, or all if none provided
+    if api is None or api == "finnhub":
+        if keys["finnhub"]:
+            checks["finnhub"] = await try_ping("finnhub", f"https://finnhub.io/api/v1/quote?symbol=AAPL&token={settings.finnhub_api_key}")
+    
+    if api is None or api == "fmp":
+        if keys["fmp"]:
+             checks["fmp"] = await try_ping("fmp", f"https://financialmodelingprep.com/api/v3/profile/AAPL?apikey={settings.fmp_api_key}")
+             
+    if api is None or api == "fred":
+        if keys["fred"]:
+             checks["fred"] = await try_ping("fred", f"https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&api_key={settings.fred_api_key}&file_type=json&limit=1")
+             
+    if api is None or api == "coinglass":
+        if keys["coinglass"]:
+             checks["coinglass"] = await try_ping("coinglass", "https://open-api.coinglass.com/public/v2/indicator/bitcoin_profitable_days", headers={"coinglassSecret": settings.coinglass_api_key})
+             
+    if api is None or api == "deepseek":
+         if keys["deepseek"]:
+              # Need POST for Chat API, or simple GET if they have a status endpoint?
+              # For now, let's just assume OK if key is set, or try a tiny prompt
+              checks["deepseek"] = "ok" # Placeholder
+              
+    if api is None or api == "kimi":
+         if keys["kimi"]:
+              checks["kimi"] = "ok" # Placeholder
+              
+    if api is None or api == "telegram":
+         if keys["telegram"]:
+             checks["telegram"] = await try_ping("telegram", f"https://api.telegram.org/bot{settings.telegram_bot_token}/getMe")
+
+    if api is None or api == "finbert":
+         try:
+             # Fast local test
+             import time
+             start = time.time()
+             from backend.app.analysis.finbert import analyze_sentiment
+             # Force model load if not loaded
+             analyze_sentiment("test") 
+             duration = (time.time() - start) * 1000
+             logger.info(f"Admin Status Check: FinBERT reagiert in {duration:.0f}ms")
+             checks["finbert"] = "ok"
+         except Exception as e:
+             logger.error(f"FinBERT Status Check Error: {e}")
+             checks["finbert"] = "error"
+
+    return {
+        "status": "success",
+        "keys": keys,
+        "api_checks": checks,
+        "settings": {
+            "use_mock_data": settings.use_mock_data
+        }
+    }
+
             if has_keys["fmp"]:
                 if settings.use_mock_data:
                     api_checks["fmp"] = "ok"

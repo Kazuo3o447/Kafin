@@ -10,3 +10,5 @@ pytest>=8.0.0
 structlog>=24.1.0
 redis>=5.0.0
 yfinance>=0.2.37
+torch==2.5.*
+transformers==4.47.*

@@ -66,7 +66,14 @@ async def generate_audit_report(ticker: str) -> str:
     
     now = datetime.now()
     month_ago = now.replace(day=max(1, now.day - 30)) if now.day > 1 else now # rough 30 days
-    news_list = await get_company_news(ticker, month_ago.strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d"))
+    
+    # 1.5 Try getting news from memory first, else fallback to Finnhub
+    from backend.app.memory.short_term import get_bullet_points
+    news_memory = await get_bullet_points(ticker)
+    
+    news_list = None
+    if not news_memory:
+        news_list = await get_company_news(ticker, month_ago.strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d"))
     
     macro = await get_macro_snapshot()
     
@@ -89,7 +96,31 @@ async def generate_audit_report(ticker: str) -> str:
     sys_prompt, user_tmpl = _read_prompt(AUDIT_PROMPT_PATH)
     
     # Format news
-    news_str = "\n".join([f"- {n.headline}: {n.summary[:100]}..." for n in news_list[:5]]) if news_list else "Keine relevanten Nachrichten in den letzten 30 Tagen."
+    if news_memory:
+        import json
+        bullets = []
+        for nm in news_memory[:5]:
+            try:
+                # bp kann String oder JSON-String Liste sein
+                bp_data = nm.get("bullet_points")
+                if isinstance(bp_data, str):
+                    try: 
+                        parsed = json.loads(bp_data)
+                        if isinstance(parsed, list): bullets.extend(parsed)
+                        else: bullets.append(str(parsed))
+                    except:
+                        bullets.append(bp_data)
+                elif isinstance(bp_data, list):
+                    bullets.extend(bp_data)
+            except Exception as e:
+                logger.error(f"Fehler beim Parsen der Memory-Stichpunkte: {e}")
+                
+        if bullets:
+            news_str = "\n".join([f"- {b}" for b in bullets[:7]]) # max 7 Stichpunkte
+        else:
+             news_str = "Keine relevanten Nachrichten in den letzten 30 Tagen."
+    else:
+        news_str = "\n".join([f"- {n.headline}: {n.summary[:100]}..." for n in news_list[:5]]) if news_list else "Keine relevanten Nachrichten in den letzten 30 Tagen."
     
     user_prompt = user_tmpl \
         .replace("{{ticker}}", ticker) \

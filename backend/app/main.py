@@ -35,6 +35,13 @@ async def health_check():
     """Prüft, ob die API erreichbar ist."""
     return HealthCheckResponse(status="ok", version="1.0.0")
 
+from backend.app.analysis.finbert import analyze_sentiment
+
+@app.post("/api/finbert/analyze")
+async def api_finbert_analyze(text: str):
+    score = analyze_sentiment(text)
+    return {"text": text, "sentiment_score": score}
+
 from fastapi import APIRouter
 from typing import List
 
@@ -153,6 +160,45 @@ async def api_remove_watchlist_item(ticker: str):
     if success:
          return {"status": "success"}
     return {"status": "error"}
+
+from backend.app.data.news_processor import run_news_pipeline, process_news_for_ticker
+from backend.app.data.sec_edgar import scan_filings_for_watchlist
+
+news_router = APIRouter(prefix="/api/news", tags=["news"])
+
+@news_router.post("/scan")
+async def api_news_scan():
+    """Führt die News-Pipeline für alle Watchlist-Ticker aus."""
+    logger.info("API Call: news-scan (manuell)")
+    wl = await get_watchlist()
+    tickers = [item["ticker"] for item in wl]
+    results = await run_news_pipeline(tickers)
+    return {"status": "success", "results": results}
+
+@news_router.post("/scan/{ticker}")
+async def api_news_scan_ticker(ticker: str):
+    """Führt die News-Pipeline für einen einzelnen Ticker aus."""
+    logger.info(f"API Call: news-scan for {ticker}")
+    result = await process_news_for_ticker(ticker)
+    return {"status": "success", "result": result}
+
+@news_router.get("/memory/{ticker}")
+async def api_news_memory(ticker: str):
+    """Gibt alle gespeicherten Stichpunkte für einen Ticker zurück."""
+    from backend.app.memory.short_term import get_bullet_points
+    bullets = await get_bullet_points(ticker)
+    return {"ticker": ticker, "count": len(bullets), "bullet_points": bullets}
+
+@news_router.post("/sec-scan")
+async def api_sec_scan():
+    """Scannt SEC EDGAR für alle Watchlist-Ticker."""
+    logger.info("API Call: sec-scan")
+    wl = await get_watchlist()
+    tickers = [item["ticker"] for item in wl]
+    filings = await scan_filings_for_watchlist(tickers)
+    return {"status": "success", "filings_found": len(filings), "filings": filings}
+
+app.include_router(news_router)
 
 from backend.app.analysis.report_generator import generate_audit_report, generate_sunday_report
 

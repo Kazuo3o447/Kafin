@@ -6,6 +6,9 @@ WORKDIR /app
 COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Modell vorladen (verhindert Download zur Laufzeit)
+RUN python -c "from transformers import AutoModelForSequenceClassification, AutoTokenizer; AutoModelForSequenceClassification.from_pretrained('ProsusAI/finbert'); AutoTokenizer.from_pretrained('ProsusAI/finbert')"
+
 # Anwendung
 COPY backend/app /app/backend/app
 COPY schemas /app/schemas

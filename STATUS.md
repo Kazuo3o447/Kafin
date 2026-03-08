@@ -23,9 +23,9 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 *   **Report-Versand**: Umstellung von E-Mail (SMTP) auf Telegram-Direktnachricht (mit automatischem Chunking bei langen Berichten).
 
 ## 🚀 Nächste Schritte (Phase 3)
-*   [ ] **Finnhub News-Pipeline**: Implementierung des Scrapers zum Speichern von Nachrichten in Supabase.
-*   [ ] **SEC EDGAR Scanner**: Automatisierte Überwachung von 8-K und 10-Q Filings.
-*   [ ] **Alerting-Engine**: Logik für "Torpedo-Warnungen" bei negativen News-Events.
+*   [x] **Finnhub News-Pipeline**: Implementierung des Scrapers zum Speichern von Nachrichten in Supabase (inklusive FinBERT Sentiment).
+*   [x] **SEC EDGAR Scanner**: Automatisierte Überwachung von 8-K und Form 4 Filings.
+*   [x] **Alerting-Engine**: Logik für "Torpedo-Warnungen" bei negativen News-Events.
 
 ## 🛠️ System-Hinweis
 *   **Docker**: Backend, Redis und n8n laufen stabil im Verbund.

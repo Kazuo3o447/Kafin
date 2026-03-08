@@ -12,7 +12,8 @@ from backend.app.config import settings
 from backend.app.logger import get_logger
 from backend.app.rate_limiter import rate_limit
 from schemas.earnings import EarningsExpectation
-from schemas.sentiment import NewsBulletPoint, ShortInterestData, InsiderActivity
+from typing import Optional
+from schemas.sentiment import NewsBulletPoint, ShortInterestData, InsiderActivity, SocialSentiment
 
 logger = get_logger(__name__)
 
@@ -217,4 +218,45 @@ async def get_insider_transactions(ticker: str) -> InsiderActivity:
              buy_volume_90d=buy_vol,
              sell_volume_90d=sell_vol
         )
+
+@rate_limit("finnhub")
+async def get_social_sentiment(ticker: str) -> Optional[SocialSentiment]:
+    """Ruft Finnhub Social Sentiment der letzten 7 Tage ab."""
+    if settings.use_mock_data:
+        return SocialSentiment(reddit_mentions=150, twitter_mentions=300, social_score=0.35)
+        
+    now = datetime.now()
+    from_date = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    url = f"https://finnhub.io/api/v1/stock/social-sentiment?symbol={ticker}&from={from_date}&token={settings.finnhub_api_key}"
+    
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            
+            reddit = data.get("reddit", [])
+            twitter = data.get("twitter", [])
+            
+            # Aggregation über die letzten 7 Tage
+            r_mentions = sum(r.get("mention", 0) for r in reddit)
+            t_mentions = sum(t.get("mention", 0) for t in twitter)
+            total_mentions = r_mentions + t_mentions
+            
+            if total_mentions == 0:
+                return None
+                
+            r_score = sum(r.get("score", 0) * r.get("mention", 0) for r in reddit)
+            t_score = sum(t.get("score", 0) * t.get("mention", 0) for t in twitter)
+            
+            avg_score = (r_score + t_score) / total_mentions
+            
+            return SocialSentiment(
+                reddit_mentions=r_mentions,
+                twitter_mentions=t_mentions,
+                social_score=round(avg_score, 4)
+            )
+        except Exception as e:
+            logger.error(f"Finnhub Social Sentiment Fehler für {ticker}: {e}")
+            return None
 

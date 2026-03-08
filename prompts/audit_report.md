@@ -42,6 +42,10 @@ Einordnung: {{insider_assessment}}
 NACHRICHTEN DER LETZTEN WOCHEN:
 {{news_bullet_points}}
 
+OPTIONEN & SOCIAL:
+Options-Setup: {{options_metrics}}
+Social-Sentiment (7d): {{social_sentiment}}
+
 SCORES:
 Opportunity-Score: {{opportunity_score}}/10
 Torpedo-Score: {{torpedo_score}}/10

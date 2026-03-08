@@ -34,6 +34,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 - [x] **Phase 3B:** Weekly Summary im Sonntags-Report.
 - [x] **Phase 3B:** Torpedo Monitor (Material News detection).
 - [x] **Phase 3B:** Makro-News (Global Macro Intelligence / DeepSeek Summary).
+- [x] **Phase 3B:** Options- & Social-Sentiment Analyse (Zero-Cost via yfinance/Finnhub).
 
 ## 🚀 Nächste Schritte (Phase 4 / UI)
 - UI/Frontend mit React und Tailwind gestalten.

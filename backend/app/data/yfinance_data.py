@@ -10,7 +10,9 @@ API:    Yahoo Finance (via yfinance Bibliothek)
 import yfinance as yf
 import json
 import os
-from schemas.technicals import TechnicalSetup
+from datetime import datetime
+from typing import Optional
+from schemas.technicals import TechnicalSetup, OptionsMetrics
 from backend.app.config import settings
 from backend.app.logger import get_logger
 
@@ -78,3 +80,60 @@ async def get_technical_setup(ticker: str) -> TechnicalSetup:
     except Exception as e:
         logger.error(f"yfinance Fehler für {ticker}: {e}")
         return TechnicalSetup(ticker=ticker, current_price=0.0)
+
+async def get_options_metrics(ticker: str) -> Optional[OptionsMetrics]:
+    """Berechnet Options-Kennzahlen für einen Ticker (PCR, IV ATM)."""
+    if settings.use_mock_data:
+        return OptionsMetrics(put_call_ratio_oi=1.1, implied_volatility_atm=0.25, expiration="2024-01-01")
+        
+    try:
+        stock = yf.Ticker(ticker)
+        # Check if options exist
+        exps = getattr(stock, 'options', [])
+        if not exps:
+            return None
+
+        # Finde nächste Expiration > 5 Tage in der Zukunft
+        now = datetime.now()
+        target_exp = None
+        for exp in exps:
+            exp_date = datetime.strptime(exp, "%Y-%m-%d")
+            if (exp_date - now).days > 5:
+                target_exp = exp
+                break
+                
+        if not target_exp:
+            return None
+            
+        opt = stock.option_chain(target_exp)
+        calls = opt.calls
+        puts = opt.puts
+        
+        if calls.empty or puts.empty:
+            return None
+            
+        # Put/Call Ratio (Open Interest)
+        total_put_oi = float(puts['openInterest'].sum())
+        total_call_oi = float(calls['openInterest'].sum())
+        pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0.0
+        
+        # IV ATM
+        # Approximiere aktuellen Kurs mittels yfinance history
+        hist = stock.history(period="1d")
+        if hist.empty:
+             return None
+        current_price = float(hist['Close'].iloc[-1])
+        
+        # Finde ATM Call
+        calls['distance'] = abs(calls['strike'] - current_price)
+        atm_call = calls.loc[calls['distance'].idxmin()]
+        iv_atm = float(atm_call['impliedVolatility'])
+        
+        return OptionsMetrics(
+            put_call_ratio_oi=round(pcr, 2),
+            implied_volatility_atm=round(iv_atm, 4),
+            expiration=target_exp
+        )
+    except Exception as e:
+        logger.error(f"yfinance Options Fehler für {ticker}: {e}")
+        return None

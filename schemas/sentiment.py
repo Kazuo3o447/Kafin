@@ -50,3 +50,10 @@ class InsiderActivity(BaseModel):
     is_cluster_sell: bool = False
     assessment: str = "normal"                  # "normal" | "bullish" | "bearish"
     model_config = ConfigDict(from_attributes=True)
+
+class SocialSentiment(BaseModel):
+    """Social-Media Sentiment."""
+    reddit_mentions: int = 0
+    twitter_mentions: int = 0
+    social_score: float = 0.0
+    model_config = ConfigDict(from_attributes=True)

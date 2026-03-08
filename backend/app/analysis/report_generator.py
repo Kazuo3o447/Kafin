@@ -73,14 +73,23 @@ async def generate_audit_report(ticker: str) -> str:
     """
     logger.info(f"Generating Audit Report for {ticker}")
     
-    # 1. Fetch data
+    profile = await get_company_profile(ticker)
+    if not profile:
+        logger.warning(f"Ticker-Validierung fehlgeschlagen für {ticker}.")
+        return f"Fehler: Ticker '{ticker}' ist ungültig (kein Profil gefunden)."
+
     estimates = await get_analyst_estimates(ticker)
     history = await get_earnings_history(ticker)
-    profile = await get_company_profile(ticker)
     metrics = await get_key_metrics(ticker)
     short_interest = await get_short_interest(ticker)
     insiders = await get_insider_transactions(ticker)
     technicals = await get_technical_setup(ticker)
+    
+    from backend.app.data.yfinance_data import get_options_metrics
+    options = await get_options_metrics(ticker)
+    
+    from backend.app.data.finnhub import get_social_sentiment
+    social = await get_social_sentiment(ticker)
     
     now = datetime.now()
     month_ago = now.replace(day=max(1, now.day - 30)) if now.day > 1 else now # rough 30 days
@@ -103,7 +112,9 @@ async def generate_audit_report(ticker: str) -> str:
         "insider_activity": insiders.dict() if insiders else {},
         "macro": macro.dict() if macro else {},
         "technicals": technicals.dict() if technicals else {},
-        "news_memory": news_memory if news_memory else []
+        "news_memory": news_memory if news_memory else [],
+        "options": options.dict() if options else {},
+        "social": social.dict() if social else {}
     }
     
     # 2. Scores
@@ -179,6 +190,8 @@ async def generate_audit_report(ticker: str) -> str:
         .replace("{{insider_sells}}", str(getattr(insiders, "total_sells", "0")) if insiders else "0") \
         .replace("{{insider_sell_value}}", str(getattr(insiders, "total_sell_value", "0.0")) if insiders else "0.0") \
         .replace("{{insider_assessment}}", str(getattr(insiders, "assessment", "normal")) if insiders else "normal") \
+        .replace("{{options_metrics}}", f"PCR: {options.put_call_ratio_oi} | IV ATM: {options.implied_volatility_atm * 100:.1f}%" if options else "N/A") \
+        .replace("{{social_sentiment}}", f"Score: {social.social_score} (Reddit: {social.reddit_mentions}, Twitter: {social.twitter_mentions})" if social else "N/A") \
         .replace("{{news_bullet_points}}", news_str) \
         .replace("{{opportunity_score}}", str(opp_score.total_score if opp_score else 0.0)) \
         .replace("{{torpedo_score}}", str(torp_score.total_score if torp_score else 0.0))

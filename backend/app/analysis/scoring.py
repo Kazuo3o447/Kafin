@@ -79,7 +79,11 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     elif assessment == "bearish": ia_score = 0.0
 
     # options_flow
-    options_flow = 5.0
+    of_score = 5.0
+    options = data.get("options", {})
+    pcr = options.get("put_call_ratio_oi", 0.0) if isinstance(options, dict) else 0.0
+    if pcr > 1.2:
+        of_score = min(10.0, of_score + 2.0)  # Konträr-Signal
 
     total_score = (
         em * weights.get("earnings_momentum", 0) +
@@ -90,7 +94,7 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
         sector_regime * weights.get("sector_regime", 0) +
         ss * weights.get("short_squeeze_potential", 0) +
         ia_score * weights.get("insider_activity", 0) +
-        options_flow * weights.get("options_flow", 0)
+        of_score * weights.get("options_flow", 0)
     )
     
     return OpportunityScore(
@@ -104,7 +108,7 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
         sector_regime=round(sector_regime, 2),
         short_squeeze_potential=round(ss, 2),
         insider_activity=round(ia_score, 2),
-        options_flow=round(options_flow, 2)
+        options_flow=round(of_score, 2)
     )
 
 async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
@@ -125,7 +129,11 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
         elif ps < sector_ps: vd = 0.0
 
     # expectation_gap
-    expectation_gap = 5.0
+    eg_score = 5.0
+    options = data.get("options", {})
+    iv_atm = options.get("implied_volatility_atm", 0.0) if isinstance(options, dict) else 0.0
+    if iv_atm > 0.80:
+        eg_score = min(10.0, eg_score + 2.0)
 
     # insider_selling
     isa_score = 0.0
@@ -163,7 +171,7 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
 
     total_score = (
         vd * weights.get("valuation_downside", 0) +
-        expectation_gap * weights.get("expectation_gap", 0) +
+        eg_score * weights.get("expectation_gap", 0) +
         isa_score * weights.get("insider_selling", 0) +
         guidance_deceleration * weights.get("guidance_deceleration", 0) +
         leadership_instability * weights.get("leadership_instability", 0) +
@@ -175,7 +183,7 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
         ticker=ticker,
         total_score=round(total_score, 2),
         valuation_downside=round(vd, 2),
-        expectation_gap=round(expectation_gap, 2),
+        expectation_gap=round(eg_score, 2),
         insider_selling=round(isa_score, 2),
         guidance_deceleration=round(guidance_deceleration, 2),
         leadership_instability=round(leadership_instability, 2),

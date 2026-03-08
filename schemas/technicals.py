@@ -21,3 +21,10 @@ class TechnicalSetup(BaseModel):
     above_sma50: bool = False
     above_sma200: bool = False
     model_config = ConfigDict(from_attributes=True)
+
+class OptionsMetrics(BaseModel):
+    """Options-Kennzahlen via yfinance."""
+    put_call_ratio_oi: float = 0.0
+    implied_volatility_atm: float = 0.0
+    expiration: str = ""
+    model_config = ConfigDict(from_attributes=True)

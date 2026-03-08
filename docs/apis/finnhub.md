@@ -5,6 +5,9 @@ Auth: Query-Parameter `token={FINNHUB_API_KEY}`
 Rate-Limit: 60 Calls/Minute (Free Tier)
 Docs: https://finnhub.io/docs/api
 
+## Konfiguration
+- FINNHUB_API_KEY: d6mk689r01qi0ajmimf0d6mk689r01qi0ajmimfg
+
 ## Genutzte Endpoints
 
 ### Earnings Calendar

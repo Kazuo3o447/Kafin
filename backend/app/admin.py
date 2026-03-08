@@ -610,6 +610,24 @@ ADMIN_HTML = """
             btn.innerHTML = `<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Alle Prüfen`;
         }
         
+        // Individual API test
+        async function testApi(apiName) {
+            const btn = document.getElementById(`btn-test-${apiName}`);
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '...';
+            btn.disabled = true;
+            
+            try {
+                // We pass the specific API to check as a query parameter
+                const res = await fetch(`/api/status/check?api=${apiName}`, {method: 'POST'});
+                const data = await res.json();
+                renderStatusGrid(data);
+                showToast(`${apiName.toUpperCase()} Ping erfolgreich gesendet.`);
+            } catch (e) {
+                showToast(`Prüfung für ${apiName} fehlgeschlagen`, 'error');
+            }
+        }
+        
         function renderStatusGrid(data) {
             const grid = document.getElementById('status-grid');
             grid.innerHTML = '';
@@ -618,11 +636,14 @@ ADMIN_HTML = """
             const renderCard = (title, items) => {
                 let itemsHtml = items.map(i => `
                     <div class="flex justify-between items-center py-2 border-b border-gray-700 last:border-0">
-                        <span class="text-sm text-gray-300 font-medium">${i.label}</span>
+                        <div class="flex items-center">
+                            <span class="text-sm text-gray-300 font-medium">${i.label}</span>
+                            ${i.testable ? `<button onclick="testApi('${i.id}')" id="btn-test-${i.id}" class="ml-2 text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-0.5 rounded text-gray-300 transition uppercase tracking-wider">Test</button>` : ''}
+                        </div>
                         <div class="flex items-center space-x-2">
-                           ${i.status === 'ok' ? '<span class="w-2 h-2 bg-green-500 rounded-full"></span><span class="text-xs text-gray-400">OK</span>' : 
-                             i.status === 'error' ? '<span class="w-2 h-2 bg-red-500 rounded-full"></span><span class="text-xs text-gray-400">Error</span>' : 
-                             '<span class="w-2 h-2 bg-yellow-500 rounded-full"></span><span class="text-xs text-gray-400">N/A</span>'}
+                           ${i.status === 'ok' ? '<span class="w-2 h-2 bg-green-500 rounded-full shadow-[0_0_5px_rgba(34,197,94,0.5)]"></span><span class="text-xs text-gray-400">OK</span>' : 
+                             i.status === 'error' ? '<span class="w-2 h-2 bg-red-500 rounded-full shadow-[0_0_5px_rgba(239,68,68,0.5)]"></span><span class="text-xs text-gray-400">Error</span>' : 
+                             '<span class="w-2 h-2 bg-yellow-500 rounded-full shadow-[0_0_5px_rgba(234,179,8,0.5)]"></span><span class="text-xs text-gray-400">N/A</span>'}
                         </div>
                     </div>
                 `).join('');
@@ -640,9 +661,15 @@ ADMIN_HTML = """
 
             // APIs
             const apis = ['Finnhub', 'FMP', 'FRED', 'CoinGlass', 'DeepSeek', 'Kimi'].map(k => {
-                const keySet = data.keys[k.toLowerCase()];
-                return { label: k, status: keySet ? (data.api_checks[k.toLowerCase()] || 'ok') : 'warning' };
+                const id = k.toLowerCase();
+                const keySet = data.keys[id];
+                return { id: id, label: k, status: keySet ? (data.api_checks[id] || 'warning') : 'warning', testable: true };
             });
+            
+            // Add Telegram individually since it's an API, but not in the original list
+            const telSet = data.keys['telegram'];
+            apis.push({ id: 'telegram', label: 'Telegram', status: telSet ? (data.api_checks['telegram'] || 'warning') : 'warning', testable: true });
+            
             grid.innerHTML += renderCard('API Schnittstellen', apis);
 
             // Services
@@ -765,11 +792,14 @@ async def get_logs_endpoint():
     return logs
 
 @router.post("/api/status/check")
-async def run_status_check():
+async def run_status_check(api: str = None):
     """
     Führt simple GET Requests aus, wenn die Keys da sind.
-    Da wir noch keine echte Geschäftslogik haben, sind das Placeholder-Checks.
+    Wenn `api` angegeben ist, wird nur dieser eine Service aktiv getestet (Netzwerk),
+    die anderen bekommen nur ihren Key-Status.
     """
+    telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN") or getattr(settings, "telegram_bot_token", None)
+    
     has_keys = {
         "finnhub": bool(settings.finnhub_api_key),
         "fmp": bool(settings.fmp_api_key),
@@ -777,34 +807,102 @@ async def run_status_check():
         "coinglass": bool(settings.coinglass_api_key),
         "deepseek": bool(settings.deepseek_api_key),
         "kimi": bool(settings.kimi_api_key),
-        "supabase": bool(settings.supabase_key)
+        "supabase": bool(settings.supabase_key),
+        "telegram": bool(telegram_token)
     }
     
     api_checks = {}
+    targets = [api] if api else ["finnhub", "fmp", "fred", "coinglass", "deepseek", "kimi", "telegram"]
     
-    # Simulated simple ping if key present, else warning
-    async with httpx.AsyncClient() as client:
-        # Finnhub Example
-        if has_keys["finnhub"]:
-            if settings.use_mock_data:
-                api_checks["finnhub"] = "ok" # Mock mode always returns ok
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        # Finnhub
+        if "finnhub" in targets or not api:
+            if has_keys["finnhub"]:
+                if settings.use_mock_data:
+                    api_checks["finnhub"] = "ok" # Mock mode always returns ok
+                else:
+                    try:
+                        # Ein einfacher symbol lookup request an finnhub als ping
+                        res = await client.get(f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={settings.finnhub_api_key}")
+                        api_checks["finnhub"] = "ok" if res.status_code == 200 else "error"
+                    except Exception as e:
+                        logger.error(f"Status check failed for Finnhub: {str(e)}")
+                        api_checks["finnhub"] = "error"
             else:
-                try:
-                    # Ein einfacher symbol lookup request an finnhub als ping
-                    res = await client.get(f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={settings.finnhub_api_key}")
-                    api_checks["finnhub"] = "ok" if res.status_code == 200 else "error"
-                except Exception as e:
-                    logger.error(f"Status check failed for Finnhub: {str(e)}")
-                    api_checks["finnhub"] = "error"
-        else:
-             api_checks["finnhub"] = "warning"
-             
+                 api_checks["finnhub"] = "warning"
+                 
+        # FMP
+        if "fmp" in targets or not api:
+            if has_keys["fmp"]:
+                if settings.use_mock_data:
+                    api_checks["fmp"] = "ok"
+                else:
+                    try:
+                        res = await client.get(f"https://financialmodelingprep.com/stable/search-symbol?query=AAPL&apikey={settings.fmp_api_key}")
+                        api_checks["fmp"] = "ok" if res.status_code == 200 else "error"
+                    except Exception as e:
+                        logger.error(f"Status check failed for FMP: {str(e)}")
+                        api_checks["fmp"] = "error"
+            else:
+                 api_checks["fmp"] = "warning"
+
+        # FRED
+        if "fred" in targets or not api:
+            if has_keys["fred"]:
+                if settings.use_mock_data:
+                    api_checks["fred"] = "ok"
+                else:
+                    try:
+                        res = await client.get(f"https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&api_key={settings.fred_api_key}&sort_order=desc&limit=1&file_type=json")
+                        api_checks["fred"] = "ok" if res.status_code == 200 else "error"
+                    except Exception as e:
+                        logger.error(f"Status check failed for FRED: {str(e)}")
+                        api_checks["fred"] = "error"
+            else:
+                 api_checks["fred"] = "warning"
+
+        # DEEPSEEK
+        if "deepseek" in targets or not api:
+            if has_keys["deepseek"]:
+                if settings.use_mock_data:
+                    api_checks["deepseek"] = "ok"
+                else:
+                    try:
+                        res = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization": f"Bearer {settings.deepseek_api_key}"}, json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "Ping"}], "max_tokens": 5})
+                        api_checks["deepseek"] = "ok" if res.status_code == 200 else "error"
+                    except Exception as e:
+                        logger.error(f"Status check failed for DeepSeek: {str(e)}")
+                        api_checks["deepseek"] = "error"
+            else:
+                 api_checks["deepseek"] = "warning"
+
+        # TELEGRAM
+        if "telegram" in targets or not api:
+            if has_keys["telegram"]:
+                if settings.use_mock_data:
+                    api_checks["telegram"] = "ok"
+                else:
+                    try:
+                        res = await client.get(f"https://api.telegram.org/bot{telegram_token}/getMe")
+                        api_checks["telegram"] = "ok" if res.status_code == 200 else "error"
+                    except Exception as e:
+                        logger.error(f"Status check failed for Telegram: {str(e)}")
+                        api_checks["telegram"] = "error"
+            else:
+                 api_checks["telegram"] = "warning"
+
         # Mock others for now since they are not fully wired up
-        for k in ["fmp", "fred", "coinglass", "deepseek", "kimi"]:
-            if has_keys[k]:
-                api_checks[k] = "ok" # We assume it works if we have the key for the MVP Status Check
-            else:
-                api_checks[k] = "warning"
+        for k in ["coinglass", "kimi"]:
+            if k in targets or not api:
+                if has_keys.get(k, False):
+                    api_checks[k] = "ok" # We assume it works if we have the key for the MVP Status Check
+                else:
+                    api_checks[k] = "warning"
+
+    # Fill up the rest with defaults if a single specific API was queried
+    for k in has_keys:
+        if k not in api_checks:
+            api_checks[k] = "ok" if has_keys[k] else "warning"
 
     return {
         "status": "success",

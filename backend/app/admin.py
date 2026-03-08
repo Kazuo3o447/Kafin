@@ -30,7 +30,7 @@ ADMIN_HTML = """
 <html lang="de" class="dark">
 <head>
     <meta charset="UTF-8">
-    <title>Antigravity Admin</title>
+    <title>Kafin Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -58,7 +58,7 @@ ADMIN_HTML = """
     
     <header class="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-10">
         <div class="max-w-6xl mx-auto flex justify-between items-center">
-            <h1 class="text-xl font-bold text-blue-400">Antigravity Admin Panel</h1>
+            <h1 class="text-xl font-bold text-blue-400">Kafin Admin Panel</h1>
             <div class="flex space-x-1">
                 <button onclick="switchTab('reports')" id="btn-reports" class="tab-btn active px-4 py-2 hover:bg-gray-700 rounded transition">Reports</button>
                 <button onclick="switchTab('watchlist')" id="btn-watchlist" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Watchlist</button>

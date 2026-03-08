@@ -1,9 +1,45 @@
-# APIs Settings Configuration
+# Kafin — API-Konfiguration (Keys kommen aus .env)
 finnhub:
-  rate_limit: 30
+  base_url: "https://finnhub.io/api/v1"
+  rate_limit_per_minute: 60
+  retry_max: 3
+  retry_backoff_seconds: 2
+
 fmp:
-  rate_limit: 10
+  base_url: "https://financialmodelingprep.com/api/v3"
+  rate_limit_per_minute: 300
+  retry_max: 3
+  retry_backoff_seconds: 1
+
+fred:
+  base_url: "https://api.stlouisfed.org/fred"
+  rate_limit_per_minute: 120
+  retry_max: 3
+  retry_backoff_seconds: 1
+
 deepseek:
   base_url: "https://api.deepseek.com/v1"
+  model: "deepseek-chat"
+  max_tokens: 4096
+  temperature: 0.3
+  rate_limit_per_minute: 60
+  retry_max: 2
+  retry_backoff_seconds: 5
+
 kimi:
-  base_url: "https://api.kimi.ai/v1"
+  base_url: "https://api.moonshot.cn/v1"
+  model: "moonshot-v1-auto"
+  max_tokens: 8192
+  temperature: 0.3
+  rate_limit_per_minute: 30
+  retry_max: 2
+  retry_backoff_seconds: 10
+
+coinglass:
+  base_url: "https://open-api-v3.coinglass.com/api"
+  rate_limit_per_minute: 30
+  retry_max: 3
+  retry_backoff_seconds: 5
+
+supabase:
+  timeout_seconds: 30

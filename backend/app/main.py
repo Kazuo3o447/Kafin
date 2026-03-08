@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 app = FastAPI(
     title=settings.app_name,
     version="1.0.0",
-    description="Backend API für die Antigravity Earnings-Trading-Plattform",
+    description="Backend API für die Kafin Earnings-Trading-Plattform",
 )
 
 @app.on_event("startup")

@@ -2,179 +2,216 @@ import yaml
 import os
 from schemas.scores import OpportunityScore, TorpedoScore, AuditRecommendation
 from backend.app.logger import get_logger
+from backend.app.config import settings
 
 logger = get_logger(__name__)
 
-SCORING_YAML_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "config", "scoring.yaml")
-
-def _load_weights() -> dict:
-    with open(SCORING_YAML_PATH, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)["weights"]
+def _load_scoring_config() -> dict:
+    return settings.scoring
 
 async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunityScore:
     """
     Berechnet den Opportunity-Score basierend auf positiven Katalysatoren.
-    
-    Args:
-        ticker (str): Das Tickersymbol der Aktie.
-        data (dict): Das gesammelte Daten-Dictionary (Earnings, Valuation, Short Interest, etc.).
-        
-    Returns:
-        OpportunityScore: Ein Pydantic Model mit dem Total Score und den einzelnen Faktoren.
     """
-    weights = _load_weights()["opportunity"]
-    factors = {}
+    scoring_config = _load_scoring_config()
+    weights = scoring_config.get("opportunity_score", {})
     
     # earnings_momentum
     em = 0.0
-    history = data.get("earnings_history", {})
-    quarters_beat = history.get("quarters_beat", 0)
-    avg_surprise = history.get("avg_surprise_percent", 0.0)
+    history = data.get("earnings_history")
+    quarters_beat = getattr(history, "quarters_beat", 0) if not isinstance(history, dict) else history.get("quarters_beat", 0) if history else 0
+    avg_surprise = getattr(history, "avg_surprise_percent", 0.0) if not isinstance(history, dict) else history.get("avg_surprise_percent", 0.0) if history else 0.0
     if quarters_beat == 8 and avg_surprise > 0:
         em = 10.0
     elif quarters_beat == 0:
         em = 0.0
     else:
         em = (quarters_beat / 8.0) * 10.0
-    factors["earnings_momentum"] = em
 
-    # whisper_delta (Mock impl, requires actual estimates vs whisper logic)
-    whisper_delta = 5.0 # Default if unknown
-    factors["whisper_delta"] = whisper_delta
+    # whisper_delta
+    whisper_delta = 5.0 
 
     # valuation_regime
     vr = 5.0
-    val = data.get("valuation", {})
-    pe = val.get("pe_ratio")
-    sector_pe = val.get("sector_pe", 15.0) # Mock median fallback
+    val = data.get("valuation")
+    pe = getattr(val, "pe_ratio", None) if not isinstance(val, dict) else val.get("pe_ratio") if val else None
+    sector_pe = getattr(val, "pe_sector_median", 15.0) if not isinstance(val, dict) else val.get("pe_sector_median", 15.0) if val else 15.0
     if pe and sector_pe:
         if pe < sector_pe * 0.8: vr = 10.0
         elif pe > sector_pe * 2.0: vr = 0.0
         else: vr = 5.0
-    factors["regime_valuation"] = vr
 
-    # guidance_trend (mocked, missing actual struct structure)
-    factors["forward_guidance"] = 5.0
+    # guidance_trend
+    guidance_trend = 5.0
 
-    # technical_setup (Mocked)
-    factors["technical_setup"] = 5.0
+    # technical_setup
+    technical_setup = 5.0
 
     # sector_regime
-    factors["sector_regime"] = 5.0
+    sector_regime = 5.0
 
     # short_squeeze_potential
     ss = 0.0
-    si_data = data.get("short_interest", {})
-    si_pct = getattr(si_data, "short_interest", 0) if not isinstance(si_data, dict) else si_data.get("short_interest", 0)
-    dtc = getattr(si_data, "days_to_cover", 0) if not isinstance(si_data, dict) else si_data.get("days_to_cover", 0)
+    si_data = data.get("short_interest")
+    si_pct = getattr(si_data, "short_interest_percent", 0.0) if not isinstance(si_data, dict) else si_data.get("short_interest_percent", 0.0) if si_data else 0.0
+    dtc = getattr(si_data, "days_to_cover", 0.0) if not isinstance(si_data, dict) else si_data.get("days_to_cover", 0.0) if si_data else 0.0
     
     if si_pct > 30 and dtc > 5: ss = 10.0
     elif 15 <= si_pct <= 30: ss = 5.0
     elif si_pct < 10: ss = 0.0
     else: ss = 2.5
-    factors["short_squeeze"] = ss
 
     # insider_activity
     ia_score = 5.0
-    ia = data.get("insider_activity", {})
-    assessment = getattr(ia, "cluster_assessment", "") if not isinstance(ia, dict) else ia.get("cluster_assessment", "")
-    if assessment == "Cluster-Käufe": ia_score = 10.0
-    elif assessment == "Cluster-Verkäufe": ia_score = 0.0
-    factors["insider_activity"] = ia_score
+    ia = data.get("insider_activity")
+    assessment = getattr(ia, "assessment", "") if not isinstance(ia, dict) else ia.get("assessment", "") if ia else ""
+    if assessment == "bullish": ia_score = 10.0
+    elif assessment == "bearish": ia_score = 0.0
 
     # options_flow
-    factors["options_flow"] = 5.0
+    options_flow = 5.0
 
-    total_score = float(sum(factors[k] * weights.get(k, 0) for k in factors))
+    total_score = (
+        em * weights.get("earnings_momentum", 0) +
+        whisper_delta * weights.get("whisper_delta", 0) +
+        vr * weights.get("valuation_regime", 0) +
+        guidance_trend * weights.get("guidance_trend", 0) +
+        technical_setup * weights.get("technical_setup", 0) +
+        sector_regime * weights.get("sector_regime", 0) +
+        ss * weights.get("short_squeeze_potential", 0) +
+        ia_score * weights.get("insider_activity", 0) +
+        options_flow * weights.get("options_flow", 0)
+    )
     
-    return OpportunityScore(total_score=round(total_score, 2), factors=factors)
+    return OpportunityScore(
+        ticker=ticker,
+        total_score=round(total_score, 2),
+        earnings_momentum=round(em, 2),
+        whisper_delta=round(whisper_delta, 2),
+        valuation_regime=round(vr, 2),
+        guidance_trend=round(guidance_trend, 2),
+        technical_setup=round(technical_setup, 2),
+        sector_regime=round(sector_regime, 2),
+        short_squeeze_potential=round(ss, 2),
+        insider_activity=round(ia_score, 2),
+        options_flow=round(options_flow, 2)
+    )
 
 async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
     """
     Berechnet den Torpedo-Score basierend auf negativen Risikofaktoren.
-    
-    Args:
-        ticker (str): Das Tickersymbol der Aktie.
-        data (dict): Das gesammelte Daten-Dictionary (Valuation, Insider, Macro, etc.).
-        
-    Returns:
-        TorpedoScore: Ein Pydantic Model mit dem Total Score und den einzelnen Faktoren.
     """
-    weights = _load_weights()["torpedo"]
-    factors = {}
+    scoring_config = _load_scoring_config()
+    weights = scoring_config.get("torpedo_score", {})
     
     # valuation_downside
     vd = 0.0
-    val = data.get("valuation", {})
-    ps = val.get("ps_ratio")
-    sector_ps = 3.0 # Mock median
+    val = data.get("valuation")
+    ps = getattr(val, "ps_ratio", None) if not isinstance(val, dict) else val.get("ps_ratio") if val else None
+    sector_ps = getattr(val, "ps_sector_median", 3.0) if not isinstance(val, dict) else val.get("ps_sector_median", 3.0) if val else 3.0
     if ps:
         if ps > sector_ps * 3.0: vd = 10.0
         elif ps > sector_ps * 1.5: vd = 5.0
         elif ps < sector_ps: vd = 0.0
-    factors["valuation_fall_height"] = vd
 
     # expectation_gap
-    factors["expectation_gap"] = 5.0
+    expectation_gap = 5.0
 
     # insider_selling
     isa_score = 0.0
-    ia = data.get("insider_activity", {})
-    assessment = getattr(ia, "cluster_assessment", "") if not isinstance(ia, dict) else ia.get("cluster_assessment", "")
-    if assessment == "Cluster-Verkäufe": isa_score = 10.0
-    factors["insider_selling"] = isa_score
+    ia = data.get("insider_activity")
+    assessment = getattr(ia, "assessment", "") if not isinstance(ia, dict) else ia.get("assessment", "") if ia else ""
+    if assessment == "bearish": isa_score = 10.0
 
-    # guidance_slowdown
-    factors["guidance_slowdown"] = 5.0
+    # guidance_deceleration
+    guidance_deceleration = 5.0
 
     # leadership_instability
-    factors["leadership_instability"] = 0.0
+    leadership_instability = 0.0
 
     # technical_downtrend
-    factors["technical_downtrend"] = 5.0
+    technical_downtrend = 5.0
 
-    # macro_headwinds
+    # macro_headwind
     mh = 0.0
-    macro = data.get("macro", {})
-    vix = getattr(macro, "vix", 0) if not isinstance(macro, dict) else macro.get("vix", 0)
+    macro = data.get("macro")
+    vix = getattr(macro, "vix", 0.0) if not isinstance(macro, dict) else macro.get("vix", 0.0) if macro else 0.0
     if vix > 30: mh = 10.0
     elif vix < 15: mh = 0.0
     else: mh = 5.0
-    factors["macro_headwinds"] = mh
 
-    total_score = float(sum(factors[k] * weights.get(k, 0) for k in factors))
+    total_score = (
+        vd * weights.get("valuation_downside", 0) +
+        expectation_gap * weights.get("expectation_gap", 0) +
+        isa_score * weights.get("insider_selling", 0) +
+        guidance_deceleration * weights.get("guidance_deceleration", 0) +
+        leadership_instability * weights.get("leadership_instability", 0) +
+        technical_downtrend * weights.get("technical_downtrend", 0) +
+        mh * weights.get("macro_headwind", 0)
+    )
     
-    return TorpedoScore(total_score=round(total_score, 2), factors=factors)
+    return TorpedoScore(
+        ticker=ticker,
+        total_score=round(total_score, 2),
+        valuation_downside=round(vd, 2),
+        expectation_gap=round(expectation_gap, 2),
+        insider_selling=round(isa_score, 2),
+        guidance_deceleration=round(guidance_deceleration, 2),
+        leadership_instability=round(leadership_instability, 2),
+        technical_downtrend=round(technical_downtrend, 2),
+        macro_headwind=round(mh, 2)
+    )
 
 async def get_recommendation(opportunity: OpportunityScore, torpedo: TorpedoScore) -> AuditRecommendation:
     """
     Kombiniert Opportunity- und Torpedo-Scores in eine finale Empfehlung (Buy, Hold, Short etc.).
-    
-    Args:
-        opportunity (OpportunityScore): Der berechnete Opportunity-Score.
-        torpedo (TorpedoScore): Der berechnete Torpedo-Score.
-        
-    Returns:
-        AuditRecommendation: Empfehlungstext inkl. kurzer Begründung.
     """
-    # Basic Threshold config mock (todo: move to scoring.yaml)
+    scoring_config = _load_scoring_config()
+    thresholds = scoring_config.get("thresholds", {})
+    
     opp = opportunity.total_score
     torp = torpedo.total_score
     
-    rec = "Hold"
-    reason = "Neutral."
+    rec = "hold"
+    rec_label = "Kein Trade"
+    reason = "Weder starke Opportunität noch gefährliche Torpedos."
     
-    if opp > 7.5 and torp < 4.0:
-        rec = "Strong Buy"
+    sb_min_opp = thresholds.get("strong_buy_min_opportunity", 7.0)
+    sb_max_torp = thresholds.get("strong_buy_max_torpedo", 3.0)
+    ss_max_opp = thresholds.get("strong_short_max_opportunity", 3.0)
+    ss_min_torp = thresholds.get("strong_short_min_torpedo", 7.0)
+    watch_min_torp = thresholds.get("watch_min_torpedo", 7.0)
+
+    if opp >= sb_min_opp and torp <= sb_max_torp:
+        rec = "strong_buy"
+        rec_label = "Strong Buy"
         reason = "Hohe Opportunität bei geringem Torpedo-Risiko."
-    elif opp > 6.0 and torp < 5.0:
-        rec = "Buy"
-        reason = "Gute Opportunität bei vertretbarem Risiko."
-    elif opp < 4.0 and torp > 6.0:
-        rec = "Short"
-        reason = "Schwache Opportunität bei hohem Risiko."
-    elif opp < 3.0 and torp > 7.5:
-        rec = "Strong Short"
+    elif opp >= sb_min_opp - 1.0 and torp <= sb_max_torp + 1.0:
+        rec = "buy_hedge" 
+        rec_label = "Buy mit Absicherung"
+        reason = "Gute Opportunität, aber absicherungswürdiges Risiko."
+    elif opp <= ss_max_opp and torp >= ss_min_torp:
+        rec = "strong_short"
+        rec_label = "Strong Short"
         reason = "Sehr schwache Dynamik kombiniert mit gefährlichen Torpedos."
+    elif opp <= ss_max_opp + 1.0 and torp >= ss_min_torp - 1.0:
+        rec = "potential_short"
+        rec_label = "Potentieller Short"
+        reason = "Schwache Opportunität und erhöhtes Risiko."
+    elif torp >= watch_min_torp:
+        rec = "watch"
+        rec_label = "Beobachten"
+        reason = "Hohes Risiko, aber Opportunität ist unklar. Beobachten."
+    elif opp < 4.0 and torp < 4.0:
+        rec = "ignore"
+        rec_label = "Ignorieren"
+        reason = "Keine Signale."
         
-    return AuditRecommendation(recommendation=rec, reasoning=reason)
+    return AuditRecommendation(
+        ticker=opportunity.ticker,
+        opportunity_score=opportunity,
+        torpedo_score=torpedo,
+        recommendation=rec,
+        recommendation_label=rec_label,
+        reasoning=reason
+    )

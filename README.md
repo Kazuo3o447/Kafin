@@ -1,4 +1,4 @@
-# Antigravity Trading Platform
+# Kafin Trading Platform
 
 Eine KI-gestützte Earnings-Trading-Plattform.
 

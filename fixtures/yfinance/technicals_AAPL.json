@@ -1,0 +1,15 @@
+{
+    "ticker": "AAPL",
+    "current_price": 178.50,
+    "sma_50": 175.20,
+    "sma_200": 168.90,
+    "rsi_14": 55.3,
+    "support_level": 170.00,
+    "resistance_level": 185.00,
+    "high_52w": 199.62,
+    "low_52w": 142.00,
+    "distance_to_52w_high_percent": -10.58,
+    "trend": "uptrend",
+    "above_sma50": true,
+    "above_sma200": true
+}

@@ -17,3 +17,4 @@
 
 ## Aktuelle Abhängigkeiten / Blocker
 - (Keine) - Phase 2 ist vollständig integriert. Wir sind bereit für Phase 3 (News-Pipeline).
+- **Update**: Korrektur-Durchlauf abgeschlossen (Schemas, Configs, Imports, Naming auf Kafin umgestellt).

@@ -21,7 +21,7 @@ ENV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__
 
 class Settings(BaseSettings):
     # App Settings
-    app_name: str = "Antigravity"
+    app_name: str = "Kafin"
     environment: str = "development"
     use_mock_data: bool = False
     log_level: str = "INFO"
@@ -50,13 +50,24 @@ class Settings(BaseSettings):
     )
     
     def reload_from_yaml(self):
-         """Reloads configuration dynamically from YAML"""
-         yaml_data = load_yaml_config(YAML_PATH) if os.path.exists(YAML_PATH) else {}
-         self.environment = yaml_data.get("app", {}).get("env", self.environment)
-         self.app_name = yaml_data.get("app", {}).get("name", self.app_name)
-         self.use_mock_data = yaml_data.get("flags", {}).get("use_mock_data", self.use_mock_data)
-         self.log_level = yaml_data.get("admin", {}).get("log_level", self.log_level)
-         self.report_language = yaml_data.get("admin", {}).get("report_language", self.report_language)
+        """Reloads configuration dynamically from YAML"""
+        yaml_data = load_yaml_config(YAML_PATH) if os.path.exists(YAML_PATH) else {}
+        self.environment = yaml_data.get("environment", self.environment)
+        self.use_mock_data = yaml_data.get("use_mock_data", self.use_mock_data)
+        self.log_level = yaml_data.get("log_level", self.log_level)
+        self.report_language = yaml_data.get("report_language", self.report_language)
+
+    @property
+    def apis(self) -> dict:
+        return load_yaml_config(os.path.join(os.path.dirname(YAML_PATH), "apis.yaml"))
+
+    @property
+    def scoring(self) -> dict:
+        return load_yaml_config(os.path.join(os.path.dirname(YAML_PATH), "scoring.yaml"))
+
+    @property
+    def alerts(self) -> dict:
+        return load_yaml_config(os.path.join(os.path.dirname(YAML_PATH), "alerts.yaml"))
 
 settings = Settings()
 settings.reload_from_yaml()

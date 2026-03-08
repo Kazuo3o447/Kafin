@@ -1,20 +1,27 @@
-# Scoring Configuration
-weights:
-  opportunity:
-    earnings_momentum: 0.15
-    whisper_delta: 0.15
-    regime_valuation: 0.15
-    forward_guidance: 0.15
-    technical_setup: 0.10
-    sector_regime: 0.10
-    short_squeeze: 0.10
-    insider_activity: 0.05
-    options_flow: 0.05
-  torpedo:
-    valuation_fall_height: 0.20
-    expectation_gap: 0.20
-    insider_selling: 0.15
-    guidance_slowdown: 0.15
-    leadership_instability: 0.10
-    technical_downtrend: 0.10
-    macro_headwinds: 0.10
+# Kafin — Scoring-Gewichtungen
+opportunity_score:
+  earnings_momentum: 0.15
+  whisper_delta: 0.15
+  valuation_regime: 0.15
+  guidance_trend: 0.15
+  technical_setup: 0.10
+  sector_regime: 0.10
+  short_squeeze_potential: 0.10
+  insider_activity: 0.05
+  options_flow: 0.05
+
+torpedo_score:
+  valuation_downside: 0.20
+  expectation_gap: 0.20
+  insider_selling: 0.15
+  guidance_deceleration: 0.15
+  leadership_instability: 0.10
+  technical_downtrend: 0.10
+  macro_headwind: 0.10
+
+thresholds:
+  strong_buy_min_opportunity: 7
+  strong_buy_max_torpedo: 3
+  strong_short_max_opportunity: 3
+  strong_short_min_torpedo: 7
+  watch_min_torpedo: 7

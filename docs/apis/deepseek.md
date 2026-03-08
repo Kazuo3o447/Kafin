@@ -6,6 +6,9 @@ Modell: `deepseek-chat` (DeepSeek-V3.2, 128K Kontext)
 Docs: https://api-docs.deepseek.com/
 Pricing: $0.28/M Input-Tokens, $0.42/M Output-Tokens (Stand März 2026)
 
+## Konfiguration
+- DEEPSEEK_API_KEY: sk-13a56192cfd74ba6b1b6bfc68d4555ff
+
 ## Genutzter Endpoint
 
 ### Chat Completions

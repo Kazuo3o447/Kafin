@@ -1,21 +1,32 @@
-# STATUS
+# KAFIN - PROJEKTSTATUS
 
-## Projekt-Phasen
-- [x] **PHASE 1 - Daten-Fundament** (Aktuell: Grundgerüst und Admin-Panel implementiert)
-  - ✅ Finnhub Modul
-  - ✅ FMP Modul
-  - ✅ FRED Modul
-- [x] **PHASE 2 - Audit-Report-Pipeline**
-  - ✅ Watchlist-Management
-  - ✅ Scoring-Engine (Opportunity/Torpedo)
-  - ✅ Report-Generator (DeepSeek Prompting)
-  - ✅ E-Mail Versand
-- [ ] **PHASE 3 - News-Pipeline & Alerts**
-  - ✅ Supabase-Datenbank-Integration (Tabellen angelegt, Verbindung getestet)
-- [ ] **PHASE 3b - Bitcoin-Modul**
-- [ ] **PHASE 4 - Feedback-Loop**
-- [ ] **PHASE 5 - Web-Dashboard**
+Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Admin-Panel).
 
-## Aktuelle Abhängigkeiten / Blocker
-- (Keine) - Phase 2 ist vollständig integriert. Wir sind bereit für Phase 3 (News-Pipeline).
-- **Update**: Korrektur-Durchlauf abgeschlossen (Schemas, Configs, Imports, Naming auf Kafin umgestellt).
+## ✅ Abgeschlossene Meilensteine
+
+### 1. Supabase & Datenbank
+*   **Schema-Validierung**: Alle Tabellen (`watchlist`, `news_articles`, `macro_data`, `system_logs`, `audit_reports`) im SQL-Schema definiert.
+*   **Konnektivität**: Verbindungserfolg via Docker-Container bestätigt.
+*   **Dokumentation**: `docs/apis/supabase.md` mit Credentials und Setup-Anweisungen finalisiert.
+
+### 2. API-Schnittstellen (Anbindung & Verifikation)
+*   **Finnhub**: API-Key hinterlegt, Test-Script `test_finnhub_connection.py` erfolgreich ausgeführt.
+*   **FMP (Financial Modeling Prep)**: Key hinterlegt. Verbindungsproblem (403) durch Wechsel auf `/stable/` Endpunkte gelöst.
+*   **FRED (Fed Reserve)**: Key hinterlegt, Abfrage von Makro-Daten (VIX etc.) verifiziert.
+*   **DeepSeek**: KI-Anbindung (`deepseek-chat`) für automatisierte Analysen erfolgreich getestet.
+*   **Telegram**: Bot-Integration (Token + Chat-ID) inklusive automatischer Chat-ID Ermittlung und Versandtest abgeschlossen.
+
+### 3. Admin Panel & Backend-Logik
+*   **API-Status-Check**: Erweiterte Übersicht im Admin-Portal, ob alle Keys korrekt konfiguriert sind.
+*   **Einzeltests**: Implementierung von "Test"-Buttons für jede API einzeln, um Netzwerk-Störungen gezielt zu debuggen.
+*   **Logging-Infrastruktur**: Fix des `structlog` Caching-Bugs. Logs fließen nun in Echtzeit in das Admin-Panel.
+*   **Report-Versand**: Umstellung von E-Mail (SMTP) auf Telegram-Direktnachricht (mit automatischem Chunking bei langen Berichten).
+
+## 🚀 Nächste Schritte (Phase 3)
+*   [ ] **Finnhub News-Pipeline**: Implementierung des Scrapers zum Speichern von Nachrichten in Supabase.
+*   [ ] **SEC EDGAR Scanner**: Automatisierte Überwachung von 8-K und 10-Q Filings.
+*   [ ] **Alerting-Engine**: Logik für "Torpedo-Warnungen" bei negativen News-Events.
+
+## 🛠️ System-Hinweis
+*   **Docker**: Backend, Redis und n8n laufen stabil im Verbund.
+*   **Repository**: Alle Updates sind nach jeder Änderung direkt nach `Kazuo3o447/Kafin` gepusht worden.

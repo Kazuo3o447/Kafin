@@ -27,6 +27,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 - [x] **Phase 3A:** News Pipeline inkl. Watchlist-Scanning, FinBERT-Filterung, und DeepSeek Stichpunktextraktion.
 - [x] **Phase 3A:** Kurzzeit-Speicher (Supabase) für die gewonnenen News-Stichpunkte.
 - [x] **Phase 3A:** SEC Edgar Scanner (Form 8-K / 4) für Insider-Trades.
+- [x] **Phase 3A:** Narrative Intelligence Modul (Partnerschaften & Downsizing)
 - [x] **Phase 3A:** Admin Panel Updates für FinBERT und News/SEC Control.
 - [x] **Phase 3B:** Automatisierte Scheduling-Workflows mit n8n für News/SEC und Reports.
 - [x] **Phase 3B:** Weekly Summary im Sonntags-Report.

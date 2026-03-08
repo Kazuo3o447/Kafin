@@ -7,7 +7,7 @@ Docs: https://core.telegram.org/bots/api
 
 ## Konfiguration
 - TELEGRAM_BOT_TOKEN: 8625880380:AAH3Jcg7dq40nODDoGEUqxLaUR0VWTXhKUU
-- TELEGRAM_CHAT_ID: (Noch leer - muss über `/getUpdates` oder Chat generiert werden)
+- TELEGRAM_CHAT_ID: 5625024826 (User: Kazu)
 
 ## Genutzter Endpoint
 

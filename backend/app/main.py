@@ -164,37 +164,86 @@ _latest_report = ""
 
 @reports_router.post("/generate/{ticker}")
 async def api_generate_report(ticker: str):
-    logger.info(f"API Call: generate-report for {ticker}")
+    """
+    Generiert einen einzelnen Audit-Report für den angegebenen Ticker.
+    Der Report wird über DeepSeek erstellt und im Arbeitsspeicher gespeichert.
+    """
+    logger.info(f"[Report] Starte Audit-Report für {ticker}...")
     global _latest_report
-    report_text = await generate_audit_report(ticker)
-    _latest_report = report_text
-    return {"status": "success", "report": report_text}
+    try:
+        report_text = await generate_audit_report(ticker)
+        _latest_report = report_text
+        logger.info(f"[Report] Audit-Report für {ticker} erfolgreich generiert ({len(report_text)} Zeichen).")
+        return {"status": "success", "report": report_text}
+    except Exception as e:
+        logger.error(f"[Report] Fehler beim Generieren des Audit-Reports für {ticker}: {e}")
+        return {"status": "error", "message": str(e)}
 
 @reports_router.post("/generate-sunday")
 async def api_generate_sunday_report():
-    logger.info("API Call: generate-sunday-report")
+    """
+    Erstellt den wöchentlichen Sonntags-Report und schickt ihn via Telegram.
+
+    HINWEIS: Der ursprüngliche E-Mail-Versand (SMTP) ist bewusst deaktiviert.
+    Grund: SMTP ist in der Build-Phase nicht konfiguriert.
+    Geplant: In der Endphase wird die send_sunday_report() Funktion aus alerts/email.py
+             aktiviert und parallel zum Telegram-Alert genutzt.
+    Aktuelle Lösung: Report wird per Telegram Bot als Textnachricht zugestellt.
+    """
+    logger.info("[SundayReport] Starte wöchentlichen Sonntags-Report...")
+    
     wl = await get_watchlist()
     tickers = [item["ticker"] for item in wl]
+    logger.info(f"[SundayReport] Watchlist geladen. {len(tickers)} Ticker: {tickers}")
     
     global _latest_report
-    report_text = await generate_sunday_report(tickers)
-    _latest_report = report_text
     
-    # Fire and forget email logic (to be implemented)
-    import asyncio
     try:
-        from backend.app.alerts.email import send_sunday_report
-        asyncio.create_task(send_sunday_report(report_text))
-    except ImportError:
-        logger.warning("Email module not yet implemented.")
+        report_text = await generate_sunday_report(tickers)
+        _latest_report = report_text
+        logger.info(f"[SundayReport] Report generiert. Größe: {len(report_text)} Zeichen.")
+    except Exception as e:
+        logger.error(f"[SundayReport] Fehler beim Generieren des Reports: {e}")
+        return {"status": "error", "message": str(e)}
+
+    # ---------------------------------------------------------------
+    # TELEGRAM-VERSAND (Aktiv / Primärer Versandweg in der Build-Phase)
+    # ---------------------------------------------------------------
+    # Da Telegram die Nachricht auf max. 4096 Zeichen begrenzt,
+    # teilen wir lange Reports in Blöcke à 4000 Zeichen auf.
+    try:
+        from backend.app.alerts.telegram import send_telegram_alert
+        
+        MAX_CHUNK = 4000
+        chunks = [report_text[i:i+MAX_CHUNK] for i in range(0, len(report_text), MAX_CHUNK)]
+        
+        logger.info(f"[SundayReport] Sende Report via Telegram ({len(chunks)} Nachrichten)...")
+        for idx, chunk in enumerate(chunks):
+            prefix = f"📊 <b>KAFIN SUNDAY REPORT</b> ({idx+1}/{len(chunks)})\n\n" if idx == 0 else f"<b>[Fortsetzung {idx+1}/{len(chunks)}]</b>\n\n"
+            success = await send_telegram_alert(prefix + chunk)
+            if not success:
+                logger.warning(f"[SundayReport] Telegram-Versand Chunk {idx+1} fehlgeschlagen.")
+        
+        logger.info("[SundayReport] Telegram-Versand abgeschlossen.")
+    except Exception as e:
+        logger.error(f"[SundayReport] Telegram-Versand fehlgeschlagen: {e}")
+
+    # ---------------------------------------------------------------
+    # E-MAIL DEAKTIVIERT (Build-Phase)
+    # ---------------------------------------------------------------
+    # TODO (Endphase): SMTP konfigurieren und folgende Zeilen reaktivieren:
+    # from backend.app.alerts.email import send_sunday_report
+    # asyncio.create_task(send_sunday_report(report_text))
+    # ---------------------------------------------------------------
         
     return {"status": "success", "report": report_text}
 
 @reports_router.get("/latest")
 async def api_get_latest_report():
-    logger.info("API Call: get-latest-report")
+    logger.info("[Report] API Call: get-latest-report")
     return {"report": _latest_report}
 
 app.include_router(data_router)
 app.include_router(watchlist_router)
 app.include_router(reports_router)
+

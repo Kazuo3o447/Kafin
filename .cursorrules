@@ -1,0 +1,5 @@
+# WICHTIGE REGELN FÜR DEN AGENTEN
+
+1. LIES IMMER ZUERST DIE `CLAUDE.md` für die Architektur und Projektstruktur.
+2. Scanne niemals blind Code-Dateien, um herauszufinden, wo etwas liegt. Nutze dafür ausschließlich die Map in der `CLAUDE.md`.
+3. Lade immer nur die Dateien in den Kontext, die für die aktuelle Aufgabe zwingend notwendig sind.

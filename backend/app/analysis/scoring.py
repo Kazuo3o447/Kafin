@@ -54,8 +54,37 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     # guidance_trend
     guidance_trend = 5.0
 
-    # technical_setup
+    # technical_setup — aus echten yfinance-Daten
     technical_setup = 5.0
+    tech = data.get("technicals", {})
+    if isinstance(tech, dict) and tech:
+        trend = tech.get("trend", "sideways")
+        rsi = tech.get("rsi_14")
+        above_50 = tech.get("above_sma50", False)
+        above_200 = tech.get("above_sma200", False)
+        dist_52w = tech.get("distance_to_52w_high_percent")
+
+        if trend == "uptrend" and above_50 and above_200:
+            technical_setup = 8.0
+        elif trend == "uptrend":
+            technical_setup = 7.0
+        elif trend == "downtrend" and not above_200:
+            technical_setup = 2.0
+        elif trend == "downtrend":
+            technical_setup = 3.0
+
+        # RSI-Modifikator
+        if rsi is not None:
+            if 40 <= rsi <= 60:
+                technical_setup = min(10.0, technical_setup + 1.0)  # Neutral = gut für Entry
+            elif rsi > 75:
+                technical_setup = max(0.0, technical_setup - 2.0)  # Überkauft
+            elif rsi < 30:
+                technical_setup = min(10.0, technical_setup + 1.5)  # Überverkauft = konträr bullisch
+
+        # 52W-Hoch-Nähe als Bonus
+        if dist_52w is not None and dist_52w > -5.0:
+            technical_setup = min(10.0, technical_setup + 1.0)  # Nahe am Hoch = Momentum
 
     # sector_regime
     sector_regime = 5.0
@@ -147,8 +176,31 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
     # leadership_instability
     leadership_instability = 0.0
 
-    # technical_downtrend
+    # technical_downtrend — aus echten yfinance-Daten
     technical_downtrend = 5.0
+    tech = data.get("technicals", {})
+    if isinstance(tech, dict) and tech:
+        trend = tech.get("trend", "sideways")
+        rsi = tech.get("rsi_14")
+        above_200 = tech.get("above_sma200", False)
+        dist_52w = tech.get("distance_to_52w_high_percent")
+
+        if trend == "downtrend" and not above_200:
+            technical_downtrend = 9.0
+        elif trend == "downtrend":
+            technical_downtrend = 7.0
+        elif trend == "uptrend" and above_200:
+            technical_downtrend = 1.0
+        elif trend == "sideways":
+            technical_downtrend = 4.0
+
+        # RSI-Divergenz als Warnung
+        if rsi is not None and rsi > 80:
+            technical_downtrend = min(10.0, technical_downtrend + 2.0)  # Extrem überkauft = Rückschlagrisiko
+
+        # Weit vom 52W-Hoch = bereits unter Druck
+        if dist_52w is not None and dist_52w < -25.0:
+            technical_downtrend = min(10.0, technical_downtrend + 1.5)
 
     # macro_headwind
     mh = 0.0
@@ -165,7 +217,7 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
         if news.get("is_narrative_shift", False):
             if shift_type == "Strategic-Downsizing":
                 guidance_deceleration = min(10.0, guidance_deceleration + 2.0)
-                expectation_gap = min(10.0, expectation_gap + 2.0)
+                eg_score = min(10.0, eg_score + 2.0)
                 logger.warning(f"[{ticker}] 🚨 Negative Narrative Shift erkannt ({shift_type}). Torpedo-Scores erhöht!")
                 break
 

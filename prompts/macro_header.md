@@ -29,7 +29,11 @@ High-Yield Credit Spread: {{credit_spread}} Basispunkte
 10Y-2Y Spread (Yield Curve): {{yield_spread}}
 DXY (Dollar-Index): {{dxy}}
 
-Kommende Woche:
+S&P 500 (Woche): {{sp500_perf}}%
+Nasdaq 100 (Woche): {{ndx_perf}}%
+Gold (Woche): {{gold_perf}}%
+
+Kalender (Nächste Woche):
 {{upcoming_events}}
 
 GENERAL_MACRO Stichpunkte der Woche:

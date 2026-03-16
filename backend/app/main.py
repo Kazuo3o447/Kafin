@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from backend.app.config import settings
 from backend.app.logger import get_logger
 from backend.app.admin import router as admin_router
+from backend.app.init_watchlist import ensure_watchlist_populated
 from schemas.base import HealthCheckResponse
 
 logger = get_logger(__name__)
@@ -27,6 +28,7 @@ async def startup_event():
     logger.info("Admin Panel is available at /admin")
     if settings.use_mock_data:
         logger.warning("Mock-Data-Modus ist AKTIV. Es werden keine echten APIs aufgerufen.")
+    await ensure_watchlist_populated()
 
 app.include_router(admin_router)
 

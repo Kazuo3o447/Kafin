@@ -137,3 +137,29 @@ async def get_options_metrics(ticker: str) -> Optional[OptionsMetrics]:
     except Exception as e:
         logger.error(f"yfinance Options Fehler für {ticker}: {e}")
         return None
+
+async def get_market_context() -> dict:
+    """Holt die Performance der letzten 5 Handelstage für S&P 500, Nasdaq 100 und Gold."""
+    if settings.use_mock_data:
+        return {"sp500_perf": 1.2, "ndx_perf": 1.5, "gold_perf": -0.5}
+
+    result = {"sp500_perf": 0.0, "ndx_perf": 0.0, "gold_perf": 0.0}
+    tickers = {"^GSPC": "sp500_perf", "^NDX": "ndx_perf", "GC=F": "gold_perf"}
+    
+    try:
+        for ticker, key in tickers.items():
+            try:
+                stock = yf.Ticker(ticker)
+                hist = stock.history(period="5d")
+                if not hist.empty and len(hist) >= 2:
+                    first_price = float(hist["Close"].iloc[0])
+                    last_price = float(hist["Close"].iloc[-1])
+                    if first_price > 0:
+                        perf = ((last_price - first_price) / first_price) * 100
+                        result[key] = round(perf, 2)
+            except Exception as e:
+                logger.error(f"yfinance Fehler für Market Context {ticker}: {e}")
+    except Exception as e:
+        logger.error(f"Genereller yfinance Fehler in get_market_context: {e}")
+        
+    return result

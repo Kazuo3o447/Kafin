@@ -10,6 +10,16 @@ from backend.app.analysis.deepseek import call_deepseek
 
 logger = get_logger(__name__)
 
+
+def _fmt(value, date, unit="", fallback="Nicht verfügbar"):
+    """Formatiert einen FRED-Wert für den Prompt. Verhindert dass 'None' an die KI geht."""
+    if value is None:
+        return fallback
+    result = f"{value}{unit}"
+    if date:
+        result += f" (Stand: {date})"
+    return result
+
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 AUDIT_PROMPT_PATH = os.path.join(ROOT_DIR, "prompts", "audit_report.md")
 MACRO_PROMPT_PATH = os.path.join(ROOT_DIR, "prompts", "macro_header.md")
@@ -33,6 +43,9 @@ async def generate_macro_header() -> str:
     """
     logger.info("Generating Macro Header")
     macro = await get_macro_snapshot()
+    
+    from backend.app.data.yfinance_data import get_market_context
+    market_ctx = await get_market_context()
     
     # Wirtschaftskalender: Nächste 7 Tage (Earnings)
     from backend.app.data.finnhub import get_earnings_calendar
@@ -80,14 +93,23 @@ async def generate_macro_header() -> str:
     
     # Replace placeholders
     user_prompt = user_tmpl \
-        .replace("{{fed_rate}}", f"{getattr(macro, 'fed_rate', 'N/A')} (Stand: {getattr(macro, 'fed_rate_date', 'N/A')})") \
-        .replace("{{vix}}", f"{getattr(macro, 'vix', 'N/A')} (Stand: {getattr(macro, 'vix_date', 'N/A')})") \
-        .replace("{{credit_spread}}", f"{getattr(macro, 'credit_spread_bps', 'N/A')} (Stand: {getattr(macro, 'credit_spread_date', 'N/A')})") \
-        .replace("{{yield_spread}}", f"{getattr(macro, 'yield_curve_10y_2y', 'N/A')} (Stand: {getattr(macro, 'yield_curve_date', 'N/A')})") \
-        .replace("{{dxy}}", f"{getattr(macro, 'dxy', 'N/A')} (Stand: {getattr(macro, 'dxy_date', 'N/A')})") \
+        .replace("{{fed_rate}}", _fmt(macro.fed_rate, macro.fed_rate_date, "%")) \
+        .replace("{{vix}}", _fmt(macro.vix, macro.vix_date)) \
+        .replace("{{credit_spread}}", _fmt(macro.credit_spread_bps, macro.credit_spread_date, " Bp")) \
+        .replace("{{yield_spread}}", _fmt(macro.yield_curve_10y_2y, macro.yield_curve_date)) \
+        .replace("{{dxy}}", _fmt(macro.dxy, macro.dxy_date)) \
+        .replace("{{sp500_perf}}", str(market_ctx.get('sp500_perf', 0.0))) \
+        .replace("{{ndx_perf}}", str(market_ctx.get('ndx_perf', 0.0))) \
+        .replace("{{gold_perf}}", str(market_ctx.get('gold_perf', 0.0))) \
         .replace("{{upcoming_events}}", upcoming_str) \
         .replace("{{macro_bullets}}", macro_bullets_str)
-        
+
+    if "{{" in user_prompt:
+        unreplaced = [p for p in user_prompt.split("{{") if "}}" in p]
+        logger.warning(f"Unreplaced Platzhalter im Makro-Prompt: {[p.split('}}')[0] for p in unreplaced]}")
+
+    logger.debug(f"Makro-Prompt an DeepSeek:\n{user_prompt[:500]}...")
+
     result = await call_deepseek(sys_prompt, user_prompt)
     return result
 
@@ -178,6 +200,49 @@ async def generate_audit_report(ticker: str) -> str:
     else:
         news_str = "\n".join([f"- {n.headline}: {n.summary[:100]}..." for n in news_list[:5]]) if news_list else "Keine relevanten Nachrichten in den letzten 30 Tagen."
     
+    # KORREKTUR 5: Letztes Quartal aus Earnings-History extrahieren
+    last_actual = "N/A"
+    last_consensus = "N/A"
+    last_surprise = "N/A"
+    last_reaction = "N/A"
+
+    if history:
+        all_q = getattr(history, "all_quarters", [])
+        if all_q and len(all_q) > 0:
+            last_q = all_q[0]  # Neuestes Quartal
+            last_actual = str(getattr(last_q, "eps_actual", "N/A"))
+            last_consensus = str(getattr(last_q, "eps_consensus", "N/A"))
+            last_surprise = str(getattr(last_q, "eps_surprise_percent", "N/A"))
+            last_reaction = str(getattr(last_q, "stock_reaction_1d", "N/A"))
+        elif hasattr(history, "last_quarter") and history.last_quarter:
+            lq = history.last_quarter
+            last_actual = str(getattr(lq, "eps_actual", "N/A"))
+            last_consensus = str(getattr(lq, "eps_consensus", "N/A"))
+            last_surprise = str(getattr(lq, "eps_surprise_percent", "N/A"))
+            last_reaction = str(getattr(lq, "stock_reaction_1d", "N/A"))
+
+    # KORREKTUR 4c: Sektor-Median P/E aus FMP holen
+    sector_pe_str = "N/A"
+    if profile and hasattr(profile, "sector"):
+        try:
+            from backend.app.data.fmp import get_sector_pe
+            sector_pe = await get_sector_pe(profile.sector)
+            sector_pe_str = str(round(sector_pe, 1)) if sector_pe else "N/A"
+        except Exception:
+            sector_pe_str = "N/A"
+
+    # KORREKTUR 4d: 3-Jahres-Median P/E — Pragmatischer Fallback auf aktuelles P/E
+    pe_own_median_str = str(round(getattr(metrics, "pe_ratio", 18.0), 1)) if metrics and getattr(metrics, "pe_ratio", None) else "N/A"
+
+    # KORREKTUR 6: SMA-Distance berechnen statt hardcoded 0.0
+    sma50_dist = "N/A"
+    sma200_dist = "N/A"
+    if technicals and technicals.current_price and technicals.current_price > 0:
+        if technicals.sma_50:
+            sma50_dist = f"{((technicals.current_price - technicals.sma_50) / technicals.sma_50 * 100):.1f}"
+        if technicals.sma_200:
+            sma200_dist = f"{((technicals.current_price - technicals.sma_200) / technicals.sma_200 * 100):.1f}"
+
     user_prompt = user_tmpl \
         .replace("{{ticker}}", ticker) \
         .replace("{{company_name}}", getattr(estimates, "company_name", ticker) if estimates else ticker) \
@@ -188,21 +253,21 @@ async def generate_audit_report(ticker: str) -> str:
         .replace("{{quarters_beat}}", str(getattr(history, "quarters_beat", "0")) if history else "0") \
         .replace("{{total_quarters}}", str((getattr(history, "quarters_beat", 0) + getattr(history, "quarters_missed", 0))) if history else "0") \
         .replace("{{avg_surprise}}", str(getattr(history, "avg_surprise_percent", "0.0")) if history else "0.0") \
-        .replace("{{last_eps_actual}}", "0.0") \
-        .replace("{{last_eps_consensus}}", "0.0") \
-        .replace("{{last_surprise}}", "0.0") \
-        .replace("{{last_reaction}}", "0.0") \
+        .replace("{{last_eps_actual}}", last_actual) \
+        .replace("{{last_eps_consensus}}", last_consensus) \
+        .replace("{{last_surprise}}", last_surprise) \
+        .replace("{{last_reaction}}", last_reaction) \
         .replace("{{pe_ratio}}", str(getattr(metrics, "pe_ratio", "N/A")) if metrics else "N/A") \
-        .replace("{{pe_sector_median}}", "15.0") \
-        .replace("{{pe_own_3y_median}}", "18.0") \
+        .replace("{{pe_sector_median}}", sector_pe_str) \
+        .replace("{{pe_own_3y_median}}", pe_own_median_str) \
         .replace("{{ps_ratio}}", str(getattr(metrics, "ps_ratio", "N/A")) if metrics else "N/A") \
         .replace("{{market_cap}}", str(getattr(metrics, "market_cap", "N/A")) if metrics else "N/A") \
         .replace("{{current_price}}", str(getattr(technicals, "current_price", "N/A")) if technicals else "N/A") \
         .replace("{{trend}}", str(getattr(technicals, "trend", "N/A")) if technicals else "N/A") \
         .replace("{{sma50_status}}", "Über" if technicals and technicals.above_sma50 else "Unter") \
-        .replace("{{sma50_distance}}", "0.0") \
+        .replace("{{sma50_distance}}", sma50_dist) \
         .replace("{{sma200_status}}", "Über" if technicals and technicals.above_sma200 else "Unter") \
-        .replace("{{sma200_distance}}", "0.0") \
+        .replace("{{sma200_distance}}", sma200_dist) \
         .replace("{{rsi}}", str(getattr(technicals, "rsi_14", "N/A")) if technicals else "N/A") \
         .replace("{{support}}", str(getattr(technicals, "support_level", "N/A")) if technicals else "N/A") \
         .replace("{{resistance}}", str(getattr(technicals, "resistance_level", "N/A")) if technicals else "N/A") \
@@ -283,26 +348,30 @@ async def generate_weekly_summary() -> str:
     all_bullets = macro_recent + ticker_bullets
 
     if not all_bullets:
-        # Fallback: Direkt Finnhub-News der letzten 7 Tage holen
-        logger.info("Kurzzeit-Gedächtnis leer, hole Finnhub-News direkt als Fallback")
+        logger.info("Kurzzeit-Gedächtnis leer. Versuche Finnhub-News direkt als Fallback.")
         from backend.app.data.finnhub import get_company_news
-        
+
         fallback_news = []
         cutoff_str = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
         today_str = datetime.now().strftime("%Y-%m-%d")
 
-        for ticker in tickers[:10]:  # Maximal 10 Ticker
+        for ticker in tickers[:10]:
             try:
                 news = await get_company_news(ticker, cutoff_str, today_str)
-                for n in (news or [])[:3]:  # Top 3 pro Ticker
-                    fallback_news.append(f"- [{ticker}] {n.headline}")
-            except Exception:
-                pass
+                if news:
+                    for n in news[:3]:
+                        headline = getattr(n, "headline", str(n)) if not isinstance(n, dict) else n.get("headline", str(n))
+                        fallback_news.append(f"- [{ticker}] {headline}")
+                        logger.debug(f"Fallback-News für {ticker}: {headline[:60]}")
+            except Exception as e:
+                logger.warning(f"Finnhub-News Fallback für {ticker} fehlgeschlagen: {e}")
 
-        if fallback_news:
-            events_text = "\n".join(fallback_news[:20])
-        else:
-            return "News-Pipeline noch nicht aktiv. Keine Daten für Wochenzusammenfassung verfügbar."
+        if not fallback_news:
+            logger.warning("Auch Finnhub-Fallback hat keine News geliefert.")
+            return "News-Pipeline noch nicht aktiv und Finnhub-Fallback hat keine Daten geliefert. Bitte News-Scan manuell über das Admin-Panel starten."
+
+        events_text = "\n".join(fallback_news[:20])
+        logger.info(f"Fallback: {len(fallback_news)} News-Headlines aus Finnhub geholt.")
     else:
         events_text = "\n".join([
             f"- [{b.get('ticker', '?')}] ({b.get('category', 'general')}) Sentiment {float(b.get('sentiment_score', 0)):.2f}: " +
@@ -329,6 +398,14 @@ async def generate_sunday_report(tickers: list[str]) -> str:
     """
     logger.info(f"Sunday Report: {len(tickers)} Ticker erhalten: {tickers}")
     
+    # Pre-Flight Check: Makro-Events für die nächste Woche holen und ins Gedächtnis schreiben
+    try:
+        from backend.app.data.macro_processor import fetch_global_macro_events
+        await fetch_global_macro_events()
+        logger.info("Pre-Flight Check: fetch_global_macro_events abgeschlossen.")
+    except Exception as e:
+        logger.error(f"Fehler beim Pre-Flight Check (Wirtschaftskalender): {e}")
+
     if not tickers:
         logger.warning("Keine Ticker für Audit-Reports. Prüfe Watchlist.")
     

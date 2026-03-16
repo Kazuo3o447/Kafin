@@ -116,7 +116,36 @@ async def setup_workflows():
             }
         }
 
-        for wf in [news_workflow, sec_workflow, sunday_workflow]:
+        # Workflow 4: Morning Briefing (Montag-Freitag 07:00 CET)
+        morning_workflow = {
+            "name": "Kafin: Morning Briefing (Mo-Fr 07:00)",
+            "active": True,
+            "nodes": [
+                {
+                    "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "0 7 * * 1-5"}]}},
+                    "name": "Trigger: Mo-Fr 07:00 CET",
+                    "type": "n8n-nodes-base.scheduleTrigger",
+                    "position": [250, 300],
+                    "typeVersion": 1
+                },
+                {
+                    "parameters": {
+                        "url": "http://kafin-backend:8000/api/reports/generate-morning",
+                        "method": "POST",
+                        "options": {"timeout": 120000}
+                    },
+                    "name": "Morning Briefing generieren",
+                    "type": "n8n-nodes-base.httpRequest",
+                    "position": [450, 300],
+                    "typeVersion": 1
+                }
+            ],
+            "connections": {
+                "Trigger: Mo-Fr 07:00 CET": {"main": [[{"node": "Morning Briefing generieren", "type": "main", "index": 0}]]}
+            }
+        }
+
+        for wf in [news_workflow, sec_workflow, sunday_workflow, morning_workflow]:
             try:
                 response = await client.post("/api/v1/workflows", json=wf)
                 if response.status_code in (200, 201):

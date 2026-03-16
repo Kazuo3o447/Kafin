@@ -217,7 +217,8 @@ async def api_n8n_setup():
     await setup_workflows()
     return {"status": "success", "message": "n8n Workflows wurden erstellt"}
 
-from backend.app.analysis.report_generator import generate_audit_report, generate_sunday_report
+from backend.app.analysis.report_generator import generate_audit_report, generate_sunday_report, generate_morning_briefing
+from backend.app.data.market_overview import get_market_overview as fetch_market_overview
 
 # Report Router
 reports_router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -301,10 +302,46 @@ async def api_generate_sunday_report():
         
     return {"status": "success", "report": report_text}
 
+@reports_router.post("/generate-morning")
+async def api_generate_morning_briefing():
+    """Generiert das tägliche Morning Briefing."""
+    logger.info("[MorningBriefing] Starte Morning Briefing...")
+    global _latest_report
+    try:
+        report = await generate_morning_briefing()
+        _latest_report = report
+        logger.info(f"[MorningBriefing] Briefing generiert. Größe: {len(report)} Zeichen.")
+    except Exception as e:
+        logger.error(f"[MorningBriefing] Fehler: {e}")
+        return {"status": "error", "message": str(e)}
+
+    # Per Telegram senden
+    try:
+        from backend.app.alerts.telegram import send_telegram_alert
+
+        MAX_CHUNK = 4000
+        chunks = [report[i:i+MAX_CHUNK] for i in range(0, len(report), MAX_CHUNK)]
+        logger.info(f"[MorningBriefing] Sende via Telegram ({len(chunks)} Nachrichten)...")
+        for idx, chunk in enumerate(chunks):
+            prefix = f"📊 <b>KAFIN MORNING BRIEFING</b> ({idx+1}/{len(chunks)})\n\n" if idx == 0 else f"<b>[Fortsetzung {idx+1}/{len(chunks)}]</b>\n\n"
+            await send_telegram_alert(prefix + chunk)
+        logger.info("[MorningBriefing] Telegram-Versand abgeschlossen.")
+    except Exception as e:
+        logger.error(f"[MorningBriefing] Telegram-Versand fehlgeschlagen: {e}")
+
+    return {"status": "success", "report": report}
+
 @reports_router.get("/latest")
 async def api_get_latest_report():
     logger.info("[Report] API Call: get-latest-report")
     return {"report": _latest_report}
+
+@data_router.get("/market-overview")
+async def api_market_overview():
+    """Gibt die aktuelle Marktübersicht zurück (Indizes, Sektoren, Makro)."""
+    logger.info("API Call: market-overview")
+    overview = await fetch_market_overview()
+    return overview
 
 app.include_router(data_router)
 app.include_router(watchlist_router)

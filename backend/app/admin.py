@@ -77,10 +77,16 @@ ADMIN_HTML = """
             <section class="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-lg font-semibold text-white">Report Generator</h2>
-                    <button id="btn-sunday-report" onclick="generateSundayReport()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded transition font-medium shadow-lg flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"></path></svg>
-                        Sonntags-Report generieren
-                    </button>
+                    <div class="flex space-x-3">
+                        <button id="btn-morning-briefing" onclick="generateMorningBriefing()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded transition font-medium shadow-lg flex items-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                            Morning Briefing
+                        </button>
+                        <button id="btn-sunday-report" onclick="generateSundayReport()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded transition font-medium shadow-lg flex items-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"></path></svg>
+                            Sonntags-Report
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="mb-6">
@@ -337,6 +343,14 @@ ADMIN_HTML = """
             </div>
             
             <hr class="border-gray-700 my-8">
+
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg mt-6">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-md font-medium text-gray-300">Marktübersicht (Live)</h3>
+                    <button onclick="loadMarketOverview()" class="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-white transition">Aktualisieren</button>
+                </div>
+                <div id="market-overview-content" class="text-sm text-gray-400">Klicke "Aktualisieren" um Marktdaten zu laden.</div>
+            </div>
             
             <div class="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg mt-6">
                 <div class="flex justify-between items-center mb-2">
@@ -375,6 +389,13 @@ ADMIN_HTML = """
                 startLogPolling();
             } else {
                 stopLogPolling();
+            }
+            
+            if(tabId === 'status') {
+                loadMarketOverview();
+                if(!marketRefreshInterval) marketRefreshInterval = setInterval(loadMarketOverview, 300000);
+            } else {
+                if(marketRefreshInterval) { clearInterval(marketRefreshInterval); marketRefreshInterval = null; }
             }
             
             if(tabId === 'settings') loadSettings();
@@ -442,11 +463,97 @@ ADMIN_HTML = """
             }
         }
         
+        async function generateMorningBriefing() {
+            const overlay = document.getElementById('report-status-overlay');
+            const statusText = document.getElementById('report-status-text');
+            const output = document.getElementById('report-output-area');
+            
+            overlay.classList.remove('hidden');
+            statusText.textContent = 'Erstelle Morning Briefing... (Marktdaten + DeepSeek Analyse)';
+            
+            try {
+                const res = await fetch('/api/reports/generate-morning', {method: 'POST'});
+                const data = await res.json();
+                if(res.ok && data.status === 'success') {
+                    output.value = data.report;
+                    showToast('Morning Briefing fertig und per Telegram versendet!');
+                } else {
+                    showToast('Fehler: ' + (data.message || 'Unbekannt'), 'error');
+                }
+            } catch(e) {
+                showToast('Verbindungsfehler', 'error');
+            } finally {
+                overlay.classList.add('hidden');
+            }
+        }
+
         function copyReport() {
             const text = document.getElementById('report-output-area').value;
             navigator.clipboard.writeText(text).then(() => {
                 showToast('Kopiert!');
             });
+        }
+
+        // --- MARKET OVERVIEW ---
+        let marketRefreshInterval = null;
+
+        async function loadMarketOverview() {
+            const container = document.getElementById('market-overview-content');
+            container.innerHTML = '<span class="text-gray-500">Lade Marktdaten...</span>';
+            try {
+                const res = await fetch('/api/data/market-overview');
+                const data = await res.json();
+                if(data.error) {
+                    container.innerHTML = `<span class="text-red-400">${data.error}</span>`;
+                    return;
+                }
+                let html = '<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">';
+                
+                // Indizes
+                html += '<div><h4 class="font-semibold text-gray-200 mb-2">Indizes</h4><table class="w-full text-xs">';
+                html += '<tr class="border-b border-gray-700"><th class="text-left py-1 text-gray-400">Index</th><th class="text-right py-1 text-gray-400">Kurs</th><th class="text-right py-1 text-gray-400">Tag</th><th class="text-right py-1 text-gray-400">Woche</th><th class="text-right py-1 text-gray-400">Trend</th></tr>';
+                for(const [sym, d] of Object.entries(data.indices || {})) {
+                    if(d.error) continue;
+                    const dayColor = d.change_1d_pct >= 0 ? 'text-green-400' : 'text-red-400';
+                    const wkColor = d.change_5d_pct >= 0 ? 'text-green-400' : 'text-red-400';
+                    html += `<tr class="border-b border-gray-800"><td class="py-1 font-mono text-blue-400">${d.name || sym}</td><td class="text-right py-1">$${d.price}</td><td class="text-right py-1 ${dayColor}">${d.change_1d_pct > 0 ? '+' : ''}${d.change_1d_pct}%</td><td class="text-right py-1 ${wkColor}">${d.change_5d_pct > 0 ? '+' : ''}${d.change_5d_pct}%</td><td class="text-right py-1">${d.trend || '-'}</td></tr>`;
+                }
+                html += '</table></div>';
+
+                // Sektoren Top/Bottom
+                const ranking = data.sector_ranking_5d || [];
+                if(ranking.length > 0) {
+                    html += '<div><h4 class="font-semibold text-gray-200 mb-2">Sektor-Rotation (5T)</h4>';
+                    html += '<div class="space-y-1">';
+                    const top3 = ranking.slice(0, 3);
+                    const bot3 = ranking.slice(-3).reverse();
+                    top3.forEach(s => { html += `<div class="flex justify-between"><span class="text-green-400">${s.name}</span><span class="text-green-400 font-mono">+${s.perf_5d}%</span></div>`; });
+                    html += '<hr class="border-gray-700 my-1">';
+                    bot3.forEach(s => { html += `<div class="flex justify-between"><span class="text-red-400">${s.name}</span><span class="text-red-400 font-mono">${s.perf_5d}%</span></div>`; });
+                    html += '</div></div>';
+                }
+
+                html += '</div>';
+
+                // Makro-Proxys
+                const macroData = data.macro || {};
+                if(Object.keys(macroData).length > 0) {
+                    html += '<div class="mt-4"><h4 class="font-semibold text-gray-200 mb-2">Makro-Proxys</h4><div class="flex flex-wrap gap-3">';
+                    for(const [sym, d] of Object.entries(macroData)) {
+                        if(d.error) continue;
+                        const color = d.change_1d_pct >= 0 ? 'text-green-400' : 'text-red-400';
+                        html += `<span class="bg-gray-900 px-3 py-1 rounded border border-gray-700">${d.name || sym}: <span class="font-mono">$${d.price}</span> <span class="${color} font-mono">(${d.change_1d_pct > 0 ? '+' : ''}${d.change_1d_pct}%)</span></span>`;
+                    }
+                    html += '</div></div>';
+                }
+
+                if(data.timestamp) {
+                    html += `<p class="text-xs text-gray-600 mt-3">Stand: ${data.timestamp}</p>`;
+                }
+                container.innerHTML = html;
+            } catch(e) {
+                container.innerHTML = '<span class="text-red-400">Fehler beim Laden der Marktdaten.</span>';
+            }
         }
 
         // --- WATCHLIST ---

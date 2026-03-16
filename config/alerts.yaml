@@ -3,4 +3,9 @@ telegram:
   enabled: true
 email:
   enabled: true
-# ...
+
+schedules:
+  sunday_report: "0 20 * * 0"          # Sonntag 20:00 CET
+  morning_briefing: "0 7 * * 1-5"      # Montag-Freitag 07:00 CET
+  news_pipeline: "*/30 * * * *"        # Alle 30 Minuten
+  sec_scanner: "*/10 * * * *"          # Alle 10 Minuten

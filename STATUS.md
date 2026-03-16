@@ -37,6 +37,16 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 - [x] **Phase 3B:** Options- & Social-Sentiment Analyse (Zero-Cost via yfinance/Finnhub).
 - [x] **Stabilität:** 5 kritische Fixes für Makro-Daten und Prompt-Resilience abgeschlossen.
 
+### 5. Tägliches Morning Briefing
+*   **Marktübersicht**: `market_overview.py` — Index-Chartanalyse (SPY, QQQ, DIA, IWM), 11 Sektor-ETFs mit Rotationsranking, 5 Makro-Proxys (VIX, TLT, UUP, GLD, USO) via yfinance.
+*   **Allgemeine Nachrichten**: Finnhub General News Endpoint mit Qualitätsfilter (Reuters, Bloomberg, CNBC etc.).
+*   **Tages-Snapshot**: `daily_snapshots`-Tabelle in Supabase für Vergleich "gestern vs. heute" mit automatischer Regime-Erkennung.
+*   **DeepSeek-Analyse**: Analytischer Prompt v0.2 mit Vergleich, Kausalität, Widerspruchserkennung, Regime-Einordnung, Cross-Asset-Signalen.
+*   **Scheduling**: n8n Workflow "Morning Briefing (Mo-Fr 07:00)" mit 120s Timeout.
+*   **Admin-Panel**: Blauer "Morning Briefing"-Button im Reports-Tab, Marktübersicht-Karte im Status-Tab mit Auto-Refresh (5min).
+*   **Telegram**: Automatischer Versand mit Chunking für lange Briefings.
+*   **API-Endpoints**: `POST /api/reports/generate-morning`, `GET /api/data/market-overview`.
+
 ## 🚀 Nächste Schritte (Phase 4 / UI)
 - UI/Frontend mit React und Tailwind gestalten.
 - Auswertung der Alert-Qualität im Produktivbetrieb über die Zeit.

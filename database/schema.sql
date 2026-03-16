@@ -99,3 +99,23 @@ CREATE TABLE IF NOT EXISTS audit_reports (
     created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_reports_ticker ON audit_reports(ticker, report_date);
+
+CREATE TABLE IF NOT EXISTS daily_snapshots (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    date DATE NOT NULL UNIQUE,
+    spy_price FLOAT,
+    spy_change_pct FLOAT,
+    qqq_price FLOAT,
+    qqq_change_pct FLOAT,
+    dia_price FLOAT,
+    iwm_price FLOAT,
+    vix FLOAT,
+    credit_spread FLOAT,
+    yield_spread FLOAT,
+    dxy FLOAT,
+    top_sector TEXT,
+    bottom_sector TEXT,
+    regime TEXT,
+    briefing_summary TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);

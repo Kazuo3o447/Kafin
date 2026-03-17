@@ -20,6 +20,9 @@ class TechnicalSetup(BaseModel):
     trend: str = "sideways"
     above_sma50: bool = False
     above_sma200: bool = False
+    historical_volatility_20d: Optional[float] = None  # 20-Tage historische Volatilität (%)
+    historical_volatility_60d: Optional[float] = None  # 60-Tage historische Volatilität (%)
+    beta: Optional[float] = None  # Beta zum S&P 500
     model_config = ConfigDict(from_attributes=True)
 
 class OptionsMetrics(BaseModel):

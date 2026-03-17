@@ -1,5 +1,6 @@
 import yaml
 import os
+from typing import Optional
 from schemas.scores import OpportunityScore, TorpedoScore, AuditRecommendation
 from backend.app.logger import get_logger
 from backend.app.config import settings
@@ -296,3 +297,158 @@ async def get_recommendation(opportunity: OpportunityScore, torpedo: TorpedoScor
         recommendation_label=rec_label,
         reasoning=reason
     )
+
+
+def calculate_quality_score(
+    debt_to_equity: Optional[float],
+    current_ratio: Optional[float],
+    free_cash_flow_yield: Optional[float],
+    pe_ratio: Optional[float] = None
+) -> float:
+    """
+    Berechnet Quality-Score (0-10) basierend auf fundamentalen Kennzahlen.
+    
+    Logik:
+    - Debt-to-Equity < 1.5 = gut (3 Punkte)
+    - Current Ratio > 1.2 = gut (3 Punkte)
+    - Free Cash Flow Yield > 0 = gut (4 Punkte)
+    - Value Trap Detection: Hohe Schulden + negativer FCF = harte Strafe (-5 Punkte)
+    
+    Returns: Score zwischen 0-10
+    """
+    score = 0.0
+    
+    # 1. Debt-to-Equity Check (3 Punkte)
+    if debt_to_equity is not None:
+        if debt_to_equity < 1.0:
+            score += 3.0  # Sehr gesund
+        elif debt_to_equity < 1.5:
+            score += 2.0  # Akzeptabel
+        elif debt_to_equity < 2.5:
+            score += 1.0  # Erhöht
+        else:
+            score += 0.0  # Kritisch
+    else:
+        score += 1.5  # Neutral wenn keine Daten
+    
+    # 2. Current Ratio Check (3 Punkte)
+    if current_ratio is not None:
+        if current_ratio > 2.0:
+            score += 3.0  # Sehr liquide
+        elif current_ratio > 1.2:
+            score += 2.5  # Gesund
+        elif current_ratio > 1.0:
+            score += 1.5  # Knapp
+        else:
+            score += 0.0  # Liquiditätsprobleme
+    else:
+        score += 1.5  # Neutral wenn keine Daten
+    
+    # 3. Free Cash Flow Yield Check (4 Punkte)
+    if free_cash_flow_yield is not None:
+        if free_cash_flow_yield > 0.05:  # > 5%
+            score += 4.0  # Starker FCF
+        elif free_cash_flow_yield > 0.02:  # > 2%
+            score += 3.0  # Positiver FCF
+        elif free_cash_flow_yield > 0:
+            score += 2.0  # Leicht positiv
+        else:
+            score += 0.0  # Negativer FCF = Problem
+    else:
+        score += 2.0  # Neutral wenn keine Daten
+    
+    # 4. Value Trap Detection (Strafe)
+    # Hohe Schulden + negativer FCF = klassische Value Trap
+    if (debt_to_equity is not None and debt_to_equity > 2.0 and 
+        free_cash_flow_yield is not None and free_cash_flow_yield < 0):
+        score = max(0.0, score - 5.0)
+        logger.warning(f"Value Trap erkannt: D/E={debt_to_equity:.2f}, FCF Yield={free_cash_flow_yield:.4f}")
+    
+    # Zusätzliche Strafe: Sehr hohe Schulden + kein FCF-Wachstum
+    if (debt_to_equity is not None and debt_to_equity > 3.0):
+        score = max(0.0, score - 2.0)
+        logger.warning(f"Kritische Verschuldung: D/E={debt_to_equity:.2f}")
+    
+    return min(10.0, round(score, 2))
+
+
+def calculate_mismatch_score(
+    sentiment_score: float,
+    quality_score: float,
+    beta: float,
+    iv_atm: Optional[float] = None,
+    hist_vol: Optional[float] = None
+) -> float:
+    """
+    Berechnet Mismatch-Score - die Kernmetrik für Contrarian-Trading-Opportunities.
+    
+    Trigger-Logik:
+    - Sentiment extrem negativ (< -0.5) = Market überreagiert
+    - Quality Score hoch (> 6/10) = Fundamentals intakt
+    - Beta hoch (> 1.2) = Volatile Aktie mit starker Bewegung
+    - IV vs. Hist Vol Spread = Optionen-Timing
+    
+    Returns: Score zwischen 0-100 (je höher desto stärker die Contrarian-Opportunity)
+    """
+    score = 0.0
+    
+    # 1. Sentiment-Check (max 40 Punkte)
+    # Je negativer das Sentiment, desto höher die Contrarian-Chance
+    if sentiment_score < -0.7:
+        score += 40.0  # Extremer Pessimismus
+    elif sentiment_score < -0.5:
+        score += 30.0  # Starker Pessimismus
+    elif sentiment_score < -0.3:
+        score += 20.0  # Moderater Pessimismus
+    elif sentiment_score < -0.1:
+        score += 10.0  # Leichter Pessimismus
+    else:
+        score += 0.0  # Kein negativer Sentiment = kein Contrarian-Setup
+    
+    # 2. Quality-Check (max 30 Punkte)
+    # Fundamentals müssen intakt sein, sonst ist es eine Value Trap
+    if quality_score >= 8.0:
+        score += 30.0  # Exzellente Fundamentals
+    elif quality_score >= 6.0:
+        score += 25.0  # Gute Fundamentals
+    elif quality_score >= 4.0:
+        score += 15.0  # Akzeptable Fundamentals
+    else:
+        score += 0.0  # Schwache Fundamentals = Value Trap Gefahr
+    
+    # 3. Beta-Check (max 20 Punkte)
+    # Hohe Volatilität = größere Chancen aber auch Risiken
+    if beta >= 1.5:
+        score += 20.0  # Sehr volatile Aktie
+    elif beta >= 1.2:
+        score += 15.0  # Volatile Aktie
+    elif beta >= 1.0:
+        score += 10.0  # Durchschnittliche Volatilität
+    else:
+        score += 5.0  # Niedrige Volatilität = weniger attraktiv für Contrarian-Plays
+    
+    # 4. Options-Timing (max 10 Punkte Bonus)
+    # IV vs. Historical Vol Spread gibt Hinweis auf Options-Pricing
+    if iv_atm is not None and hist_vol is not None:
+        iv_spread = iv_atm - hist_vol
+        
+        if iv_spread > 10.0:
+            # IV deutlich höher als historische Vola = Optionen teuer
+            score += 0.0  # Kein Bonus, Options zu teuer
+            logger.info(f"IV zu teuer: {iv_atm:.2f}% vs. Hist {hist_vol:.2f}% (Spread: +{iv_spread:.2f}%)")
+        elif iv_spread > 5.0:
+            score += 5.0  # Leicht erhöhte IV
+        elif iv_spread < -5.0:
+            # IV niedriger als historische Vola = Optionen günstig!
+            score += 10.0  # Bonus für günstige Options
+            logger.info(f"IV günstig: {iv_atm:.2f}% vs. Hist {hist_vol:.2f}% (Spread: {iv_spread:.2f}%)")
+        else:
+            score += 7.0  # Neutrale IV
+    
+    # 5. Contrarian-Boost
+    # Wenn alle Kriterien erfüllt sind, extra Boost
+    if sentiment_score < -0.5 and quality_score > 6.0 and beta > 1.2:
+        score = min(100.0, score + 10.0)
+        logger.info(f"🎯 CONTRARIAN SETUP: Sentiment={sentiment_score:.2f}, Quality={quality_score:.1f}, Beta={beta:.2f}")
+    
+    return min(100.0, round(score, 2))

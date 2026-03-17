@@ -18,6 +18,9 @@ class OpportunityScore(BaseModel):
     short_squeeze_potential: float = 0.0
     insider_activity: float = 0.0
     options_flow: float = 0.0
+    beta: Optional[float] = None
+    quality_score: Optional[float] = None
+    mismatch_score: Optional[float] = None
     model_config = ConfigDict(from_attributes=True)
 
 

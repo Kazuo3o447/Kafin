@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowUpRight, Info } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Info, Circle } from "lucide-react";
 
 type IndexData = {
   name: string;
@@ -79,24 +79,37 @@ function formatPct(value?: number, fallback = "--") {
 }
 
 function MacroBanner({ macro }: { macro: MacroSnapshot }) {
+  const regime = macro.regime?.toUpperCase() || "CAUTIOUS";
+  const isRiskOn = regime.includes("RISK") && regime.includes("ON");
+  const isRiskOff = regime.includes("RISK") && regime.includes("OFF");
+
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-gradient-to-r from-[#1c1c2d] to-[#11111b] p-6 shadow-lg">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.4em] text-[var(--text-muted)]">Regime</p>
-          <h2 className="text-2xl font-semibold text-[var(--text-primary)]">{macro.regime?.toUpperCase() || "CAUTIOUS"}</h2>
+    <div className="card p-8">
+      <div className="flex flex-wrap items-center justify-between gap-6">
+        <div className="flex items-center gap-6">
+          <div className={`flex h-16 w-16 items-center justify-center rounded-2xl ${
+            isRiskOn ? "bg-[var(--accent-green)] bg-opacity-10" : isRiskOff ? "bg-[var(--accent-red)] bg-opacity-10" : "bg-[var(--accent-amber)] bg-opacity-10"
+          }`}>
+            <Circle size={32} className={`${
+              isRiskOn ? "fill-[var(--accent-green)] text-[var(--accent-green)]" : isRiskOff ? "fill-[var(--accent-red)] text-[var(--accent-red)]" : "fill-[var(--accent-amber)] text-[var(--accent-amber)]"
+            }`} />
+          </div>
+          <div>
+            <p className="text-sm text-[var(--text-secondary)] mb-1">Market Regime</p>
+            <h2 className="text-3xl font-bold text-[var(--text-primary)]">{regime}</h2>
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-6 md:grid-cols-5">
           {[
-            { label: "Fed", value: macro.fed_rate ? `${macro.fed_rate.toFixed(2)}%` : "-" },
-            { label: "VIX", value: macro.vix ? macro.vix.toFixed(2) : "-" },
-            { label: "Spread", value: macro.credit_spread_bps ? `${macro.credit_spread_bps.toFixed(2)} bp` : "-" },
-            { label: "Yield", value: macro.yield_curve_10y_2y ? `${macro.yield_curve_10y_2y.toFixed(2)}%` : "-" },
-            { label: "DXY", value: macro.dxy ? macro.dxy.toFixed(2) : "-" },
+            { label: "Fed Rate", value: macro.fed_rate ? `${macro.fed_rate.toFixed(2)}%` : "-", color: "text-[var(--text-primary)]" },
+            { label: "VIX", value: macro.vix ? macro.vix.toFixed(2) : "-", color: macro.vix && macro.vix > 25 ? "text-[var(--accent-red)]" : "text-[var(--accent-green)]" },
+            { label: "Credit Spread", value: macro.credit_spread_bps ? `${macro.credit_spread_bps.toFixed(0)} bp` : "-", color: "text-[var(--text-primary)]" },
+            { label: "Yield Curve", value: macro.yield_curve_10y_2y ? `${macro.yield_curve_10y_2y.toFixed(2)}%` : "-", color: macro.yield_curve_10y_2y && macro.yield_curve_10y_2y < 0 ? "text-[var(--accent-red)]" : "text-[var(--text-primary)]" },
+            { label: "DXY", value: macro.dxy ? macro.dxy.toFixed(2) : "-", color: "text-[var(--text-primary)]" },
           ].map((item) => (
             <div key={item.label}>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">{item.label}</p>
-              <p className="text-base font-semibold text-[var(--text-primary)]">{item.value}</p>
+              <p className="text-xs text-[var(--text-muted)] mb-1">{item.label}</p>
+              <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
             </div>
           ))}
         </div>
@@ -109,26 +122,27 @@ function IndexCards({ data }: { data: Record<string, IndexData> }) {
   const entries = Object.entries(data);
   if (!entries.length) return null;
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
       {entries.map(([symbol, item]) => (
-        <div key={symbol} className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
-          <div className="flex items-center justify-between">
+        <div key={symbol} className="card p-6">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-xs text-[var(--text-muted)]">{item.name}</p>
-              <h3 className="text-lg font-semibold text-[var(--text-primary)]">{symbol}</h3>
+              <p className="text-xs text-[var(--text-muted)] mb-1">{item.name}</p>
+              <h3 className="text-xl font-bold text-[var(--text-primary)]">{symbol}</h3>
             </div>
             <TrendIcon value={item.change_1d_pct} />
           </div>
-          <div className="mt-4 flex items-end justify-between">
+          <div className="flex items-end justify-between">
             <div>
-              <p className="text-2xl font-bold text-[var(--text-primary)]">${item.price?.toFixed(2) || "--"}</p>
-              <p className={`text-sm ${item.change_1d_pct && item.change_1d_pct >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"}`}>
-                {formatPct(item.change_1d_pct)} (1d)
+              <p className="text-3xl font-bold text-[var(--text-primary)]">${item.price?.toFixed(2) || "--"}</p>
+              <p className={`text-sm font-medium mt-1 ${item.change_1d_pct && item.change_1d_pct >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"}`}>
+                {formatPct(item.change_1d_pct)} today
               </p>
             </div>
-            <div className="text-right text-xs text-[var(--text-muted)]">
-              <p>RSI {item.rsi_14 ? item.rsi_14.toFixed(1) : "--"}</p>
-              <p className="capitalize">{item.trend || "-"}</p>
+            <div className="text-right">
+              <p className="text-xs text-[var(--text-muted)] mb-1">RSI</p>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">{item.rsi_14 ? item.rsi_14.toFixed(1) : "--"}</p>
+              <p className="text-xs text-[var(--text-muted)] capitalize mt-1">{item.trend || "-"}</p>
             </div>
           </div>
         </div>
@@ -142,25 +156,41 @@ function SectorTable({ sectors }: { sectors: SectorRank[] }) {
   const top = sectors.slice(0, 5);
   const bottom = sectors.slice(-5).reverse();
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
-        <h4 className="text-sm font-semibold text-[var(--text-secondary)]">Top Sektoren (5d)</h4>
-        <div className="mt-4 space-y-2 text-sm">
+    <div className="grid gap-6 md:grid-cols-2">
+      <div className="card p-6">
+        <h4 className="text-lg font-bold text-[var(--text-primary)] mb-4">Top Performers</h4>
+        <div className="space-y-4">
           {top.map((item) => (
-            <div key={item.symbol} className="flex items-center justify-between">
-              <span className="text-[var(--text-primary)]">{item.name}</span>
-              <span className="text-[var(--accent-green)]">{formatPct(item.perf_5d)}</span>
+            <div key={item.symbol}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-[var(--text-primary)]">{item.name}</span>
+                <span className="text-sm font-bold text-[var(--accent-green)]">{formatPct(item.perf_5d)}</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[var(--accent-green)]"
+                  style={{ width: `${Math.min(100, Math.abs(item.perf_5d) * 10)}%` }}
+                />
+              </div>
             </div>
           ))}
         </div>
       </div>
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
-        <h4 className="text-sm font-semibold text-[var(--text-secondary)]">Schwächste Sektoren</h4>
-        <div className="mt-4 space-y-2 text-sm">
+      <div className="card p-6">
+        <h4 className="text-lg font-bold text-[var(--text-primary)] mb-4">Worst Performers</h4>
+        <div className="space-y-4">
           {bottom.map((item) => (
-            <div key={item.symbol} className="flex items-center justify-between">
-              <span className="text-[var(--text-primary)]">{item.name}</span>
-              <span className="text-[var(--accent-red)]">{formatPct(item.perf_5d)}</span>
+            <div key={item.symbol}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-[var(--text-primary)]">{item.name}</span>
+                <span className="text-sm font-bold text-[var(--accent-red)]">{formatPct(item.perf_5d)}</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[var(--accent-red)]"
+                  style={{ width: `${Math.min(100, Math.abs(item.perf_5d) * 10)}%` }}
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -172,19 +202,24 @@ function SectorTable({ sectors }: { sectors: SectorRank[] }) {
 function MacroProxies({ macro }: { macro: Record<string, IndexData> }) {
   if (!Object.keys(macro).length) return null;
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
-      <h4 className="text-sm font-semibold text-[var(--text-secondary)]">Makro-Proxys</h4>
-      <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div className="card p-6">
+      <h4 className="text-lg font-bold text-[var(--text-primary)] mb-4">Macro Proxies</h4>
+      <div className="space-y-4">
         {Object.entries(macro).map(([symbol, item]) => (
-          <div key={symbol} className="rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] p-3 text-sm">
-            <div className="flex items-center justify-between text-[var(--text-muted)]">
-              <span>{item.name}</span>
+          <div key={symbol} className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
               <TrendIcon value={item.change_1d_pct} />
+              <div>
+                <p className="text-sm font-medium text-[var(--text-primary)]">{item.name}</p>
+                <p className="text-xs text-[var(--text-muted)]">{symbol}</p>
+              </div>
             </div>
-            <div className="mt-2 text-lg font-semibold text-[var(--text-primary)]">${item.price?.toFixed(2) || "--"}</div>
-            <p className={`${item.change_1d_pct && item.change_1d_pct >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"}`}>
-              {formatPct(item.change_1d_pct)}
-            </p>
+            <div className="text-right">
+              <p className="text-lg font-bold text-[var(--text-primary)]">${item.price?.toFixed(2) || "--"}</p>
+              <p className={`text-sm font-medium ${item.change_1d_pct && item.change_1d_pct >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"}`}>
+                {formatPct(item.change_1d_pct)}
+              </p>
+            </div>
           </div>
         ))}
       </div>
@@ -194,17 +229,17 @@ function MacroProxies({ macro }: { macro: Record<string, IndexData> }) {
 
 function BriefingPreview({ report }: { report: string }) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-5">
-      <div className="flex items-center justify-between">
+    <div className="card p-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Morning Briefing</p>
-          <h3 className="text-xl font-semibold text-[var(--text-primary)]">Letzter Run</h3>
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">Morning Briefing</h3>
+          <p className="text-sm text-[var(--text-secondary)]">Letzter Run</p>
         </div>
-        <button className="rounded-full border border-[var(--border)] px-4 py-1 text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]">
+        <button className="rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90 transition-all">
           Volltext öffnen
         </button>
       </div>
-      <div className="mt-4 max-h-48 overflow-y-auto rounded-lg bg-[var(--bg-tertiary)] p-4 font-mono text-sm text-[var(--text-secondary)]">
+      <div className="max-h-48 overflow-y-auto rounded-lg bg-[var(--bg-tertiary)] p-4 text-sm text-[var(--text-primary)] leading-relaxed">
         {report.slice(0, 1200) || "Noch kein Report generiert."}
       </div>
     </div>
@@ -213,34 +248,55 @@ function BriefingPreview({ report }: { report: string }) {
 
 function WatchlistGrid({ items }: { items: WatchlistItem[] }) {
   if (!items.length) return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-5 text-sm text-[var(--text-muted)]">
-      Watchlist leer – füge im Watchlist-Tab Ticker hinzu.
+    <div className="card p-6 text-center">
+      <p className="text-sm text-[var(--text-muted)]">Watchlist leer – füge im Watchlist-Tab Ticker hinzu.</p>
     </div>
   );
 
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-5">
-      <div className="flex items-center justify-between">
+    <div className="card p-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Watchlist</p>
-          <h3 className="text-xl font-semibold text-[var(--text-primary)]">Aktive Ticker</h3>
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">Watchlist Highlights</h3>
+          <p className="text-sm text-[var(--text-secondary)]">{items.length} aktive Ticker</p>
         </div>
-        <span className="text-sm text-[var(--text-muted)]">{items.length} Symbole</span>
       </div>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {items.slice(0, 9).map((item) => (
-          <div key={item.ticker} className="rounded-xl border border-[var(--border)] bg-[var(--bg-tertiary)] p-4">
-            <div className="flex items-center justify-between">
+      <div className="space-y-3">
+        {items.slice(0, 6).map((item) => (
+          <div key={item.ticker} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] p-4 transition-all hover:shadow-sm">
+            <div className="flex items-center gap-4">
               <div>
+                <h4 className="text-lg font-bold text-[var(--text-primary)]">{item.ticker}</h4>
                 <p className="text-xs text-[var(--text-muted)]">{item.company_name || ""}</p>
-                <h4 className="text-lg font-semibold text-[var(--text-primary)]">{item.ticker}</h4>
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-[var(--text-secondary)]">${item.price?.toFixed(2) || "--"}</p>
-                <p className="text-[10px] text-[var(--text-muted)]">OS: {item.opportunity_score ?? "--"} | TS: {item.torpedo_score ?? "--"}</p>
               </div>
             </div>
-            <p className="mt-3 text-xs text-[var(--text-muted)] line-clamp-2">{item.notes || "Keine Notiz."}</p>
+            <div className="flex items-center gap-6">
+              <div className="text-right">
+                <p className="text-sm font-bold text-[var(--text-primary)]">${item.price?.toFixed(2) || "--"}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="text-center">
+                  <p className="text-xs text-[var(--text-muted)] mb-1">OPP</p>
+                  <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${
+                    (item.opportunity_score ?? 0) >= 7 ? "bg-[var(--accent-green)] bg-opacity-10 text-[var(--accent-green)]" :
+                    (item.opportunity_score ?? 0) >= 5 ? "bg-[var(--accent-amber)] bg-opacity-10 text-[var(--accent-amber)]" :
+                    "bg-[var(--accent-red)] bg-opacity-10 text-[var(--accent-red)]"
+                  }`}>
+                    {item.opportunity_score?.toFixed(1) ?? "--"}
+                  </span>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-[var(--text-muted)] mb-1">TORP</p>
+                  <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${
+                    (item.torpedo_score ?? 0) >= 7 ? "bg-[var(--accent-red)] bg-opacity-10 text-[var(--accent-red)]" :
+                    (item.torpedo_score ?? 0) >= 5 ? "bg-[var(--accent-amber)] bg-opacity-10 text-[var(--accent-amber)]" :
+                    "bg-[var(--accent-green)] bg-opacity-10 text-[var(--accent-green)]"
+                  }`}>
+                    {item.torpedo_score?.toFixed(1) ?? "--"}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -252,31 +308,30 @@ export default async function Home() {
   const { macro, overview, report, watchlist } = await getDashboardData();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 p-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.35em] text-[var(--text-muted)]">Command Center</p>
-          <h1 className="text-3xl font-semibold text-[var(--text-primary)]">Morning Situation Briefing</h1>
-          <p className="text-sm text-[var(--text-secondary)]">Makro → Indizes → Watchlist. Alles auf einen Blick.</p>
+          <h1 className="text-4xl font-bold text-[var(--text-primary)]">Dashboard</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-2">Marktüberblick und Watchlist-Highlights</p>
         </div>
-        <div className="flex items-center gap-2 rounded-full border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-muted)]">
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-2 text-sm">
           <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--accent-green)]" />
-          Live verbunden mit Kafin Backend
+          <span className="text-[var(--text-secondary)]">Live</span>
         </div>
       </div>
 
       <MacroBanner macro={macro} />
 
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-[var(--text-muted)]">Marktstruktur</h2>
+      <section className="space-y-6">
+        <h2 className="text-lg font-bold text-[var(--text-primary)]">Market Overview</h2>
         <IndexCards data={overview.indices} />
-        <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+        <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
           <SectorTable sectors={overview.sector_ranking_5d || []} />
           <MacroProxies macro={overview.macro} />
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid gap-6 lg:grid-cols-2">
         <BriefingPreview report={report} />
         <WatchlistGrid items={watchlist} />
       </section>

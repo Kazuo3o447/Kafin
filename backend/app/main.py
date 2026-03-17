@@ -92,11 +92,17 @@ from backend.app.data.fmp import (
     get_company_profile, get_analyst_estimates, get_earnings_history, get_key_metrics
 )
 from backend.app.data.fred import get_macro_snapshot
+from backend.app.data.yfinance_data import (
+    get_risk_metrics, get_atm_implied_volatility, get_historical_volatility
+)
+from backend.app.analysis.scoring import calculate_quality_score, calculate_mismatch_score
+from backend.app.memory.short_term import get_memory_for_ticker
 
 from schemas.earnings import EarningsExpectation, EarningsHistorySummary
 from schemas.sentiment import NewsBulletPoint, ShortInterestData, InsiderActivity
 from schemas.valuation import ValuationData
 from schemas.macro import MacroSnapshot
+from schemas.options import OptionsData
 
 data_router = APIRouter(prefix="/api/data", tags=["data"])
 
@@ -160,6 +166,157 @@ async def api_performance():
     except Exception as e:
         logger.error(f"Performance-Endpoint Fehler: {e}")
         return {"status": "error", "message": str(e)}
+
+
+@data_router.get("/options/{ticker}", response_model=OptionsData)
+async def api_options_data(ticker: str):
+    """Holt Options-Daten inkl. IV ATM, Put/Call Ratio, historischer Volatilität."""
+    logger.info(f"API Call: options-data for {ticker}")
+    options_data = await get_atm_implied_volatility(ticker)
+    if options_data is None:
+        return OptionsData(ticker=ticker)
+    return options_data
+
+
+@data_router.get("/risk-metrics/{ticker}")
+async def api_risk_metrics(ticker: str):
+    """Holt Risk-Metriken: Beta, historische Volatilität."""
+    logger.info(f"API Call: risk-metrics for {ticker}")
+    
+    # Beta
+    risk_data = await get_risk_metrics(ticker)
+    beta = risk_data.get("beta")
+    
+    # Historische Volatilität (20 und 60 Tage)
+    hist_vol_20d = await get_historical_volatility(ticker, days=20)
+    hist_vol_60d = await get_historical_volatility(ticker, days=60)
+    
+    return {
+        "ticker": ticker,
+        "beta": beta,
+        "historical_volatility_20d": hist_vol_20d,
+        "historical_volatility_60d": hist_vol_60d
+    }
+
+
+@data_router.get("/contrarian-opportunities")
+async def api_contrarian_opportunities(min_mismatch_score: float = 50.0):
+    """
+    Findet Contrarian-Trading-Opportunities in der Watchlist.
+    
+    Kriterien:
+    - Sentiment < -0.5 (extrem negativ)
+    - Quality Score > 6/10 (Fundamentals intakt)
+    - Beta > 1.2 (volatile Aktie)
+    - Mismatch Score > min_mismatch_score
+    """
+    logger.info(f"API Call: contrarian-opportunities (min_mismatch_score={min_mismatch_score})")
+    
+    try:
+        from backend.app.memory.watchlist import get_watchlist
+        
+        watchlist = await get_watchlist()
+        opportunities = []
+        
+        for item in watchlist:
+            ticker = item.get("ticker")
+            
+            try:
+                # 1. Sentiment (letzte 7 Tage)
+                news_memory = await get_memory_for_ticker(ticker)
+                if not news_memory:
+                    continue
+                
+                # Durchschnittlicher Sentiment der letzten 7 Tage
+                recent_bullets = news_memory[:7]  # Annahme: chronologisch sortiert
+                if not recent_bullets:
+                    continue
+                
+                sentiment_scores = [b.get("sentiment_score", 0) for b in recent_bullets if b.get("sentiment_score") is not None]
+                if not sentiment_scores:
+                    continue
+                
+                avg_sentiment = sum(sentiment_scores) / len(sentiment_scores)
+                
+                # Filter: Sentiment muss extrem negativ sein
+                if avg_sentiment >= -0.5:
+                    continue
+                
+                # 2. Beta
+                risk_data = await get_risk_metrics(ticker)
+                beta = risk_data.get("beta")
+                if beta is None or beta < 1.2:
+                    continue
+                
+                # 3. Quality Score
+                key_metrics = await get_key_metrics(ticker)
+                if not key_metrics:
+                    continue
+                
+                quality_score = calculate_quality_score(
+                    debt_to_equity=key_metrics.debt_to_equity,
+                    current_ratio=key_metrics.current_ratio,
+                    free_cash_flow_yield=key_metrics.free_cash_flow_yield,
+                    pe_ratio=key_metrics.pe_ratio
+                )
+                
+                # Filter: Quality muss gut sein
+                if quality_score < 6.0:
+                    continue
+                
+                # 4. Options-Daten
+                options_data = await get_atm_implied_volatility(ticker)
+                iv_atm = options_data.implied_volatility_atm if options_data else None
+                hist_vol = options_data.historical_volatility if options_data else None
+                
+                # 5. Mismatch Score berechnen
+                mismatch_score = calculate_mismatch_score(
+                    sentiment_score=avg_sentiment,
+                    quality_score=quality_score,
+                    beta=beta,
+                    iv_atm=iv_atm,
+                    hist_vol=hist_vol
+                )
+                
+                # Filter: Mismatch Score muss hoch genug sein
+                if mismatch_score < min_mismatch_score:
+                    continue
+                
+                # Material News Count
+                material_count = sum(1 for b in recent_bullets if b.get("is_material", False))
+                
+                opportunities.append({
+                    "ticker": ticker,
+                    "mismatch_score": mismatch_score,
+                    "sentiment_7d": round(avg_sentiment, 3),
+                    "quality_score": quality_score,
+                    "beta": beta,
+                    "iv_atm": iv_atm,
+                    "hist_vol": hist_vol,
+                    "iv_spread": round(iv_atm - hist_vol, 2) if (iv_atm and hist_vol) else None,
+                    "material_news_count": material_count,
+                    "debt_to_equity": key_metrics.debt_to_equity,
+                    "current_ratio": key_metrics.current_ratio,
+                    "fcf_yield": key_metrics.free_cash_flow_yield
+                })
+                
+            except Exception as e:
+                logger.debug(f"Contrarian-Check für {ticker} fehlgeschlagen: {e}")
+                continue
+        
+        # Sortiere nach Mismatch Score (höchste zuerst)
+        opportunities.sort(key=lambda x: x["mismatch_score"], reverse=True)
+        
+        logger.info(f"Gefunden: {len(opportunities)} Contrarian-Opportunities")
+        return {
+            "status": "success",
+            "count": len(opportunities),
+            "opportunities": opportunities
+        }
+        
+    except Exception as e:
+        logger.error(f"Contrarian-Opportunities Fehler: {e}")
+        return {"status": "error", "message": str(e), "opportunities": []}
 
 from backend.app.memory.watchlist import (
     get_watchlist, add_ticker, remove_ticker, update_ticker, get_earnings_this_week

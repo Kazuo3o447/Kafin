@@ -103,3 +103,12 @@ HEUTE:
 
 → WARNSIGNALE:
 • [Jede Divergenz oder Widerspruch in den Daten. Max 3 Punkte.]
+
+→ CONTRARIAN-OPPORTUNITIES (Beta > 1.2, Sentiment < -0.5, Quality > 6/10):
+{{contrarian_setups}}
+• [Ticker] — Mismatch-Score: {{mismatch_score}}/100 | Beta: {{beta}} | Quality: {{quality_score}}/10
+  - Sentiment 7T: {{sentiment_7d}} ({{material_news_count}} Material Events)
+  - IV ATM: {{iv_atm}}% vs. Hist Vol {{hist_vol}}% (Spread: {{iv_spread}}%)
+  - Fundamentals: D/E {{debt_to_equity}}, CR {{current_ratio}}, FCF Yield {{fcf_yield}}%
+  - Setup: [Value Trap NEIN/UNKLAR/JA] | Options: [GÜNSTIG/TEUER/NEUTRAL]
+  - Trade-Idee: [Aktien/Calls/Puts mit Strike/Expiration wenn relevant]

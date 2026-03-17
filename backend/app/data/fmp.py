@@ -235,6 +235,9 @@ async def get_key_metrics(ticker: str) -> ValuationData | None:
         pe_ratio=data.get("peRatioTTM"),
         ps_ratio=data.get("priceToSalesRatioTTM"),
         market_cap=data.get("marketCapTTM"),
+        debt_to_equity=data.get("debtToEquityTTM"),
+        current_ratio=data.get("currentRatioTTM"),
+        free_cash_flow_yield=data.get("freeCashFlowYieldTTM"),
     )
 
 

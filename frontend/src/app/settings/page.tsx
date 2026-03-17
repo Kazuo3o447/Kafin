@@ -79,27 +79,26 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 p-8">
       <div>
-        <p className="text-xs uppercase tracking-[0.35em] text-[var(--text-muted)]">Einstellungen</p>
-        <h1 className="text-3xl font-semibold text-[var(--text-primary)]">System & Diagnostics</h1>
-        <p className="text-sm text-[var(--text-secondary)]">Systemcheck, Logs und Konfiguration</p>
+        <h1 className="text-4xl font-bold text-[var(--text-primary)]">Settings</h1>
+        <p className="text-sm text-[var(--text-secondary)] mt-2">System Diagnostics & Configuration</p>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-[var(--text-primary)]">Systemcheck</h2>
+          <h2 className="text-2xl font-bold text-[var(--text-primary)]">System Check</h2>
           <button
             onClick={runDiagnostics}
             disabled={loading}
-            className="flex items-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-[var(--accent-blue)] px-6 py-3 text-sm font-medium text-white shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
           >
-            <Play size={16} />
-            {loading ? "Läuft..." : "Systemcheck starten"}
+            <Play size={18} />
+            {loading ? "Running..." : "Run Diagnostics"}
           </button>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
           {[
             { key: "supabase", label: "Supabase" },
             { key: "deepseek", label: "DeepSeek" },
@@ -112,52 +111,52 @@ export default function SettingsPage() {
           ].map(({ key, label }) => {
             const status = diagnostics[key as keyof DiagnosticResult];
             return (
-              <div key={key} className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">{label}</h3>
+              <div key={key} className="card p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold text-[var(--text-primary)]">{label}</h3>
                   {getStatusIcon(status?.status)}
                 </div>
-                <p className="mt-2 text-xs text-[var(--text-muted)]">{status?.details || "Nicht getestet"}</p>
+                <p className="text-xs text-[var(--text-muted)] leading-relaxed">{status?.details || "Not tested yet"}</p>
               </div>
             );
           })}
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-[var(--text-primary)]">Datenbank-Status</h2>
+          <h2 className="text-2xl font-bold text-[var(--text-primary)]">Database Status</h2>
           <button
             onClick={loadDbStatus}
             disabled={loading}
-            className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-6 py-3 text-sm font-medium text-[var(--text-primary)] shadow-sm hover:bg-[var(--bg-tertiary)] disabled:opacity-50 transition-all"
           >
-            <Database size={16} />
-            {loading ? "Lädt..." : "DB-Status laden"}
+            <Database size={18} />
+            {loading ? "Loading..." : "Load DB Status"}
           </button>
         </div>
 
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-6">
+        <div className="card p-6">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b border-[var(--border)]">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-[var(--text-secondary)]">Tabelle</th>
-                  <th className="px-4 py-3 text-right font-semibold text-[var(--text-secondary)]">Anzahl Zeilen</th>
+                  <th className="px-4 py-3 text-left font-semibold text-[var(--text-secondary)]">Table</th>
+                  <th className="px-4 py-3 text-right font-semibold text-[var(--text-secondary)]">Row Count</th>
                 </tr>
               </thead>
               <tbody>
                 {dbStatus.tables && dbStatus.tables.length > 0 ? (
                   dbStatus.tables.map((table, idx) => (
-                    <tr key={idx} className="border-b border-[var(--border)] hover:bg-[var(--bg-tertiary)]">
-                      <td className="px-4 py-3 text-[var(--text-primary)]">{table.table_name}</td>
-                      <td className="px-4 py-3 text-right text-[var(--text-primary)]">{table.row_count}</td>
+                    <tr key={idx} className="border-b border-[var(--border)] hover:bg-[var(--bg-tertiary)] transition-colors">
+                      <td className="px-4 py-4 font-medium text-[var(--text-primary)]">{table.table_name}</td>
+                      <td className="px-4 py-4 text-right text-[var(--text-primary)]">{table.row_count}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={2} className="px-4 py-8 text-center text-[var(--text-muted)]">
-                      Keine Daten verfügbar. Klicke auf "DB-Status laden".
+                    <td colSpan={2} className="px-4 py-12 text-center text-[var(--text-muted)]">
+                      No data available. Click "Load DB Status".
                     </td>
                   </tr>
                 )}
@@ -167,34 +166,34 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-[var(--text-muted)]">Telegram-Test</h2>
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            Sendet eine Test-Nachricht an deinen Telegram-Bot.
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="card p-6">
+          <h2 className="text-lg font-bold text-[var(--text-primary)] mb-2">Telegram Test</h2>
+          <p className="text-sm text-[var(--text-secondary)] mb-4 leading-relaxed">
+            Sends a test message to your Telegram bot.
           </p>
           <button
             onClick={testTelegram}
             disabled={loading}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-3 text-sm font-medium text-white shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
           >
-            <Play size={16} />
-            Test-Nachricht senden
+            <Play size={18} />
+            Send Test Message
           </button>
         </div>
 
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-[var(--text-muted)]">n8n-Workflows</h2>
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            Richtet alle n8n-Workflows automatisch ein.
+        <div className="card p-6">
+          <h2 className="text-lg font-bold text-[var(--text-primary)] mb-2">n8n Workflows</h2>
+          <p className="text-sm text-[var(--text-secondary)] mb-4 leading-relaxed">
+            Automatically sets up all n8n workflows.
           </p>
           <button
             onClick={setupN8n}
             disabled={loading}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-purple)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-purple)] px-4 py-3 text-sm font-medium text-white shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
           >
-            <Play size={16} />
-            Workflows einrichten
+            <Play size={18} />
+            Setup Workflows
           </button>
         </div>
       </div>

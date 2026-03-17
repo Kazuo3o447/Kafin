@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Newspaper, Play, Filter } from "lucide-react";
+import { Newspaper, Play, Filter, Circle } from "lucide-react";
 import { api } from "@/lib/api";
 
 type NewsBullet = {
@@ -118,134 +118,145 @@ export default function NewsPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-xs uppercase tracking-[0.35em] text-[var(--text-muted)]">News</p>
-        <h1 className="text-3xl font-semibold text-[var(--text-primary)]">News-Timeline</h1>
-        <p className="text-sm text-[var(--text-secondary)]">Alle News-Stichpunkte aus der Watchlist</p>
+    <div className="space-y-8 p-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-bold text-[var(--text-primary)]">News Timeline</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-2">{filtered.length} News-Stichpunkte</p>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Filter size={16} className="text-[var(--text-muted)]" />
-            <select
-              value={filterTicker}
-              onChange={(e) => setFilterTicker(e.target.value)}
-              className="rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-1 text-sm text-[var(--text-primary)] outline-none"
-            >
-              <option value="">Alle Ticker</option>
-              {watchlist.map((item) => (
-                <option key={item.ticker} value={item.ticker}>
-                  {item.ticker}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filterSentiment}
-              onChange={(e) => setFilterSentiment(e.target.value as any)}
-              className="rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-1 text-sm text-[var(--text-primary)] outline-none"
-            >
-              <option value="all">Alle Sentiments</option>
-              <option value="positive">Positiv</option>
-              <option value="negative">Negativ</option>
-            </select>
-            <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-              <input
-                type="checkbox"
-                checked={filterMaterial}
-                onChange={(e) => setFilterMaterial(e.target.checked)}
-                className="rounded border-[var(--border)]"
-              />
-              Nur Material Events
-            </label>
+        <div className="space-y-6">
+          <div className="card p-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <Filter size={18} className="text-[var(--text-muted)]" />
+              <select
+                value={filterTicker}
+                onChange={(e) => setFilterTicker(e.target.value)}
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-2 text-sm text-[var(--text-primary)] outline-none shadow-sm"
+              >
+                <option value="">Alle Ticker</option>
+                {watchlist.map((item) => (
+                  <option key={item.ticker} value={item.ticker}>
+                    {item.ticker}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={filterSentiment}
+                onChange={(e) => setFilterSentiment(e.target.value as any)}
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-2 text-sm text-[var(--text-primary)] outline-none shadow-sm"
+              >
+                <option value="all">Alle Sentiments</option>
+                <option value="positive">Positiv</option>
+                <option value="negative">Negativ</option>
+              </select>
+              <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                <input
+                  type="checkbox"
+                  checked={filterMaterial}
+                  onChange={(e) => setFilterMaterial(e.target.checked)}
+                  className="h-4 w-4 rounded border-[var(--border)] accent-[var(--accent-blue)]"
+                />
+                Nur Material Events
+              </label>
+            </div>
           </div>
 
-          <div className="max-h-[700px] space-y-3 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+          <div className="max-h-[700px] space-y-4 overflow-y-auto">
             {loading ? (
-              <p className="text-sm text-[var(--text-muted)]">Lade News...</p>
+              <div className="card p-6 text-center">
+                <p className="text-sm text-[var(--text-muted)]">Lade News...</p>
+              </div>
             ) : filtered.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">Keine News-Stichpunkte gefunden.</p>
+              <div className="card p-6 text-center">
+                <p className="text-sm text-[var(--text-muted)]">Keine News gefunden.</p>
+              </div>
             ) : (
               filtered.map((item, idx) => (
                 <div
                   key={item.id || idx}
-                  className={`rounded-lg border p-4 ${
-                    item.is_material
-                      ? "border-[var(--accent-red)] bg-red-900/10"
-                      : "border-[var(--border)] bg-[var(--bg-tertiary)]"
+                  className={`card p-5 ${
+                    item.is_material ? "border-l-4 border-l-[var(--accent-red)]" : ""
                   }`}
                 >
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="rounded bg-[var(--bg-elevated)] px-2 py-1 font-semibold text-[var(--text-primary)]">
-                        {item.ticker}
-                      </span>
-                      <span className="rounded bg-[var(--bg-elevated)] px-2 py-1 text-[var(--text-muted)]">
-                        {item.category || "News"}
-                      </span>
-                      {item.is_material && (
-                        <span className="rounded bg-[var(--accent-red)] px-2 py-1 font-semibold text-white">
-                          TORPEDO
-                        </span>
-                      )}
-                    </div>
-                    <span
-                      className={`font-semibold ${
+                  <div className="flex items-start gap-4">
+                    <Circle
+                      size={8}
+                      className={`mt-2 flex-shrink-0 ${
                         (item.sentiment_score ?? 0) > 0.3
-                          ? "text-[var(--accent-green)]"
+                          ? "fill-[var(--accent-green)] text-[var(--accent-green)]"
                           : (item.sentiment_score ?? 0) < -0.3
-                          ? "text-[var(--accent-red)]"
-                          : "text-[var(--text-muted)]"
+                          ? "fill-[var(--accent-red)] text-[var(--accent-red)]"
+                          : "fill-[var(--text-muted)] text-[var(--text-muted)]"
                       }`}
-                    >
-                      {item.sentiment_score?.toFixed(2) || "0.00"}
-                    </span>
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="badge badge-neutral">{item.ticker}</span>
+                        <span className="badge badge-info">{item.category || "News"}</span>
+                        {item.is_material && (
+                          <span className="badge badge-danger">TORPEDO</span>
+                        )}
+                        <span className="ml-auto text-xs text-[var(--text-muted)]">
+                          {item.created_at ? new Date(item.created_at).toLocaleString("de-DE") : "-"}
+                        </span>
+                      </div>
+                      <p className="text-sm text-[var(--text-primary)] leading-relaxed">{item.bullet_text}</p>
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="text-xs text-[var(--text-muted)]">Sentiment:</span>
+                        <span
+                          className={`text-sm font-bold ${
+                            (item.sentiment_score ?? 0) > 0.3
+                              ? "text-[var(--accent-green)]"
+                              : (item.sentiment_score ?? 0) < -0.3
+                              ? "text-[var(--accent-red)]"
+                              : "text-[var(--text-muted)]"
+                          }`}
+                        >
+                          {item.sentiment_score?.toFixed(2) || "0.00"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <p className="mt-3 text-sm text-[var(--text-primary)]">{item.bullet_text}</p>
-                  <p className="mt-2 text-xs text-[var(--text-muted)]">
-                    {item.created_at ? new Date(item.created_at).toLocaleString("de-DE") : "-"}
-                  </p>
                 </div>
               ))
             )}
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-6">
-            <div className="flex items-center gap-2 text-[var(--text-muted)]">
-              <Newspaper size={16} />
-              <h2 className="text-sm font-semibold uppercase tracking-[0.3em]">Scan-Aktionen</h2>
-            </div>
-            <div className="mt-4 space-y-3">
+        <div className="space-y-6">
+          <div className="card p-6">
+            <h2 className="text-lg font-bold text-[var(--text-primary)] mb-4">Scan Actions</h2>
+            <div className="space-y-3">
               <button
                 onClick={runNewsScan}
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-3 text-sm font-medium text-white shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
               >
-                <Play size={16} />
-                News-Scan jetzt
+                <Play size={18} />
+                News Scan
               </button>
               <button
                 onClick={runSecScan}
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-amber)] px-4 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-amber)] px-4 py-3 text-sm font-medium text-white shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
               >
-                <Play size={16} />
-                SEC-Scan jetzt
+                <Play size={18} />
+                SEC Scan
               </button>
               <button
                 onClick={runMacroScan}
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-purple)] px-4 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-purple)] px-4 py-3 text-sm font-medium text-white shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
               >
-                <Play size={16} />
-                Makro-Scan jetzt
+                <Play size={18} />
+                Macro Scan
               </button>
             </div>
             {scanResult && (
-              <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] p-3 text-sm text-[var(--text-primary)]">
+              <div className="mt-4 rounded-lg bg-[var(--bg-tertiary)] p-4 text-sm text-[var(--text-primary)]">
                 {scanResult}
               </div>
             )}

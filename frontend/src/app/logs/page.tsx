@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FileText, Play, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import { RefreshCw, Circle } from "lucide-react";
 
 type LogEntry = {
   timestamp?: string;
@@ -14,8 +14,7 @@ export default function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [logLevel, setLogLevel] = useState<string>("all");
-  const [showDebug, setShowDebug] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<string>("all");
 
   useEffect(() => {
     loadLogs();
@@ -42,99 +41,145 @@ export default function LogsPage() {
   }
 
   const filteredLogs = logs.filter((log) => {
-    if (!showDebug && log.level === "debug") return false;
-    if (logLevel !== "all" && log.level !== logLevel) return false;
-    return true;
+    if (activeFilter === "all") return true;
+    return log.level === activeFilter;
   });
 
+  const getLevelBadgeClass = (level?: string) => {
+    switch (level) {
+      case "error":
+        return "badge-danger";
+      case "warning":
+        return "badge-warning";
+      case "info":
+        return "badge-info";
+      case "debug":
+        return "badge-neutral";
+      default:
+        return "badge-neutral";
+    }
+  };
+
+  const logCounts = {
+    all: logs.length,
+    info: logs.filter((l) => l.level === "info").length,
+    warning: logs.filter((l) => l.level === "warning").length,
+    error: logs.filter((l) => l.level === "error").length,
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 p-8">
       <div>
-        <p className="text-xs uppercase tracking-[0.35em] text-[var(--text-muted)]">Logs</p>
-        <h1 className="text-3xl font-semibold text-[var(--text-primary)]">Live-Logs</h1>
-        <p className="text-sm text-[var(--text-secondary)]">Echtzeit-Logs aus dem Kafin Backend</p>
+        <h1 className="text-3xl font-bold text-[var(--text-primary)]">System Logs</h1>
+        <p className="text-sm text-[var(--text-secondary)] mt-2">Echtzeit-Monitoring der Backend-Aktivitäten</p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-          <input
-            type="checkbox"
-            checked={showDebug}
-            onChange={(e) => setShowDebug(e.target.checked)}
-            className="rounded border-[var(--border)]"
-          />
-          Debug anzeigen
-        </label>
-        <select
-          value={logLevel}
-          onChange={(e) => setLogLevel(e.target.value)}
-          className="rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-1 text-sm text-[var(--text-primary)] outline-none"
-        >
-          <option value="all">Alle Levels</option>
-          <option value="info">INFO</option>
-          <option value="warning">WARNING</option>
-          <option value="error">ERROR</option>
-        </select>
-        <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-          <input
-            type="checkbox"
-            checked={autoRefresh}
-            onChange={(e) => setAutoRefresh(e.target.checked)}
-            className="rounded border-[var(--border)]"
-          />
-          Auto-Refresh (5s)
-        </label>
-        <button
-          onClick={loadLogs}
-          className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-1 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
-        >
-          <Play size={16} />
-          Aktualisieren
-        </button>
-      </div>
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setActiveFilter("all")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeFilter === "all"
+                  ? "bg-[var(--accent-blue)] text-white shadow-md"
+                  : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--border)]"
+              }`}
+            >
+              Alle <span className="ml-1 opacity-75">({logCounts.all})</span>
+            </button>
+            <button
+              onClick={() => setActiveFilter("info")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeFilter === "info"
+                  ? "bg-[var(--accent-blue)] text-white shadow-md"
+                  : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--border)]"
+              }`}
+            >
+              Info <span className="ml-1 opacity-75">({logCounts.info})</span>
+            </button>
+            <button
+              onClick={() => setActiveFilter("warning")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeFilter === "warning"
+                  ? "bg-[var(--accent-amber)] text-white shadow-md"
+                  : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--border)]"
+              }`}
+            >
+              Warnings <span className="ml-1 opacity-75">({logCounts.warning})</span>
+            </button>
+            <button
+              onClick={() => setActiveFilter("error")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeFilter === "error"
+                  ? "bg-[var(--accent-red)] text-white shadow-md"
+                  : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--border)]"
+              }`}
+            >
+              Errors <span className="ml-1 opacity-75">({logCounts.error})</span>
+            </button>
+          </div>
 
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-[var(--text-muted)]">
-            Log-Stream
-          </h2>
-          <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">
-            <span className="flex items-center gap-1">
-              <CheckCircle size={14} className="text-[var(--accent-green)]" />
-              INFO
-            </span>
-            <span className="flex items-center gap-1">
-              <AlertTriangle size={14} className="text-[var(--accent-amber)]" />
-              WARNING
-            </span>
-            <span className="flex items-center gap-1">
-              <XCircle size={14} className="text-[var(--accent-red)]" />
-              ERROR
-            </span>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                className="h-4 w-4 rounded border-[var(--border)] accent-[var(--accent-blue)]"
+              />
+              Auto-Refresh (5s)
+            </label>
+            <button
+              onClick={loadLogs}
+              disabled={loading}
+              className="flex items-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-all"
+            >
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+              Aktualisieren
+            </button>
           </div>
         </div>
-        <div className="mt-4 max-h-[700px] overflow-y-auto rounded-lg bg-[var(--bg-primary)] p-4 font-mono text-xs">
+
+        <div className="space-y-2 max-h-[600px] overflow-y-auto">
           {loading && filteredLogs.length === 0 ? (
-            <p className="text-[var(--text-muted)]">Lade Logs...</p>
+            <div className="text-center py-12">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-[var(--accent-blue)] border-r-transparent"></div>
+              <p className="text-sm text-[var(--text-muted)] mt-4">Lade Logs...</p>
+            </div>
           ) : filteredLogs.length === 0 ? (
-            <p className="text-[var(--text-muted)]">Keine Logs verfügbar.</p>
+            <div className="text-center py-12">
+              <p className="text-sm text-[var(--text-muted)]">Keine Logs verfügbar</p>
+            </div>
           ) : (
             filteredLogs.map((log, idx) => (
               <div
                 key={idx}
-                className={`border-b border-[var(--border)] py-2 hover:bg-[var(--bg-tertiary)] ${
-                  log.level === "error"
-                    ? "text-[var(--accent-red)]"
-                    : log.level === "warning"
-                    ? "text-[var(--accent-amber)]"
-                    : log.level === "info"
-                    ? "text-[var(--accent-blue)]"
-                    : "text-[var(--text-muted)]"
-                }`}
+                className="flex items-start gap-4 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] p-4 transition-all hover:shadow-sm"
               >
-                <span className="text-[var(--text-muted)]">[{log.timestamp}]</span>{" "}
-                <span className="font-semibold">[{log.level?.toUpperCase()}]</span>{" "}
-                <span className="text-[var(--text-secondary)]">{log.logger}</span> - {log.event}
+                <div className="flex-shrink-0 mt-0.5">
+                  <Circle
+                    size={8}
+                    className={
+                      log.level === "error"
+                        ? "fill-[var(--accent-red)] text-[var(--accent-red)]"
+                        : log.level === "warning"
+                        ? "fill-[var(--accent-amber)] text-[var(--accent-amber)]"
+                        : log.level === "info"
+                        ? "fill-[var(--accent-blue)] text-[var(--accent-blue)]"
+                        : "fill-[var(--text-muted)] text-[var(--text-muted)]"
+                    }
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-1">
+                    <span className={`badge ${getLevelBadgeClass(log.level)}`}>{log.level?.toUpperCase()}</span>
+                    <span className="text-xs text-[var(--text-muted)]">{log.timestamp}</span>
+                  </div>
+                  <p className="text-sm text-[var(--text-primary)] mb-1">{log.event}</p>
+                  {log.logger && (
+                    <p className="text-xs text-[var(--text-muted)] font-mono">{log.logger}</p>
+                  )}
+                </div>
               </div>
             ))
           )}

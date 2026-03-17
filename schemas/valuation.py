@@ -17,4 +17,7 @@ class ValuationData(BaseModel):
     market_cap: Optional[float] = None
     sector: Optional[str] = None
     industry: Optional[str] = None
+    debt_to_equity: Optional[float] = None
+    current_ratio: Optional[float] = None
+    free_cash_flow_yield: Optional[float] = None
     model_config = ConfigDict(from_attributes=True)

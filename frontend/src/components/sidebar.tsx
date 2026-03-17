@@ -33,44 +33,41 @@ export function Sidebar() {
   }, []);
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-6">
-      <div className="mb-8">
-        <div className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]">KAFIN</div>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">Command</h1>
-        <p className="text-xs text-[var(--text-muted)]">Bloomberg Terminal DNA</p>
+    <aside className="flex h-screen w-72 flex-col border-r border-[var(--border)] bg-[var(--bg-secondary)] px-6 py-8">
+      <div className="mb-12">
+        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Kafin</h1>
+        <p className="text-sm text-[var(--text-secondary)] mt-1">Trading Intelligence</p>
       </div>
 
-      <nav className="space-y-1">
+      <nav className="space-y-2">
         {navItems.map(({ label, href, icon: Icon }) => {
           const active = pathname === href;
           return (
             <Link
               key={href}
               href={href}
-              className={`group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
+              className={`group flex items-center gap-4 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
                 active
-                  ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
+                  ? "bg-[var(--accent-blue)] text-white shadow-md"
                   : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
               }`}
             >
-              <Icon size={18} className="text-inherit" />
-              <span>{label}</span>
-              {active && (
-                <span className="ml-auto h-1 w-1 rounded-full bg-[var(--accent-blue)]" />
-              )}
+              <Icon size={20} className={active ? "text-white" : "text-[var(--text-muted)]"} />
+              <span className="flex-1">{label}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="mt-auto space-y-3 rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] p-4 text-xs text-[var(--text-secondary)]">
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-[var(--accent-green)]" />
-          Alle Systeme OK
-        </div>
-        <div className="flex items-center justify-between text-[var(--text-muted)]">
-          <span>Letztes Update</span>
-          <span className="text-[var(--text-secondary)]">{lastUpdated}</span>
+      <div className="mt-auto space-y-4 rounded-xl border border-[var(--border)] bg-[var(--bg-tertiary)] p-5 text-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-green)] bg-opacity-10">
+            <span className="h-2 w-2 rounded-full bg-[var(--accent-green)]" />
+          </div>
+          <div>
+            <div className="font-medium text-[var(--text-primary)]">System Online</div>
+            <div className="text-xs text-[var(--text-muted)]">Alle Services verfügbar</div>
+          </div>
         </div>
       </div>
     </aside>

@@ -13,8 +13,10 @@ import os
 from datetime import datetime
 from typing import Optional
 from schemas.technicals import TechnicalSetup, OptionsMetrics
+from schemas.options import OptionsData, OptionChainSummary
 from backend.app.config import settings
 from backend.app.logger import get_logger
+import numpy as np
 
 logger = get_logger(__name__)
 
@@ -80,6 +82,150 @@ async def get_technical_setup(ticker: str) -> TechnicalSetup:
     except Exception as e:
         logger.error(f"yfinance Fehler für {ticker}: {e}")
         return TechnicalSetup(ticker=ticker, current_price=0.0)
+
+
+async def get_risk_metrics(ticker: str) -> dict:
+    """
+    Holt Risk-Metriken: Beta zum S&P 500.
+    Beta > 1.2 = hohe Volatilität (wichtig für Contrarian-Setup).
+    """
+    if settings.use_mock_data:
+        return {"beta": 1.35, "ticker": ticker}
+
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        beta = info.get("beta")
+        
+        if beta is None:
+            logger.warning(f"Kein Beta für {ticker} verfügbar")
+            return {"beta": None, "ticker": ticker}
+        
+        return {
+            "beta": round(float(beta), 2),
+            "ticker": ticker
+        }
+    except Exception as e:
+        logger.error(f"Risk Metrics Fehler für {ticker}: {e}")
+        return {"beta": None, "ticker": ticker}
+
+
+async def get_historical_volatility(ticker: str, days: int = 20) -> Optional[float]:
+    """
+    Berechnet historische Volatilität (annualisiert) über die letzten N Tage.
+    Wird mit IV verglichen um zu sehen ob Optionen teuer/günstig sind.
+    """
+    if settings.use_mock_data:
+        return 25.5  # Mock: 25.5% historische Vola
+
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period=f"{days + 10}d")  # Puffer für Feiertage
+        
+        if hist.empty or len(hist) < days:
+            logger.warning(f"Nicht genug Daten für historische Vola: {ticker}")
+            return None
+        
+        # Berechne tägliche Returns
+        hist['returns'] = hist['Close'].pct_change()
+        
+        # Standardabweichung der Returns (annualisiert: sqrt(252 Trading Days))
+        daily_vol = hist['returns'].std()
+        annual_vol = daily_vol * np.sqrt(252) * 100  # In Prozent
+        
+        return round(float(annual_vol), 2)
+    except Exception as e:
+        logger.error(f"Historische Volatilität Fehler für {ticker}: {e}")
+        return None
+
+
+async def get_atm_implied_volatility(ticker: str) -> Optional[OptionsData]:
+    """
+    Holt die Implizite Volatilität (IV) der At-The-Money (ATM) Optionen.
+    Nutzt die nächste verfügbare Expiration > 5 Tage.
+    Returns: OptionsData mit IV, Volume, Put/Call Ratio, historischer Vola.
+    """
+    if settings.use_mock_data:
+        return OptionsData(
+            ticker=ticker,
+            implied_volatility_atm=35.2,
+            options_volume=125000,
+            put_call_ratio=1.15,
+            historical_volatility=28.5,
+            expiration_date="2026-04-18",
+            iv_percentile=75.0
+        )
+
+    try:
+        stock = yf.Ticker(ticker)
+        exps = getattr(stock, 'options', [])
+        
+        if not exps:
+            logger.warning(f"Keine Optionen für {ticker} verfügbar")
+            return None
+
+        # Finde nächste Expiration > 5 Tage
+        now = datetime.now()
+        target_exp = None
+        for exp in exps:
+            exp_date = datetime.strptime(exp, "%Y-%m-%d")
+            if (exp_date - now).days > 5:
+                target_exp = exp
+                break
+        
+        if not target_exp:
+            logger.warning(f"Keine passende Expiration für {ticker}")
+            return None
+        
+        opt = stock.option_chain(target_exp)
+        calls = opt.calls
+        puts = opt.puts
+        
+        if calls.empty or puts.empty:
+            return None
+        
+        # Aktueller Kurs
+        hist = stock.history(period="1d")
+        if hist.empty:
+            return None
+        current_price = float(hist['Close'].iloc[-1])
+        
+        # Finde ATM Strike (nächster zum aktuellen Kurs)
+        calls['distance'] = abs(calls['strike'] - current_price)
+        puts['distance'] = abs(puts['strike'] - current_price)
+        
+        atm_call = calls.loc[calls['distance'].idxmin()]
+        atm_put = puts.loc[puts['distance'].idxmin()]
+        
+        # Durchschnittliche IV von ATM Call und Put
+        iv_call = float(atm_call['impliedVolatility'])
+        iv_put = float(atm_put['impliedVolatility'])
+        iv_atm = (iv_call + iv_put) / 2 * 100  # In Prozent
+        
+        # Put/Call Ratio (Volume)
+        total_put_vol = float(puts['volume'].sum())
+        total_call_vol = float(calls['volume'].sum())
+        pcr = total_put_vol / total_call_vol if total_call_vol > 0 else 0.0
+        
+        # Gesamtvolumen
+        total_volume = int(total_put_vol + total_call_vol)
+        
+        # Historische Volatilität zum Vergleich
+        hist_vol = await get_historical_volatility(ticker, days=20)
+        
+        return OptionsData(
+            ticker=ticker,
+            implied_volatility_atm=round(iv_atm, 2),
+            options_volume=total_volume,
+            put_call_ratio=round(pcr, 2),
+            historical_volatility=hist_vol,
+            expiration_date=target_exp,
+            iv_percentile=None  # TODO: Berechnung erfordert historische IV-Daten
+        )
+    except Exception as e:
+        logger.error(f"ATM IV Fehler für {ticker}: {e}")
+        return None
+
 
 async def get_options_metrics(ticker: str) -> Optional[OptionsMetrics]:
     """Berechnet Options-Kennzahlen für einen Ticker (PCR, IV ATM)."""

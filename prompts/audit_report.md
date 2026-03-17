@@ -53,11 +53,32 @@ SCORES:
 Opportunity-Score: {{opportunity_score}}/10
 Torpedo-Score: {{torpedo_score}}/10
 
+CONTRARIAN-METRIKEN:
+Beta: {{beta}}
+Quality-Score: {{quality_score}}/10
+Mismatch-Score: {{mismatch_score}}/100
+- Debt-to-Equity: {{debt_to_equity}}
+- Current Ratio: {{current_ratio}}
+- Free Cash Flow Yield: {{free_cash_flow_yield}}%
+
+OPTIONS-TIMING:
+Implizite Volatilität (ATM): {{iv_atm}}%
+Historische Volatilität (20d): {{hist_vol_20d}}%
+IV Spread: {{iv_spread}}% (IV minus Hist Vol)
+Put/Call Ratio: {{put_call_ratio}}
+
+CONTRARIAN-ANALYSE (Falls Sentiment < -0.5 und Beta > 1.2):
+Sentiment 7-Tage-Durchschnitt: {{sentiment_score_7d}}
+Ist Contrarian-Setup gegeben: {{is_contrarian_setup}}
+
 Erstelle den Report auf Deutsch mit diesen Abschnitten:
 1. ZUSAMMENFASSUNG (3-4 Sätze: These, Empfehlung, größtes Risiko)
 2. BEWERTUNG IM REGIME-KONTEXT (Wie ordnet der Markt das Unternehmen ein? Narrative-Shift möglich? Asymmetrie?)
-3. EMPFEHLUNG mit Begründung (Strong Buy / Buy / Hold / Short / Strong Short)
-4. OPTIONEN-VORSCHLAG (Wenn die Empfehlung Long oder Short ist: Konkreten Spread vorschlagen)
+3. **PFLICHT: CONTRARIAN-ANALYSE** (NUR wenn Mismatch-Score > 50):
+   - **VALUE TRAP vs. ÜBERTREIBUNG?** Analysiere: Ist die Verschuldung tragbar? Ist der FCF stabil oder sinkend? Gibt es strukturelle Probleme (Downsizing, Leadership-Wechsel)? → Dein Urteil: Berechtigte Krise oder temporäre Marktübertreibung?
+   - **OPTIONS-TIMING: IV ZU TEUER?** Prüfe das IV Spread. Ist die IV deutlich höher als die historische Vola? Besteht Gefahr eines IV Crush vor Earnings? → Dein Urteil: Sind Aktien oder Optionen das bessere Instrument?
+4. EMPFEHLUNG mit Begründung (Strong Buy / Buy / Hold / Short / Strong Short)
+5. OPTIONEN-VORSCHLAG (Wenn die Empfehlung Long oder Short ist: Konkreten Spread vorschlagen. Bei Contrarian-Setups: Berücksichtige IV Spread für Timing)
 
 EXPECTED_OUTPUT:
 Strukturierter deutscher Report-Text, ca. 300-500 Wörter.

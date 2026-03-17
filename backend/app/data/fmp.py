@@ -211,3 +211,52 @@ async def get_sector_pe(sector: str) -> float | None:
         logger.error(f"Sektor-P/E Fehler: {e}")
 
     return defaults.get(sector, 18.0)
+
+
+@rate_limit("fmp")
+async def get_analyst_grades(ticker: str) -> list[dict]:
+    """
+    Holt aktuelle Analysten-Ratings und Upgrades/Downgrades für einen Ticker.
+    FMP Endpoint: /stable/grades
+    """
+    if settings.use_mock_data:
+        return [{"gradingCompany": "Morgan Stanley", "previousGrade": "Equal-Weight", "newGrade": "Overweight", "action": "upgrade", "date": "2026-03-15"}]
+
+    try:
+        url = f"https://financialmodelingprep.com/stable/grades?symbol={ticker}&limit=5&apikey={settings.fmp_api_key}"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                return data[:5] if isinstance(data, list) else []
+            else:
+                logger.warning(f"FMP grades für {ticker}: HTTP {response.status_code}")
+                return []
+    except Exception as e:
+        logger.error(f"FMP grades Fehler für {ticker}: {e}")
+        return []
+
+
+@rate_limit("fmp")
+async def get_price_target_consensus(ticker: str) -> dict | None:
+    """
+    Holt den Analysten-Konsens für Price Targets.
+    FMP Endpoint: /stable/price-target-consensus
+    """
+    if settings.use_mock_data:
+        return {"targetHigh": 200.0, "targetLow": 120.0, "targetConsensus": 165.0, "targetMedian": 160.0}
+
+    try:
+        url = f"https://financialmodelingprep.com/stable/price-target-consensus?symbol={ticker}&apikey={settings.fmp_api_key}"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list) and data:
+                    return data[0]
+                elif isinstance(data, dict):
+                    return data
+            return None
+    except Exception as e:
+        logger.error(f"FMP price target Fehler für {ticker}: {e}")
+        return None

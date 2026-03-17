@@ -2,7 +2,13 @@ import os
 from datetime import datetime
 from backend.app.logger import get_logger
 from backend.app.data.finnhub import get_company_news, get_short_interest, get_insider_transactions, get_economic_calendar
-from backend.app.data.fmp import get_company_profile, get_analyst_estimates, get_earnings_history, get_key_metrics
+from backend.app.data.fmp import (
+    get_company_profile,
+    get_analyst_estimates,
+    get_earnings_history,
+    get_key_metrics,
+    get_sector_pe,
+)
 from backend.app.data.fred import get_macro_snapshot
 from backend.app.data.yfinance_data import get_technical_setup
 from backend.app.analysis.scoring import calculate_opportunity_score, calculate_torpedo_score, get_recommendation
@@ -126,16 +132,40 @@ async def generate_audit_report(ticker: str) -> str:
         logger.warning(f"Ticker-Validierung fehlgeschlagen für {ticker}.")
         return f"Fehler: Ticker '{ticker}' ist ungültig (kein Profil gefunden)."
 
-    estimates = await get_analyst_estimates(ticker)
-    history = await get_earnings_history(ticker)
-    metrics = await get_key_metrics(ticker)
-    short_interest = await get_short_interest(ticker)
-    
+    # Daten laden — jeder Call einzeln abgesichert
+    estimates = None
+    try:
+        estimates = await get_analyst_estimates(ticker)
+    except Exception as e:
+        logger.warning(f"Analyst estimates für {ticker}: {e}")
+
+    history = None
+    try:
+        history = await get_earnings_history(ticker)
+    except Exception as e:
+        logger.warning(f"Earnings history für {ticker}: {e}")
+
+    metrics = None
+    try:
+        metrics = await get_key_metrics(ticker)
+    except Exception as e:
+        logger.warning(f"Key metrics für {ticker}: {e}")
+
+    short_interest = None
+    try:
+        short_interest = await get_short_interest(ticker)
+    except Exception as e:
+        logger.warning(f"Short interest für {ticker}: {e}")
+
     # Fallback auf yfinance wenn Finnhub short-interest fehlschlägt (403 Premium)
     if short_interest is None:
         from backend.app.data.yfinance_data import get_short_interest_yf
         from schemas.sentiment import ShortInterestData
-        yf_si = await get_short_interest_yf(ticker)
+        try:
+            yf_si = await get_short_interest_yf(ticker)
+        except Exception as e:
+            logger.warning(f"Short interest yfinance Fallback für {ticker}: {e}")
+            yf_si = None
         if yf_si:
             short_interest = ShortInterestData(
                 ticker=ticker,
@@ -147,15 +177,32 @@ async def generate_audit_report(ticker: str) -> str:
             )
         else:
             short_interest = ShortInterestData(ticker=ticker, short_interest=0, days_to_cover=0, trend="stable", squeeze_risk="low")
-    
-    insiders = await get_insider_transactions(ticker)
-    technicals = await get_technical_setup(ticker)
-    
-    from backend.app.data.yfinance_data import get_options_metrics
-    options = await get_options_metrics(ticker)
-    
-    from backend.app.data.finnhub import get_social_sentiment
-    social = await get_social_sentiment(ticker)
+
+    insiders = None
+    try:
+        insiders = await get_insider_transactions(ticker)
+    except Exception as e:
+        logger.warning(f"Insider transactions für {ticker}: {e}")
+
+    technicals = None
+    try:
+        technicals = await get_technical_setup(ticker)
+    except Exception as e:
+        logger.warning(f"Technicals für {ticker}: {e}")
+
+    options = None
+    try:
+        from backend.app.data.yfinance_data import get_options_metrics
+        options = await get_options_metrics(ticker)
+    except Exception as e:
+        logger.warning(f"Options für {ticker}: {e}")
+
+    social = None
+    try:
+        from backend.app.data.finnhub import get_social_sentiment
+        social = await get_social_sentiment(ticker)
+    except Exception as e:
+        logger.warning(f"Social sentiment für {ticker}: {e}")
     
     now = datetime.now()
     month_ago = now.replace(day=max(1, now.day - 30)) if now.day > 1 else now # rough 30 days
@@ -218,53 +265,46 @@ async def generate_audit_report(ticker: str) -> str:
     else:
         news_str = "\n".join([f"- {n.headline}: {n.summary[:100]}..." for n in news_list[:5]]) if news_list else "Keine relevanten Nachrichten in den letzten 30 Tagen."
     
-    # KORREKTUR 5: Letztes Quartal aus Earnings-History extrahieren
+    # Letzte Earnings aus History extrahieren
     last_actual = "N/A"
     last_consensus = "N/A"
     last_surprise = "N/A"
     last_reaction = "N/A"
+    if history and history.last_quarter:
+        lq = history.last_quarter
+        last_actual = str(getattr(lq, "eps_actual", "N/A"))
+        last_consensus = str(getattr(lq, "eps_consensus", "N/A"))
+        last_surprise = f"{getattr(lq, 'eps_surprise_percent', 0.0):.1f}"
+        last_reaction = str(getattr(lq, "stock_reaction_1d", "N/A"))
 
-    if history:
-        all_q = getattr(history, "all_quarters", [])
-        if all_q and len(all_q) > 0:
-            last_q = all_q[0]  # Neuestes Quartal
-            last_actual = str(getattr(last_q, "eps_actual", "N/A"))
-            last_consensus = str(getattr(last_q, "eps_consensus", "N/A"))
-            last_surprise = str(getattr(last_q, "eps_surprise_percent", "N/A"))
-            last_reaction = str(getattr(last_q, "stock_reaction_1d", "N/A"))
-        elif hasattr(history, "last_quarter") and history.last_quarter:
-            lq = history.last_quarter
-            last_actual = str(getattr(lq, "eps_actual", "N/A"))
-            last_consensus = str(getattr(lq, "eps_consensus", "N/A"))
-            last_surprise = str(getattr(lq, "eps_surprise_percent", "N/A"))
-            last_reaction = str(getattr(lq, "stock_reaction_1d", "N/A"))
-
-    # KORREKTUR 4c: Sektor-Median P/E aus FMP holen
-    sector_pe_str = "N/A"
-    if profile and hasattr(profile, "sector"):
-        try:
-            from backend.app.data.fmp import get_sector_pe
-            sector_pe = await get_sector_pe(profile.sector)
-            sector_pe_str = str(round(sector_pe, 1)) if sector_pe else "N/A"
-        except Exception:
-            sector_pe_str = "N/A"
-
-    # KORREKTUR 4d: 3-Jahres-Median P/E — Pragmatischer Fallback auf aktuelles P/E
-    pe_own_median_str = str(round(getattr(metrics, "pe_ratio", 18.0), 1)) if metrics and getattr(metrics, "pe_ratio", None) else "N/A"
-
-    # KORREKTUR 6: SMA-Distance berechnen statt hardcoded 0.0
+    # SMA-Distances berechnen
     sma50_dist = "N/A"
     sma200_dist = "N/A"
-    if technicals and technicals.current_price and technicals.current_price > 0:
-        if technicals.sma_50:
-            sma50_dist = f"{((technicals.current_price - technicals.sma_50) / technicals.sma_50 * 100):.1f}"
-        if technicals.sma_200:
-            sma200_dist = f"{((technicals.current_price - technicals.sma_200) / technicals.sma_200 * 100):.1f}"
+    if technicals:
+        cp = getattr(technicals, "current_price", None)
+        s50 = getattr(technicals, "sma_50", None)
+        s200 = getattr(technicals, "sma_200", None)
+        if cp and cp > 0 and s50:
+            sma50_dist = f"{((cp - s50) / s50 * 100):.1f}"
+        if cp and cp > 0 and s200:
+            sma200_dist = f"{((cp - s200) / s200 * 100):.1f}"
+
+    # Sektor-P/E ermitteln
+    sector_pe_str = "N/A"
+    if profile and profile.sector:
+        try:
+            sector_pe_val = await get_sector_pe(profile.sector)
+            sector_pe_str = f"{sector_pe_val:.1f}" if sector_pe_val else "N/A"
+        except Exception:
+            pass
+
+    # 3-Jahres Median P/E Fallback
+    pe_own_median_str = str(round(getattr(metrics, "pe_ratio", 18.0), 1)) if metrics and getattr(metrics, "pe_ratio", None) else "N/A"
 
     user_prompt = user_tmpl \
         .replace("{{ticker}}", ticker) \
         .replace("{{company_name}}", getattr(estimates, "company_name", ticker) if estimates else ticker) \
-        .replace("{{report_date}}", str(getattr(estimates, "date", "Unknown")) if estimates else "Unknown") \
+        .replace("{{report_date}}", str(getattr(estimates, "report_date", "Unknown")) if estimates else "Unknown") \
         .replace("{{report_timing}}", "Unknown") \
         .replace("{{eps_consensus}}", str(getattr(estimates, "eps_consensus", "0.0")) if estimates else "0.0") \
         .replace("{{revenue_consensus}}", str(getattr(estimates, "revenue_consensus", "0.0")) if estimates else "0.0") \
@@ -299,8 +339,8 @@ async def generate_audit_report(ticker: str) -> str:
         .replace("{{insider_sells}}", str(getattr(insiders, "total_sells", "0")) if insiders else "0") \
         .replace("{{insider_sell_value}}", str(getattr(insiders, "total_sell_value", "0.0")) if insiders else "0.0") \
         .replace("{{insider_assessment}}", str(getattr(insiders, "assessment", "normal")) if insiders else "normal") \
-        .replace("{{options_metrics}}", f"PCR: {options.put_call_ratio_oi} | IV ATM: {options.implied_volatility_atm * 100:.1f}%" if options else "N/A") \
-        .replace("{{social_sentiment}}", f"Score: {social.social_score} (Reddit: {social.reddit_mentions}, Twitter: {social.twitter_mentions})" if social else "N/A") \
+        .replace("{{options_metrics}}", f"PCR: {getattr(options, 'put_call_ratio_oi', 'N/A')} | IV ATM: {getattr(options, 'implied_volatility_atm', 0) * 100:.1f}%" if options else "N/A") \
+        .replace("{{social_sentiment}}", f"Score: {getattr(social, 'social_score', 'N/A')} (Reddit: {getattr(social, 'reddit_mentions', 'N/A')}, Twitter: {getattr(social, 'twitter_mentions', 'N/A')})" if social else "N/A") \
         .replace("{{news_bullet_points}}", news_str) \
         .replace("{{opportunity_score}}", str(opp_score.total_score if opp_score else 0.0)) \
         .replace("{{torpedo_score}}", str(torp_score.total_score if torp_score else 0.0))

@@ -515,6 +515,28 @@ async def generate_morning_briefing() -> str:
             bp_text = " | ".join(b["bullet_points"]) if isinstance(b.get("bullet_points"), list) else str(b.get("bullet_points", ""))
             macro_events.append(bp_text)
 
+    # 7. Analysten-Ratings für Watchlist-Ticker (letzte 7 Tage)
+    from backend.app.data.fmp import get_analyst_grades, get_price_target_consensus
+
+    analyst_lines = []
+    for ticker in wl_tickers[:10]:  # Max 10 um API-Calls zu sparen
+        try:
+            grades = await get_analyst_grades(ticker)
+            pt = await get_price_target_consensus(ticker)
+
+            recent_grades = [g for g in grades if g.get("date", "") >= (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")]
+            for g in recent_grades:
+                analyst_lines.append(
+                    f"[{ticker}] {g.get('gradingCompany', '?')}: {g.get('previousGrade', '?')} → {g.get('newGrade', '?')} ({g.get('action', '?')}) am {g.get('date', '?')}"
+                )
+
+            if pt and pt.get("targetConsensus"):
+                analyst_lines.append(f"[{ticker}] Price Target Konsens: ${pt['targetConsensus']:.0f} (Range: ${pt.get('targetLow', 0):.0f}-${pt.get('targetHigh', 0):.0f})")
+        except Exception as e:
+            logger.debug(f"Analysten-Daten für {ticker} nicht verfügbar: {e}")
+
+    analyst_str = "\n".join(analyst_lines) if analyst_lines else "Keine aktuellen Analysten-Änderungen für Watchlist-Ticker."
+
     # 6. Wirtschaftskalender heute
     today_str = datetime.now().strftime("%Y-%m-%d")
     todays_events_str = "Keine Termine heute."

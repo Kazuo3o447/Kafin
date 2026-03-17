@@ -159,6 +159,61 @@ async def get_short_interest_yf(ticker: str) -> Optional[dict]:
         logger.error(f"yfinance short interest Fehler für {ticker}: {e}")
         return None
 
+
+async def get_fundamentals_yf(ticker: str) -> Optional[dict]:
+    """
+    Holt fundamentale Bewertungskennzahlen via yfinance.
+    Dient als Fallback wenn FMP keine Daten liefert.
+    """
+    if settings.use_mock_data:
+        return {
+            "pe_ratio": 25.0,
+            "ps_ratio": 5.5,
+            "market_cap": 1_500_000_000_000,
+            "price": 200.0,
+            "eps_ttm": 8.5,
+            "revenue_ttm": 210_000_000_000,
+            "sector": "Technology",
+            "industry": "Software",
+            "forward_pe": 23.0,
+            "dividend_yield": 0.008,
+            "beta": 1.1,
+            "fifty_two_week_high": 220.0,
+            "fifty_two_week_low": 150.0,
+            "analyst_target": 230.0,
+            "analyst_recommendation": "buy",
+            "number_of_analysts": 45,
+        }
+
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+
+        if not info or not info.get("regularMarketPrice"):
+            return None
+
+        return {
+            "pe_ratio": info.get("trailingPE") or info.get("forwardPE"),
+            "ps_ratio": info.get("priceToSalesTrailing12Months"),
+            "market_cap": info.get("marketCap"),
+            "price": info.get("regularMarketPrice") or info.get("currentPrice"),
+            "eps_ttm": info.get("trailingEps"),
+            "revenue_ttm": info.get("totalRevenue"),
+            "sector": info.get("sector"),
+            "industry": info.get("industry"),
+            "forward_pe": info.get("forwardPE"),
+            "dividend_yield": info.get("dividendYield"),
+            "beta": info.get("beta"),
+            "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
+            "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
+            "analyst_target": info.get("targetMeanPrice"),
+            "analyst_recommendation": info.get("recommendationKey"),
+            "number_of_analysts": info.get("numberOfAnalystOpinions"),
+        }
+    except Exception as e:
+        logger.error(f"yfinance Fundamentals Fehler für {ticker}: {e}")
+        return None
+
 async def get_market_context() -> dict:
     """Holt die Performance der letzten 5 Handelstage für S&P 500, Nasdaq 100 und Gold."""
     if settings.use_mock_data:

@@ -10,7 +10,7 @@ from backend.app.data.fmp import (
     get_sector_pe,
 )
 from backend.app.data.fred import get_macro_snapshot
-from backend.app.data.yfinance_data import get_technical_setup
+from backend.app.data.yfinance_data import get_technical_setup, get_fundamentals_yf
 from backend.app.analysis.scoring import calculate_opportunity_score, calculate_torpedo_score, get_recommendation
 from backend.app.analysis.deepseek import call_deepseek
 
@@ -151,6 +151,19 @@ async def generate_audit_report(ticker: str) -> str:
     except Exception as e:
         logger.warning(f"Key metrics für {ticker}: {e}")
 
+    # yfinance Fallback für fehlende Fundamentaldaten
+    yf_fundamentals = None
+    if not metrics or not getattr(metrics, "pe_ratio", None):
+        try:
+            from backend.app.data.yfinance_data import get_fundamentals_yf
+            yf_fundamentals = await get_fundamentals_yf(ticker)
+            if yf_fundamentals:
+                logger.info(
+                    f"yfinance Fallback für {ticker}: P/E={yf_fundamentals.get('pe_ratio')}, MCap={yf_fundamentals.get('market_cap')}"
+                )
+        except Exception as e:
+            logger.debug(f"yfinance Fallback für {ticker} fehlgeschlagen: {e}")
+
     short_interest = None
     try:
         short_interest = await get_short_interest(ticker)
@@ -218,9 +231,23 @@ async def generate_audit_report(ticker: str) -> str:
     macro = await get_macro_snapshot()
     
     # Assemble data context for scoring
+    valuation_ctx = {}
+    if metrics:
+        valuation_ctx = metrics.dict()
+    elif profile:
+        valuation_ctx = profile.dict()
+    elif yf_fundamentals:
+        valuation_ctx = {
+            "ticker": ticker,
+            "pe_ratio": yf_fundamentals.get("pe_ratio"),
+            "ps_ratio": yf_fundamentals.get("ps_ratio"),
+            "market_cap": yf_fundamentals.get("market_cap"),
+            "sector": yf_fundamentals.get("sector"),
+        }
+
     data_ctx = {
         "earnings_history": history.dict() if history else {},
-        "valuation": metrics.dict() if metrics else profile.dict() if profile else {},
+        "valuation": valuation_ctx,
         "short_interest": short_interest.dict() if short_interest else {},
         "insider_activity": insiders.dict() if insiders else {},
         "macro": macro.dict() if macro else {},
@@ -301,13 +328,47 @@ async def generate_audit_report(ticker: str) -> str:
     # 3-Jahres Median P/E Fallback
     pe_own_median_str = str(round(getattr(metrics, "pe_ratio", 18.0), 1)) if metrics and getattr(metrics, "pe_ratio", None) else "N/A"
 
+    # Bewertungs-Fallbacks für Prompt
+    pe_val = None
+    if metrics and getattr(metrics, "pe_ratio", None):
+        pe_val = metrics.pe_ratio
+    elif yf_fundamentals and yf_fundamentals.get("pe_ratio"):
+        pe_val = yf_fundamentals["pe_ratio"]
+    pe_str = f"{pe_val:.1f}" if pe_val else "N/A"
+
+    ps_val = None
+    if metrics and getattr(metrics, "ps_ratio", None):
+        ps_val = metrics.ps_ratio
+    elif yf_fundamentals and yf_fundamentals.get("ps_ratio"):
+        ps_val = yf_fundamentals["ps_ratio"]
+    ps_str = f"{ps_val:.1f}" if ps_val else "N/A"
+
+    mcap_val = None
+    if metrics and getattr(metrics, "market_cap", None):
+        mcap_val = metrics.market_cap
+    elif yf_fundamentals and yf_fundamentals.get("market_cap"):
+        mcap_val = yf_fundamentals["market_cap"]
+    mcap_str = f"{mcap_val / 1e9:.1f}" if mcap_val and mcap_val > 0 else "N/A"
+
+    eps_consensus_val = getattr(estimates, "eps_consensus", None) if estimates else None
+    if not eps_consensus_val and yf_fundamentals:
+        eps_consensus_val = yf_fundamentals.get("eps_ttm")
+    eps_consensus_str = f"{eps_consensus_val:.2f}" if eps_consensus_val else "N/A"
+
+    rev_consensus_val = getattr(estimates, "revenue_consensus", None) if estimates else None
+    if not rev_consensus_val and yf_fundamentals:
+        rev_consensus_val = yf_fundamentals.get("revenue_ttm")
+    rev_consensus_str = (
+        f"{rev_consensus_val / 1e9:.1f}B" if rev_consensus_val and rev_consensus_val > 1e6 else "N/A"
+    )
+
     user_prompt = user_tmpl \
         .replace("{{ticker}}", ticker) \
         .replace("{{company_name}}", getattr(estimates, "company_name", ticker) if estimates else ticker) \
         .replace("{{report_date}}", str(getattr(estimates, "report_date", "Unknown")) if estimates else "Unknown") \
         .replace("{{report_timing}}", "Unknown") \
-        .replace("{{eps_consensus}}", str(getattr(estimates, "eps_consensus", "0.0")) if estimates else "0.0") \
-        .replace("{{revenue_consensus}}", str(getattr(estimates, "revenue_consensus", "0.0")) if estimates else "0.0") \
+        .replace("{{eps_consensus}}", eps_consensus_str) \
+        .replace("{{revenue_consensus}}", rev_consensus_str) \
         .replace("{{quarters_beat}}", str(getattr(history, "quarters_beat", "0")) if history else "0") \
         .replace("{{total_quarters}}", str((getattr(history, "quarters_beat", 0) + getattr(history, "quarters_missed", 0))) if history else "0") \
         .replace("{{avg_surprise}}", str(getattr(history, "avg_surprise_percent", "0.0")) if history else "0.0") \
@@ -315,11 +376,11 @@ async def generate_audit_report(ticker: str) -> str:
         .replace("{{last_eps_consensus}}", last_consensus) \
         .replace("{{last_surprise}}", last_surprise) \
         .replace("{{last_reaction}}", last_reaction) \
-        .replace("{{pe_ratio}}", str(getattr(metrics, "pe_ratio", "N/A")) if metrics else "N/A") \
+        .replace("{{pe_ratio}}", pe_str) \
         .replace("{{pe_sector_median}}", sector_pe_str) \
         .replace("{{pe_own_3y_median}}", pe_own_median_str) \
-        .replace("{{ps_ratio}}", str(getattr(metrics, "ps_ratio", "N/A")) if metrics else "N/A") \
-        .replace("{{market_cap}}", str(getattr(metrics, "market_cap", "N/A")) if metrics else "N/A") \
+        .replace("{{ps_ratio}}", ps_str) \
+        .replace("{{market_cap}}", mcap_str) \
         .replace("{{current_price}}", str(getattr(technicals, "current_price", "N/A")) if technicals else "N/A") \
         .replace("{{trend}}", str(getattr(technicals, "trend", "N/A")) if technicals else "N/A") \
         .replace("{{sma50_status}}", "Über" if technicals and technicals.above_sma50 else "Unter") \

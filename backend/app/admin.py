@@ -452,8 +452,9 @@ ADMIN_HTML = """
             try {
                 const res = await fetch(`/api/reports/generate-sunday`, {method: 'POST'});
                 const data = await res.json();
+                console.log("Sunday Report Response:", data);
                 if(res.ok && data.status === 'success') {
-                    output.value = data.report;
+                    output.value = data.report || data.result || data.message || JSON.stringify(data);
                     showToast(`Sonntags-Report fertig und per E-Mail versendet!`);
                 } else {
                     const errorMsg = data.message || 'Unbekannter Fehler';

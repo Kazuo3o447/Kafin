@@ -426,11 +426,13 @@ ADMIN_HTML = """
             try {
                 const res = await fetch(`/api/reports/generate/${ticker}`, {method: 'POST'});
                 const data = await res.json();
-                if(res.ok) {
+                if(res.ok && data.status === 'success') {
                     output.value = data.report;
                     showToast(`Report für ${ticker} fertig!`);
                 } else {
-                    showToast('Fehler bei der Generierung', 'error');
+                    const errorMsg = data.message || 'Unbekannter Fehler';
+                    output.value = `Fehler: ${errorMsg}`;
+                    showToast(`Fehler: ${errorMsg}`, 'error');
                 }
             } catch(e) {
                 showToast('Verbindungsfehler', 'error');
@@ -450,11 +452,13 @@ ADMIN_HTML = """
             try {
                 const res = await fetch(`/api/reports/generate-sunday`, {method: 'POST'});
                 const data = await res.json();
-                if(res.ok) {
+                if(res.ok && data.status === 'success') {
                     output.value = data.report;
                     showToast(`Sonntags-Report fertig und per E-Mail versendet!`);
                 } else {
-                    showToast('Fehler bei der Generierung', 'error');
+                    const errorMsg = data.message || 'Unbekannter Fehler';
+                    output.value = `Fehler: ${errorMsg}`;
+                    showToast(`Fehler: ${errorMsg}`, 'error');
                 }
             } catch(e) {
                 showToast('Verbindungsfehler', 'error');

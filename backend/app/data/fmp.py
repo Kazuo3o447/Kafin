@@ -34,7 +34,7 @@ async def get_company_profile(ticker: str) -> ValuationData:
         except Exception:
             return ValuationData(ticker=ticker)
     else:
-        url = f"https://financialmodelingprep.com/api/v3/profile/{ticker}?apikey={settings.fmp_api_key}"
+        url = f"https://financialmodelingprep.com/stable/profile/{ticker}?apikey={settings.fmp_api_key}"
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
             response.raise_for_status()
@@ -61,7 +61,7 @@ async def get_analyst_estimates(ticker: str) -> EarningsExpectation:
         except Exception:
             return EarningsExpectation(ticker=ticker, date=datetime.now().date())
     else:
-        url = f"https://financialmodelingprep.com/api/v3/analyst-estimates/{ticker}?apikey={settings.fmp_api_key}&limit=1"
+        url = f"https://financialmodelingprep.com/stable/analyst-estimates/{ticker}?apikey={settings.fmp_api_key}&limit=1"
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
             response.raise_for_status()
@@ -91,7 +91,7 @@ async def get_earnings_history(ticker: str, limit: int = 8) -> EarningsHistorySu
         except Exception:
             data = []
     else:
-        url = f"https://financialmodelingprep.com/api/v3/earnings-surprises/{ticker}?apikey={settings.fmp_api_key}"
+        url = f"https://financialmodelingprep.com/stable/earnings-surprises/{ticker}?apikey={settings.fmp_api_key}"
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
             response.raise_for_status()
@@ -151,7 +151,7 @@ async def get_key_metrics(ticker: str) -> ValuationData:
         except Exception:
             return ValuationData(ticker=ticker)
     else:
-        url = f"https://financialmodelingprep.com/api/v3/key-metrics-ttm/{ticker}?apikey={settings.fmp_api_key}"
+        url = f"https://financialmodelingprep.com/stable/key-metrics-ttm/{ticker}?apikey={settings.fmp_api_key}"
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
             response.raise_for_status()
@@ -181,7 +181,7 @@ async def get_sector_pe(sector: str) -> float | None:
         return defaults.get(sector, 18.0)
 
     try:
-        url = f"https://financialmodelingprep.com/api/v3/sector-performance?apikey={settings.fmp_api_key}"
+        url = f"https://financialmodelingprep.com/stable/sector-performance?apikey={settings.fmp_api_key}"
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
             if response.status_code == 200:

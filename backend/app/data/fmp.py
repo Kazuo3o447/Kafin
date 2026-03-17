@@ -34,7 +34,7 @@ async def get_company_profile(ticker: str) -> ValuationData:
         except Exception:
             return ValuationData(ticker=ticker)
     else:
-        url = f"https://financialmodelingprep.com/stable/profile/{ticker}?apikey={settings.fmp_api_key}"
+        url = f"https://financialmodelingprep.com/stable/profile?symbol={ticker}&apikey={settings.fmp_api_key}"
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
             response.raise_for_status()
@@ -61,7 +61,7 @@ async def get_analyst_estimates(ticker: str) -> EarningsExpectation:
         except Exception:
             return EarningsExpectation(ticker=ticker, date=datetime.now().date())
     else:
-        url = f"https://financialmodelingprep.com/stable/analyst-estimates/{ticker}?apikey={settings.fmp_api_key}&limit=1"
+        url = f"https://financialmodelingprep.com/stable/analyst-estimates?symbol={ticker}&apikey={settings.fmp_api_key}&limit=1"
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
             response.raise_for_status()
@@ -91,7 +91,7 @@ async def get_earnings_history(ticker: str, limit: int = 8) -> EarningsHistorySu
         except Exception:
             data = []
     else:
-        url = f"https://financialmodelingprep.com/stable/earnings-surprises/{ticker}?apikey={settings.fmp_api_key}"
+        url = f"https://financialmodelingprep.com/stable/earnings-surprises?symbol={ticker}&apikey={settings.fmp_api_key}"
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
             response.raise_for_status()
@@ -151,7 +151,7 @@ async def get_key_metrics(ticker: str) -> ValuationData:
         except Exception:
             return ValuationData(ticker=ticker)
     else:
-        url = f"https://financialmodelingprep.com/stable/key-metrics-ttm/{ticker}?apikey={settings.fmp_api_key}"
+        url = f"https://financialmodelingprep.com/stable/key-metrics-ttm?symbol={ticker}&apikey={settings.fmp_api_key}"
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
             response.raise_for_status()

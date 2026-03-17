@@ -13,6 +13,7 @@ from backend.app.data.fred import get_macro_snapshot
 from backend.app.data.yfinance_data import get_technical_setup, get_fundamentals_yf
 from backend.app.analysis.scoring import calculate_opportunity_score, calculate_torpedo_score, get_recommendation
 from backend.app.analysis.deepseek import call_deepseek
+from backend.app.memory.long_term import get_all_insights_for_report
 
 logger = get_logger(__name__)
 
@@ -403,15 +404,37 @@ async def generate_audit_report(ticker: str) -> str:
         .replace("{{options_metrics}}", f"PCR: {getattr(options, 'put_call_ratio_oi', 'N/A')} | IV ATM: {getattr(options, 'implied_volatility_atm', 0) * 100:.1f}%" if options else "N/A") \
         .replace("{{social_sentiment}}", f"Score: {getattr(social, 'social_score', 'N/A')} (Reddit: {getattr(social, 'reddit_mentions', 'N/A')}, Twitter: {getattr(social, 'twitter_mentions', 'N/A')})" if social else "N/A") \
         .replace("{{news_bullet_points}}", news_str) \
+        .replace("{{long_term_memory}}", lt_memory) \
         .replace("{{opportunity_score}}", str(opp_score.total_score if opp_score else 0.0)) \
         .replace("{{torpedo_score}}", str(torp_score.total_score if torp_score else 0.0))
         
     result = await call_deepseek(sys_prompt, user_prompt)
     if "MOCK_REPORT:" in result:
         # Erweitere den Mock-Bericht um unsere Daten zur Validierung
-        return f"{result}\n\n[MOCK DATA CHECK]\nTicker: {ticker}\nEmpfehlung: {rec.recommendation if rec else 'N/A'} ({rec.reasoning if rec else 'N/A'})\nOS: {opp_score.total_score if opp_score else 0.0} | TS: {torp_score.total_score if torp_score else 0.0}"
-        
-    return result
+        mock_response = f"{result}\n\n[MOCK DATA CHECK]\nTicker: {ticker}\nEmpfehlung: {rec.recommendation if rec else 'N/A'} ({rec.reasoning if rec else 'N/A'})\nOS: {opp_score.total_score if opp_score else 0.0} | TS: {torp_score.total_score if torp_score else 0.0}"
+    else:
+        mock_response = result
+
+    # Report in Supabase speichern
+    try:
+        from backend.app.db import get_supabase_client
+
+        db = get_supabase_client()
+        if db:
+            db.table("audit_reports").insert({
+                "ticker": ticker,
+                "report_type": "audit",
+                "recommendation": rec.recommendation if rec else "unknown",
+                "opportunity_score": opp_score.total_score if opp_score else 0,
+                "torpedo_score": torp_score.total_score if torp_score else 0,
+                "report_text": mock_response[:2000],
+                "created_at": datetime.now().isoformat()
+            }).execute()
+            logger.info(f"Audit-Report für {ticker} in Supabase gespeichert")
+    except Exception as e:
+        logger.debug(f"Audit-Report DB-Speicher: {e}")
+
+    return mock_response
 
 async def generate_weekly_summary() -> str:
     """

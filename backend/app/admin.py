@@ -98,6 +98,27 @@ ADMIN_HTML = """
                     </div>
                 </div>
                 
+                <div class="mt-8 bg-gray-900 border border-gray-700 rounded-lg p-4">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                        <div>
+                            <h3 class="text-md font-medium text-gray-200">Post-Earnings Review</h3>
+                            <p class="text-xs text-gray-500">Vergleich Empfehlung vs. Realität + Lessons Learned</p>
+                        </div>
+                        <div class="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+                            <select id="post-earnings-select" class="flex-1 bg-gray-800 border border-gray-700 rounded text-white p-2 text-sm">
+                                <option value="">Ticker wählen...</option>
+                            </select>
+                            <button onclick="runPostEarningsReview()" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded transition text-sm font-medium flex items-center justify-center">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                                Review starten
+                            </button>
+                        </div>
+                    </div>
+                    <div id="post-earnings-result" class="bg-black border border-gray-800 rounded p-4 text-sm text-gray-300">
+                        <p class="text-gray-500">Wähle einen Ticker und starte den Review.</p>
+                    </div>
+                </div>
+
                 <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 h-[500px] flex flex-col relative">
                     <div id="report-status-overlay" class="absolute inset-0 bg-gray-900/80 backdrop-blur-sm hidden flex flex-col items-center justify-center rounded-lg z-10 transition-all">
                         <svg class="animate-spin w-10 h-10 text-blue-500 mb-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
@@ -372,6 +393,16 @@ ADMIN_HTML = """
 
             <div class="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg mt-6">
                 <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-md font-medium text-gray-300">Trefferquote & Reviews</h3>
+                    <button onclick="loadPerformanceStats()" class="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-white transition">Aktualisieren</button>
+                </div>
+                <div id="performance-card" class="text-sm text-gray-400">
+                    Noch keine Reviews vorhanden.
+                </div>
+            </div>
+
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg mt-6">
+                <div class="flex justify-between items-center mb-3">
                     <h3 class="text-md font-medium text-gray-300">Marktübersicht (Live)</h3>
                     <button onclick="loadMarketOverview()" class="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-white transition">Aktualisieren</button>
                 </div>
@@ -419,6 +450,7 @@ ADMIN_HTML = """
             
             if(tabId === 'status') {
                 loadMarketOverview();
+                loadPerformanceStats();
                 if(!marketRefreshInterval) marketRefreshInterval = setInterval(loadMarketOverview, 300000);
             } else {
                 if(marketRefreshInterval) { clearInterval(marketRefreshInterval); marketRefreshInterval = null; }
@@ -429,6 +461,7 @@ ADMIN_HTML = """
             if(tabId === 'reports') {
                 loadWatchlist(); // For the ticker buttons
                 loadLatestReport();
+                populatePostEarningsSelect();
             }
         }
 
@@ -600,6 +633,8 @@ ADMIN_HTML = """
                 // Update report buttons
                 const repList = document.getElementById('report-ticker-list');
                 repList.innerHTML = '';
+                const postSelect = document.getElementById('post-earnings-select');
+                if(postSelect) postSelect.innerHTML = '<option value="">Ticker wählen...</option>';
                 
                 if(data.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">Watchlist ist leer</td></tr>';
@@ -644,8 +679,103 @@ ADMIN_HTML = """
                     if(dropdown) {
                         dropdown.innerHTML += `<option value="${item.ticker}">${item.ticker}</option>`;
                     }
+
+                    if(postSelect) {
+                        postSelect.innerHTML += `<option value="${item.ticker}">${item.ticker}</option>`;
+                    }
                 });
             } catch(e) { console.error('Error loading watchlist', e); showToast('Fehler beim Laden', 'error'); }
+        }
+
+        function populatePostEarningsSelect() {
+            const select = document.getElementById('post-earnings-select');
+            if(!select || select.options.length > 1) return;
+            const buttons = document.querySelectorAll('#report-ticker-list button');
+            if(buttons.length === 0) return;
+            select.innerHTML = '<option value="">Ticker wählen...</option>';
+            buttons.forEach(btn => {
+                const ticker = btn.textContent.trim();
+                if(ticker) {
+                    select.innerHTML += `<option value="${ticker}">${ticker}</option>`;
+                }
+            });
+        }
+
+        async function runPostEarningsReview() {
+            const select = document.getElementById('post-earnings-select');
+            const output = document.getElementById('post-earnings-result');
+            const ticker = select.value;
+            if(!ticker) {
+                showToast('Bitte Ticker wählen', 'error');
+                return;
+            }
+            output.innerHTML = '<p class="text-blue-400">Review wird ausgeführt...</p>';
+            try {
+                const res = await fetch(`/api/reports/post-earnings-review/${ticker}`, {method: 'POST'});
+                const data = await res.json();
+                if(res.ok && data.status === 'success') {
+                    const review = data.review;
+                    const html = `
+                        <div class="space-y-3">
+                            <div class="flex flex-wrap gap-4 text-sm">
+                                <span class="text-gray-400">Ticker: <span class="text-white font-mono">${review.ticker}</span></span>
+                                <span class="text-gray-400">Quarter: <span class="text-white font-mono">${review.quarter}</span></span>
+                                <span class="text-gray-400">Prediction: <span class="${review.prediction_correct ? 'text-green-400' : 'text-red-400'}">${review.prediction_correct ? 'korrekt' : 'falsch'}</span></span>
+                                <span class="text-gray-400">Surprise: <span class="text-white">${review.actual_surprise ?? 'N/A'}%</span></span>
+                            </div>
+                            <div class="bg-gray-950 border border-gray-800 rounded p-3 text-gray-200 whitespace-pre-wrap">${review.review || 'Kein Review generiert.'}</div>
+                            <div class="bg-gray-900 border border-gray-800 rounded p-3">
+                                <h4 class="text-sm font-semibold text-white mb-1">Lessons Learned</h4>
+                                <p class="text-gray-300">${review.lessons || 'Keine Lektion extrahiert.'}</p>
+                            </div>
+                        </div>`;
+                    output.innerHTML = html;
+                    showToast('Review abgeschlossen');
+                    loadPerformanceStats();
+                } else {
+                    output.innerHTML = `<p class="text-red-400">Fehler: ${data.message || 'Unbekannt'}</p>`;
+                    showToast('Review fehlgeschlagen', 'error');
+                }
+            } catch (e) {
+                output.innerHTML = '<p class="text-red-400">Netzwerkfehler</p>';
+                showToast('Netzwerkfehler', 'error');
+            }
+        }
+
+        async function loadPerformanceStats() {
+            const card = document.getElementById('performance-card');
+            if(!card) return;
+            card.innerHTML = '<p class="text-gray-500">Lade Trefferquote...</p>';
+            try {
+                const res = await fetch('/api/data/performance');
+                const data = await res.json();
+                if(res.ok && data.status === 'success' && Array.isArray(data.performance) && data.performance.length > 0) {
+                    const latest = data.performance[0];
+                    card.innerHTML = `
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                                <p class="text-gray-500 text-xs uppercase">Trefferquote</p>
+                                <p class="text-2xl font-bold ${latest.accuracy_percent >= 60 ? 'text-green-400' : 'text-yellow-400'}">${(latest.accuracy_percent || 0).toFixed(1)}%</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500 text-xs uppercase">Predictions</p>
+                                <p class="text-xl text-white">${latest.total_predictions || 0}</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500 text-xs uppercase">Korrekt</p>
+                                <p class="text-xl text-green-400">${latest.correct_predictions || 0}</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500 text-xs uppercase">Falsch</p>
+                                <p class="text-xl text-red-400">${latest.wrong_predictions || 0}</p>
+                            </div>
+                        </div>`;
+                } else {
+                    card.innerHTML = '<p class="text-gray-500">Noch keine Review-Daten.</p>';
+                }
+            } catch (e) {
+                card.innerHTML = '<p class="text-red-400">Fehler beim Laden.</p>';
+            }
         }
         
         async function addWatchlistItem() {

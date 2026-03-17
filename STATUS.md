@@ -47,10 +47,34 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 *   **Telegram**: Automatischer Versand mit Chunking für lange Briefings.
 *   **API-Endpoints**: `POST /api/reports/generate-morning`, `GET /api/data/market-overview`.
 
-## 🚀 Nächste Schritte (Phase 4 / UI)
-- UI/Frontend mit React und Tailwind gestalten.
-- Auswertung der Alert-Qualität im Produktivbetrieb über die Zeit.
+### 6. Phase 4A: Feedback-Loop
+*   **Langzeit-Gedächtnis**: Audit-Prompt erweitert, DeepSeek-Report speichert Insights + vollständige Reports in Supabase.
+*   **Post-Earnings Review**: Neues Modul inkl. Prompt, Performance-Tracking und Lessons Learned Speicherung.
+*   **APIs**: `POST /api/reports/post-earnings-review/{ticker}`, `POST /api/reports/scan-earnings-results`, `GET /api/data/long-term-memory/{ticker}`, `GET /api/data/performance`.
+*   **Admin Panel**: Post-Earnings Review UI (Dropdown + Ergebnisfläche) und Performance-Karte im Status-Tab.
+*   **Automatisierung**: n8n Workflow (Mo-Fr 22:00 CET) triggert automatischen Earnings-Scan und Reviews.
+*   **Supabase**: Tabellen `long_term_memory`, `earnings_reviews`, `performance_tracking` produktiv, Schema SQL loggable via API.
+
+### 7. Phase 4B: Web-Dashboard (Next.js)
+*   **Framework**: Next.js 15 mit TypeScript, Tailwind CSS, App Router, Server Components.
+*   **Design-System**: Bloomberg-Terminal-Ästhetik mit dunklem Theme, JetBrains Mono + Inter Fonts, Trading-Terminal-Farbschema.
+*   **Layout**: Feste Sidebar-Navigation (6 Tabs), responsive Grid-Layouts, Echtzeit-Statusanzeige.
+*   **Dashboard-Seite**: Makro-Regime-Banner, Index-/Sektor-/Makro-Karten, Morning-Briefing-Vorschau, Watchlist-Übersicht.
+*   **Watchlist-Seite**: Vollständige Tabelle mit Filtern, Ticker-Detail-Ansichten mit Profil/Technicals/News/Langzeit-Gedächtnis.
+*   **Reports-Seite**: 3 Tabs (Morning Briefing, Sonntags-Report, Post-Earnings Reviews) mit Generierungs-Buttons.
+*   **News-Seite**: Timeline aller News-Stichpunkte, Filter nach Ticker/Sentiment/Material-Events, Scan-Aktionen (News/SEC/Makro).
+*   **Performance-Seite**: KPI-Karten (Trefferquote, Reviews, Best/Worst Calls), Performance-Historie-Tabelle.
+*   **Settings-Seite**: Systemcheck (8 Services), DB-Status, Telegram-Test, n8n-Setup, Live-Logs mit Auto-Refresh.
+*   **Backend-Integration**: CORS aktiviert, Log-Endpoint (`GET /api/logs`) für Live-Monitoring implementiert.
+*   **Docker**: Frontend-Container in `docker-compose.yml` integriert, Dockerfile + .dockerignore erstellt.
+*   **API-Layer**: Zentraler `api.ts` mit allen Endpoints, robuste Fehlerbehandlung, Next.js ISR/SSR-Caching.
+
+## 🚀 Nächste Schritte
+- Frontend lokal testen: `cd frontend && npm run dev` → http://localhost:3000
+- Docker-Build testen: `docker-compose build kafin-frontend && docker-compose up -d`
+- Feedback-Loop weiter verfeinern (mehr Automatisierung, Review-Historie im UI anzeigen).
+- Auswertung der Alert- & Review-Qualität im Produktivbetrieb.
 
 ## 🛠️ System-Hinweis
-*   **Docker**: Backend, Redis und n8n laufen stabil im Verbund.
+*   **Docker**: Backend, Redis, n8n und Frontend laufen stabil im Verbund.
 *   **Repository**: Alle Updates sind nach jeder Änderung direkt nach `Kazuo3o447/Kafin` gepusht worden.

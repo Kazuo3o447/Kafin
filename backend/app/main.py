@@ -7,12 +7,22 @@ Deps:   FastAPI, config, logger, schemas, admin
 Config: app_name, environment
 API:    Keine externen (nur intern)
 """
+from datetime import datetime
+
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from backend.app.config import settings
-from backend.app.logger import get_logger
+from backend.app.logger import get_logger, get_recent_logs
 from backend.app.admin import router as admin_router
 from backend.app.init_watchlist import ensure_watchlist_populated
-from backend.app.init_db import ensure_daily_snapshots_table
+from backend.app.init_db import (
+    ensure_daily_snapshots_table,
+    log_schema_extension_sql,
+    get_schema_extension_sql,
+)
+from backend.app.analysis.post_earnings_review import run_post_earnings_review
+from backend.app.memory.long_term import get_insights
+from backend.app.db import get_supabase_client
 from schemas.base import HealthCheckResponse
 
 logger = get_logger(__name__)
@@ -23,14 +33,24 @@ app = FastAPI(
     description="Backend API für die Kafin Earnings-Trading-Plattform",
 )
 
+# CORS Middleware für Frontend-Zugriff
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:8000", "*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.on_event("startup")
 async def startup_event():
     logger.info(f"Starter {settings.app_name} im [{settings.environment}] Modus.")
-    logger.info("Admin Panel is available at /admin")
+    logger.info("Admin Panel ist verfügbar bei /admin")
     if settings.use_mock_data:
         logger.warning("Mock-Data-Modus ist AKTIV. Es werden keine echten APIs aufgerufen.")
     await ensure_watchlist_populated()
     await ensure_daily_snapshots_table()
+    log_schema_extension_sql()
 
 app.include_router(admin_router)
 
@@ -38,6 +58,22 @@ app.include_router(admin_router)
 async def health_check():
     """Prüft, ob die API erreichbar ist."""
     return HealthCheckResponse(status="ok", version="1.0.0")
+
+
+@app.post("/api/admin/init-tables")
+async def api_admin_init_tables():
+    """Gibt das SQL für Phase-4A Tabellen zurück."""
+    sql = get_schema_extension_sql()
+    logger.info("API Call: admin init tables SQL ausgegeben")
+    return {"status": "success", "sql": sql}
+
+@app.get("/api/logs")
+async def api_get_logs(level: str = None, limit: int = 100):
+    """Gibt die letzten Log-Einträge zurück."""
+    logs = get_recent_logs()
+    if level:
+        logs = [l for l in logs if l.get("level") == level]
+    return {"logs": logs[:limit]}
 
 from backend.app.analysis.finbert import analyze_sentiment
 
@@ -103,6 +139,27 @@ async def api_earnings_history(ticker: str):
 async def api_macro():
     logger.info(f"API Call: macro snapshot")
     return await get_macro_snapshot()
+
+
+@data_router.get("/long-term-memory/{ticker}")
+async def api_long_term_memory(ticker: str):
+    """Gibt das Langzeit-Gedächtnis für einen Ticker zurück."""
+    insights = await get_insights(ticker)
+    return {"ticker": ticker, "count": len(insights), "insights": insights}
+
+
+@data_router.get("/performance")
+async def api_performance():
+    """Aggregierte Trefferquote aus Supabase."""
+    try:
+        db = get_supabase_client()
+        if db:
+            result = db.table("performance_tracking").select("*").order("period", desc=True).execute()
+            return {"status": "success", "performance": result.data}
+        return {"status": "error", "message": "Supabase nicht verbunden"}
+    except Exception as e:
+        logger.error(f"Performance-Endpoint Fehler: {e}")
+        return {"status": "error", "message": str(e)}
 
 from backend.app.memory.watchlist import (
     get_watchlist, add_ticker, remove_ticker, update_ticker, get_earnings_this_week
@@ -338,6 +395,49 @@ async def api_generate_morning_briefing():
 async def api_get_latest_report():
     logger.info("[Report] API Call: get-latest-report")
     return {"report": _latest_report}
+
+
+@reports_router.post("/post-earnings-review/{ticker}")
+async def api_post_earnings_review(ticker: str, quarter: str | None = None):
+    """Führt einen Post-Earnings-Review für einen Ticker durch."""
+    logger.info(f"API Call: post-earnings-review for {ticker}")
+    review = await run_post_earnings_review(ticker, quarter)
+    return {"status": "success", "review": review}
+
+
+@reports_router.post("/scan-earnings-results")
+async def api_scan_earnings_results():
+    """Scannt nach neuen Earnings und triggert Post-Earnings-Reviews."""
+    logger.info("API Call: scan-earnings-results")
+    from backend.app.memory.watchlist import get_watchlist
+    from backend.app.data.fmp import get_earnings_history
+
+    wl = await get_watchlist()
+    reviews_triggered = []
+    now = datetime.utcnow()
+
+    for item in wl:
+        ticker = item.get("ticker")
+        if not ticker:
+            continue
+        try:
+            history = await get_earnings_history(ticker, limit=1)
+            if history and history.last_quarter:
+                earnings_date = getattr(history.last_quarter, "earnings_date", None)
+                if isinstance(earnings_date, datetime):
+                    days_ago = abs((now - earnings_date).days)
+                    if days_ago <= 3:
+                        result = await run_post_earnings_review(ticker)
+                        reviews_triggered.append({"ticker": ticker, "result": result})
+                        logger.info(f"Post-Earnings Review getriggert für {ticker}")
+        except Exception as e:
+            logger.debug(f"Earnings-Scan für {ticker}: {e}")
+
+    return {
+        "status": "success",
+        "reviews_triggered": len(reviews_triggered),
+        "details": reviews_triggered,
+    }
 
 @data_router.get("/market-overview")
 async def api_market_overview():

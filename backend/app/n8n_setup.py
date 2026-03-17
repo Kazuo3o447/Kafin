@@ -145,7 +145,36 @@ async def setup_workflows():
             }
         }
 
-        for wf in [news_workflow, sec_workflow, sunday_workflow, morning_workflow]:
+        # Workflow 5: Post-Earnings Review Scanner (Mo-Fr 22:00 CET)
+        earnings_review_workflow = {
+            "name": "Kafin: Post-Earnings Review (täglich 22:00)",
+            "active": True,
+            "nodes": [
+                {
+                    "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "0 22 * * 1-5"}]}},
+                    "name": "Trigger: Mo-Fr 22:00 CET",
+                    "type": "n8n-nodes-base.scheduleTrigger",
+                    "position": [250, 300],
+                    "typeVersion": 1
+                },
+                {
+                    "parameters": {
+                        "url": "http://kafin-backend:8000/api/reports/scan-earnings-results",
+                        "method": "POST",
+                        "options": {"timeout": 120000}
+                    },
+                    "name": "Earnings-Ergebnisse scannen",
+                    "type": "n8n-nodes-base.httpRequest",
+                    "position": [450, 300],
+                    "typeVersion": 1
+                }
+            ],
+            "connections": {
+                "Trigger: Mo-Fr 22:00 CET": {"main": [[{"node": "Earnings-Ergebnisse scannen", "type": "main", "index": 0}]]}
+            }
+        }
+
+        for wf in [news_workflow, sec_workflow, sunday_workflow, morning_workflow, earnings_review_workflow]:
             try:
                 response = await client.post("/api/v1/workflows", json=wf)
                 if response.status_code in (200, 201):

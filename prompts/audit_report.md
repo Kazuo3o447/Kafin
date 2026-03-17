@@ -42,8 +42,11 @@ Einordnung: {{insider_assessment}}
 NACHRICHTEN DER LETZTEN WOCHEN:
 {{news_bullet_points}}
 
+LANGZEIT-GEDÄCHTNIS (Erkenntnisse aus früheren Reviews):
+{{long_term_memory}}
+
 OPTIONEN & SOCIAL:
-Options-Setup: {{options_metrics}}
+{{options_metrics}}
 Social-Sentiment (7d): {{social_sentiment}}
 
 SCORES:

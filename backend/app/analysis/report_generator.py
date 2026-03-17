@@ -595,6 +595,7 @@ async def generate_morning_briefing() -> str:
         .replace("{{credit_spread}}", cs_str) \
         .replace("{{yield_spread}}", ys_str) \
         .replace("{{dxy}}", dxy_str) \
+        .replace("{{analyst_ratings}}", analyst_str) \
         .replace("{{general_news}}", general_news_str) \
         .replace("{{watchlist_news}}", watchlist_news_str) \
         .replace("{{macro_events}}", macro_events_str) \

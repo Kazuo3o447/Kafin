@@ -116,14 +116,14 @@ async def setup_workflows():
             }
         }
 
-        # Workflow 4: Morning Briefing (Montag-Freitag 07:00 CET)
+        # Workflow 4: Morning Briefing (Montag-Freitag 08:00 CET)
         morning_workflow = {
-            "name": "Kafin: Morning Briefing (Mo-Fr 07:00)",
+            "name": "Kafin: Morning Briefing (Mo-Fr 08:00)",
             "active": True,
             "nodes": [
                 {
-                    "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "0 7 * * 1-5"}]}},
-                    "name": "Trigger: Mo-Fr 07:00 CET",
+                    "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "0 8 * * 1-5"}]}},
+                    "name": "Trigger: Mo-Fr 08:00 CET",
                     "type": "n8n-nodes-base.scheduleTrigger",
                     "position": [250, 300],
                     "typeVersion": 1

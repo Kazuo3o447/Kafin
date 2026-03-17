@@ -107,7 +107,7 @@ ADMIN_HTML = """
                         <h4 class="text-sm font-medium text-gray-300">Letzter Report Output</h4>
                         <button onclick="copyReport()" class="text-xs text-blue-400 hover:text-blue-300">In Zwischenablage kopieren</button>
                     </div>
-                    <textarea id="report-output-area" readonly class="w-full flex-1 bg-black text-gray-300 font-mono text-sm p-4 rounded border border-gray-800 resize-none focus:outline-none"></textarea>
+                    <pre id="report-output-area" class="w-full flex-1 bg-black text-gray-300 font-mono text-sm p-4 rounded border border-gray-800 overflow-auto whitespace-pre-wrap"></pre>
                 </div>
             </section>
         </div>
@@ -411,7 +411,7 @@ ADMIN_HTML = """
             try {
                 const res = await fetch('/api/reports/latest');
                 const data = await res.json();
-                document.getElementById('report-output-area').value = data.report || "Kein Report im Speicher.";
+                document.getElementById('report-output-area').textContent = data.report || "Kein Report im Speicher.";
             } catch(e) { console.error('Error loading latest report', e); }
         }
         
@@ -427,11 +427,11 @@ ADMIN_HTML = """
                 const res = await fetch(`/api/reports/generate/${ticker}`, {method: 'POST'});
                 const data = await res.json();
                 if(res.ok && data.status === 'success') {
-                    output.value = data.report;
+                    output.textContent = data.report;
                     showToast(`Report für ${ticker} fertig!`);
                 } else {
                     const errorMsg = data.message || 'Unbekannter Fehler';
-                    output.value = `Fehler: ${errorMsg}`;
+                    output.textContent = `Fehler: ${errorMsg}`;
                     showToast(`Fehler: ${errorMsg}`, 'error');
                 }
             } catch(e) {
@@ -454,11 +454,11 @@ ADMIN_HTML = """
                 const data = await res.json();
                 console.log("Sunday Report Response:", data);
                 if(res.ok && data.status === 'success') {
-                    output.value = data.report || data.result || data.message || JSON.stringify(data);
+                    output.textContent = data.report || data.result || data.message || JSON.stringify(data);
                     showToast(`Sonntags-Report fertig und per E-Mail versendet!`);
                 } else {
                     const errorMsg = data.message || 'Unbekannter Fehler';
-                    output.value = `Fehler: ${errorMsg}`;
+                    output.textContent = `Fehler: ${errorMsg}`;
                     showToast(`Fehler: ${errorMsg}`, 'error');
                 }
             } catch(e) {
@@ -480,7 +480,7 @@ ADMIN_HTML = """
                 const res = await fetch('/api/reports/generate-morning', {method: 'POST'});
                 const data = await res.json();
                 if(res.ok && data.status === 'success') {
-                    output.value = data.report;
+                    output.textContent = data.report;
                     showToast('Morning Briefing fertig und per Telegram versendet!');
                 } else {
                     showToast('Fehler: ' + (data.message || 'Unbekannt'), 'error');
@@ -493,7 +493,7 @@ ADMIN_HTML = """
         }
 
         function copyReport() {
-            const text = document.getElementById('report-output-area').value;
+            const text = document.getElementById('report-output-area').textContent;
             navigator.clipboard.writeText(text).then(() => {
                 showToast('Kopiert!');
             });

@@ -34,14 +34,18 @@ async def get_company_profile(ticker: str) -> ValuationData:
         except Exception:
             return ValuationData(ticker=ticker)
     else:
-        url = f"https://financialmodelingprep.com/stable/profile?symbol={ticker}&apikey={settings.fmp_api_key}"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            res_data = response.json()
-            if not res_data:
-                return ValuationData(ticker=ticker)
-            data = res_data[0]
+        try:
+            url = f"https://financialmodelingprep.com/stable/profile?symbol={ticker}&apikey={settings.fmp_api_key}"
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                res_data = response.json()
+                if not res_data:
+                    return ValuationData(ticker=ticker)
+                data = res_data[0]
+        except Exception as e:
+            logger.warning(f"FMP profile Fehler für {ticker}: {e}")
+            return ValuationData(ticker=ticker)
             
     return ValuationData(
         ticker=ticker,
@@ -61,14 +65,21 @@ async def get_analyst_estimates(ticker: str) -> EarningsExpectation:
         except Exception:
             return EarningsExpectation(ticker=ticker, date=datetime.now().date())
     else:
-        url = f"https://financialmodelingprep.com/stable/analyst-estimates?symbol={ticker}&apikey={settings.fmp_api_key}&limit=1"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            res_data = response.json()
-            if not res_data:
-                return EarningsExpectation(ticker=ticker, date=datetime.now().date())
-            data = res_data[0]
+        try:
+            url = f"https://financialmodelingprep.com/stable/analyst-estimates?symbol={ticker}&apikey={settings.fmp_api_key}"
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                res_data = response.json()
+                if not res_data:
+                    return None
+                data = res_data[0]
+        except Exception as e:
+            logger.warning(f"FMP analyst-estimates Fehler für {ticker}: {e}")
+            return None
+            
+    if data is None:
+        return None
             
     d_str = data.get("date", "2026-01-01")
     try:
@@ -91,11 +102,15 @@ async def get_earnings_history(ticker: str, limit: int = 8) -> EarningsHistorySu
         except Exception:
             data = []
     else:
-        url = f"https://financialmodelingprep.com/stable/earnings-surprises?symbol={ticker}&apikey={settings.fmp_api_key}"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            data = response.json()
+        try:
+            url = f"https://financialmodelingprep.com/stable/earnings-surprises?symbol={ticker}&apikey={settings.fmp_api_key}"
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                data = response.json()
+        except Exception as e:
+            logger.warning(f"FMP earnings-surprises Fehler für {ticker}: {e}")
+            data = []
             
     data = data[:limit]
     
@@ -151,14 +166,18 @@ async def get_key_metrics(ticker: str) -> ValuationData:
         except Exception:
             return ValuationData(ticker=ticker)
     else:
-        url = f"https://financialmodelingprep.com/stable/key-metrics-ttm?symbol={ticker}&apikey={settings.fmp_api_key}"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            res_data = response.json()
-            if not res_data:
-                 return ValuationData(ticker=ticker)
-            data = res_data[0]
+        try:
+            url = f"https://financialmodelingprep.com/stable/key-metrics-ttm?symbol={ticker}&apikey={settings.fmp_api_key}"
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                res_data = response.json()
+                if not res_data:
+                    return ValuationData(ticker=ticker)
+                data = res_data[0]
+        except Exception as e:
+            logger.warning(f"FMP key-metrics-ttm Fehler für {ticker}: {e}")
+            return ValuationData(ticker=ticker)
             
     profile = await get_company_profile(ticker)
     

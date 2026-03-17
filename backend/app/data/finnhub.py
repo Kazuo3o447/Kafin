@@ -166,7 +166,7 @@ async def get_short_interest(ticker: str) -> ShortInterestData:
                 squeeze_risk=sq_risk
             )
     except Exception as e:
-        logger.warning(f"Finnhub short-interest Fehler für {ticker}: {e} - Fallback auf yfinance")
+        logger.debug(f"Finnhub short-interest Fehler für {ticker}: {e} - Fallback auf yfinance")
         return None
 
 @rate_limit("finnhub")
@@ -265,6 +265,6 @@ async def get_social_sentiment(ticker: str) -> Optional[SocialSentiment]:
                 social_score=round(avg_score, 4)
             )
         except Exception as e:
-            logger.error(f"Finnhub Social Sentiment Fehler für {ticker}: {e}")
+            logger.debug(f"Finnhub Social Sentiment Fehler für {ticker}: {e}")
             return None
 

@@ -167,6 +167,7 @@ async def api_remove_watchlist_item(ticker: str):
 
 from backend.app.data.news_processor import run_news_pipeline, process_news_for_ticker
 from backend.app.data.macro_processor import fetch_global_macro_events
+from backend.app.data.sec_edgar import scan_filings_for_watchlist
 
 news_router = APIRouter(prefix="/api/news", tags=["news"])
 
@@ -348,4 +349,121 @@ async def api_market_overview():
 app.include_router(data_router)
 app.include_router(watchlist_router)
 app.include_router(reports_router)
+
+# Diagnostics Router
+diagnostics_router = APIRouter(prefix="/api/diagnostics", tags=["diagnostics"])
+
+@diagnostics_router.get("/db")
+async def api_diagnostics_db():
+    """Prüft den Datenstand aller Supabase-Tabellen."""
+    from backend.app.db import get_supabase_client
+    db = get_supabase_client()
+    if db is None:
+        return {"status": "error", "message": "Supabase nicht verbunden"}
+
+    results = {}
+    tables = ["watchlist", "short_term_memory", "daily_snapshots", "macro_snapshots", "audit_reports"]
+    for table in tables:
+        try:
+            data = db.table(table).select("*", count="exact").limit(0).execute()
+            results[table] = {"count": data.count if hasattr(data, "count") else "unknown", "status": "ok"}
+        except Exception as e:
+            results[table] = {"count": 0, "status": f"error: {str(e)[:100]}"}
+
+    return {"status": "success", "tables": results}
+
+@diagnostics_router.get("/full")
+async def api_diagnostics_full():
+    """Vollständiger Systemcheck aller Kafin-Komponenten."""
+    import httpx
+    results = {}
+
+    # 1. Supabase
+    try:
+        from backend.app.db import get_supabase_client
+        db = get_supabase_client()
+        wl = db.table("watchlist").select("ticker").execute()
+        results["supabase"] = {"status": "ok", "watchlist_count": len(wl.data)}
+    except Exception as e:
+        results["supabase"] = {"status": "error", "message": str(e)[:100]}
+
+    # 2. DeepSeek
+    try:
+        from backend.app.analysis.deepseek import call_deepseek
+        response = await call_deepseek("Antworte mit OK", "Test")
+        results["deepseek"] = {"status": "ok" if response else "error"}
+    except Exception as e:
+        results["deepseek"] = {"status": "error", "message": str(e)[:100]}
+
+    # 3. Finnhub
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"https://finnhub.io/api/v1/quote?symbol=AAPL&token={settings.finnhub_api_key}")
+            results["finnhub"] = {"status": "ok" if r.status_code == 200 else "error", "http": r.status_code}
+    except Exception as e:
+        results["finnhub"] = {"status": "error", "message": str(e)[:100]}
+
+    # 4. FMP
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"https://financialmodelingprep.com/stable/profile?symbol=AAPL&apikey={settings.fmp_api_key}")
+            results["fmp"] = {"status": "ok" if r.status_code == 200 else "error", "http": r.status_code}
+    except Exception as e:
+        results["fmp"] = {"status": "error", "message": str(e)[:100]}
+
+    # 5. FRED
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&api_key={settings.fred_api_key}&limit=1&file_type=json&sort_order=desc")
+            results["fred"] = {"status": "ok" if r.status_code == 200 else "error", "http": r.status_code}
+    except Exception as e:
+        results["fred"] = {"status": "error", "message": str(e)[:100]}
+
+    # 6. FinBERT
+    try:
+        from backend.app.analysis.finbert import analyze_sentiment
+        score = analyze_sentiment("Stock price increases sharply")
+        results["finbert"] = {"status": "ok", "test_score": score}
+    except Exception as e:
+        results["finbert"] = {"status": "error", "message": str(e)[:100]}
+
+    # 7. Telegram
+    try:
+        from backend.app.alerts.telegram import send_telegram_alert
+        await send_telegram_alert("🧪 Systemtest")
+        results["telegram"] = {"status": "ok"}
+    except Exception as e:
+        results["telegram"] = {"status": "error", "message": str(e)[:100]}
+
+    # 8. n8n
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get("http://kafin-n8n:5678/healthz")
+            results["n8n"] = {"status": "ok" if r.status_code == 200 else "error"}
+    except Exception as e:
+        results["n8n"] = {"status": "error", "message": str(e)[:100]}
+
+    # Zusammenfassung
+    all_ok = all(v.get("status") == "ok" for v in results.values())
+    failed = [k for k, v in results.items() if v.get("status") != "ok"]
+
+    return {
+        "status": "all_ok" if all_ok else "issues_found",
+        "failed_systems": failed,
+        "details": results
+    }
+
+app.include_router(diagnostics_router)
+
+# Telegram Test Router
+telegram_router = APIRouter(prefix="/api/telegram", tags=["telegram"])
+
+@telegram_router.post("/test")
+async def api_telegram_test():
+    """Sendet eine Test-Nachricht per Telegram."""
+    from backend.app.alerts.telegram import send_telegram_alert
+    await send_telegram_alert("🧪 Kafin Systemtest: Telegram-Verbindung OK.")
+    return {"status": "success", "message": "Test-Nachricht gesendet"}
+
+app.include_router(telegram_router)
 

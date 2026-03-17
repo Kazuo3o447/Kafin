@@ -53,7 +53,8 @@ async def _fmp_get(endpoint: str, params: dict = None) -> list | dict | None:
                 data = response.json()
                 return data
             else:
-                logger.warning(f"FMP {endpoint} HTTP {response.status_code} für params={params}")
+                # Debug statt Warning für erwartete Fehler (Plan-Limits, Premium-Features)
+                logger.debug(f"FMP {endpoint} HTTP {response.status_code} für params={params}")
                 return None
     except httpx.TimeoutException:
         logger.warning(f"FMP {endpoint} Timeout")

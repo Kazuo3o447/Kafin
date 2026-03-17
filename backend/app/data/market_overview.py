@@ -270,8 +270,8 @@ async def save_daily_snapshot(market_data: dict, macro_data, regime: str = "neut
             "regime": regime,
         }
 
-        db.table("daily_snapshots").upsert(record).execute()
-        logger.info(f"Tages-Snapshot gespeichert für {date.today()}")
+        db.table("daily_snapshots").upsert(record, on_conflict="date").execute()
+        logger.info(f"Tages-Snapshot gespeichert/aktualisiert für {date.today()}")
     except Exception as e:
         logger.error(f"Fehler beim Speichern des Tages-Snapshots: {e}")
 

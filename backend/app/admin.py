@@ -63,6 +63,7 @@ ADMIN_HTML = """
                 <button onclick="switchTab('reports')" id="btn-reports" class="tab-btn active px-4 py-2 hover:bg-gray-700 rounded transition">Reports</button>
                 <button onclick="switchTab('watchlist')" id="btn-watchlist" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Watchlist</button>
                 <button onclick="switchTab('news')" id="btn-news" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">News</button>
+                <button onclick="switchTab('diagnostics')" id="btn-diagnostics" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Diagnostics</button>
                 <button onclick="switchTab('settings')" id="btn-settings" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Einstellungen</button>
                 <button onclick="switchTab('logs')" id="btn-logs" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Logs</button>
                 <button onclick="switchTab('status')" id="btn-status" class="tab-btn px-4 py-2 hover:bg-gray-700 rounded transition">Status</button>
@@ -302,6 +303,31 @@ ADMIN_HTML = """
                     </div>
                     <button type="button" onclick="saveEnvKey()" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded transition font-medium mb-[1px]">In .env Speichern</button>
                 </form>
+            </section>
+        </div>
+
+        <!-- DIAGNOSTICS TAB -->
+        <div id="tab-diagnostics" class="tab-content space-y-8">
+            <section class="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-lg font-semibold text-white">System Diagnostics</h2>
+                    <div class="space-x-2">
+                        <button onclick="runDbDiagnostics()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded transition shadow">DB Status</button>
+                        <button onclick="runFullDiagnostics()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded transition shadow">Full System Check</button>
+                        <button onclick="testTelegram()" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded transition shadow">Test Telegram</button>
+                    </div>
+                </div>
+                
+                <div id="diagnostics-status" class="mb-4 hidden">
+                    <div class="flex items-center space-x-2 text-gray-400">
+                        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <span>Running diagnostics...</span>
+                    </div>
+                </div>
+
+                <div id="diagnostics-results" class="overflow-x-auto">
+                    <p class="text-gray-500 text-sm text-center py-8">Click a button above to run system diagnostics</p>
+                </div>
             </section>
         </div>
 
@@ -1007,6 +1033,110 @@ ADMIN_HTML = """
                 { label: 'Backend API', status: 'ok' }
             ];
             grid.innerHTML += renderCard('System', system);
+        }
+
+        // --- DIAGNOSTICS ---
+        async function runDbDiagnostics() {
+            const status = document.getElementById('diagnostics-status');
+            const results = document.getElementById('diagnostics-results');
+            
+            status.classList.remove('hidden');
+            results.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">Loading...</p>';
+            
+            try {
+                const res = await fetch('/api/diagnostics/db');
+                const data = await res.json();
+                
+                if(data.status === 'error') {
+                    results.innerHTML = `<div class="text-red-400 p-4">${data.message}</div>`;
+                } else {
+                    let html = '<table class="w-full text-left border-collapse"><thead><tr class="bg-gray-900 border-b border-gray-700">';
+                    html += '<th class="p-3 text-sm font-semibold text-gray-300">Table</th>';
+                    html += '<th class="p-3 text-sm font-semibold text-gray-300 text-right">Row Count</th>';
+                    html += '<th class="p-3 text-sm font-semibold text-gray-300">Status</th>';
+                    html += '</tr></thead><tbody class="divide-y divide-gray-700">';
+                    
+                    for(const [table, info] of Object.entries(data.tables)) {
+                        const statusColor = info.status === 'ok' ? 'text-green-400' : 'text-red-400';
+                        html += `<tr><td class="p-3 font-mono text-blue-400">${table}</td>`;
+                        html += `<td class="p-3 text-right font-mono">${info.count}</td>`;
+                        html += `<td class="p-3 ${statusColor}">${info.status}</td></tr>`;
+                    }
+                    
+                    html += '</tbody></table>';
+                    results.innerHTML = html;
+                    showToast('DB Diagnostics complete');
+                }
+            } catch(e) {
+                results.innerHTML = '<p class="text-red-400 p-4">Error running diagnostics</p>';
+                showToast('Error running diagnostics', 'error');
+            } finally {
+                status.classList.add('hidden');
+            }
+        }
+        
+        async function runFullDiagnostics() {
+            const status = document.getElementById('diagnostics-status');
+            const results = document.getElementById('diagnostics-results');
+            
+            status.classList.remove('hidden');
+            results.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">Running full system check...</p>';
+            
+            try {
+                const res = await fetch('/api/diagnostics/full');
+                const data = await res.json();
+                
+                let html = '<div class="space-y-4">';
+                
+                // Summary
+                const summaryColor = data.status === 'all_ok' ? 'text-green-400' : 'text-yellow-400';
+                html += `<div class="bg-gray-900 p-4 rounded border border-gray-700">`;
+                html += `<h3 class="font-semibold ${summaryColor} mb-2">System Status: ${data.status.toUpperCase()}</h3>`;
+                if(data.failed_systems && data.failed_systems.length > 0) {
+                    html += `<p class="text-sm text-red-400">Failed: ${data.failed_systems.join(', ')}</p>`;
+                }
+                html += '</div>';
+                
+                // Details
+                html += '<table class="w-full text-left border-collapse"><thead><tr class="bg-gray-900 border-b border-gray-700">';
+                html += '<th class="p-3 text-sm font-semibold text-gray-300">Component</th>';
+                html += '<th class="p-3 text-sm font-semibold text-gray-300">Status</th>';
+                html += '<th class="p-3 text-sm font-semibold text-gray-300">Details</th>';
+                html += '</tr></thead><tbody class="divide-y divide-gray-700">';
+                
+                for(const [component, info] of Object.entries(data.details)) {
+                    const statusColor = info.status === 'ok' ? 'text-green-400' : 'text-red-400';
+                    const details = info.message || (info.http ? `HTTP ${info.http}` : '') || (info.watchlist_count !== undefined ? `Watchlist: ${info.watchlist_count}` : '') || (info.test_score !== undefined ? `Score: ${info.test_score}` : '') || '-';
+                    html += `<tr><td class="p-3 font-semibold text-blue-400">${component.toUpperCase()}</td>`;
+                    html += `<td class="p-3 ${statusColor}">${info.status}</td>`;
+                    html += `<td class="p-3 text-sm text-gray-400">${details}</td></tr>`;
+                }
+                
+                html += '</tbody></table></div>';
+                results.innerHTML = html;
+                
+                const toastType = data.status === 'all_ok' ? 'success' : 'warning';
+                showToast(`System check complete: ${data.status}`, toastType);
+            } catch(e) {
+                results.innerHTML = '<p class="text-red-400 p-4">Error running diagnostics</p>';
+                showToast('Error running diagnostics', 'error');
+            } finally {
+                status.classList.add('hidden');
+            }
+        }
+        
+        async function testTelegram() {
+            try {
+                const res = await fetch('/api/telegram/test', {method: 'POST'});
+                const data = await res.json();
+                if(res.ok && data.status === 'success') {
+                    showToast('Telegram test message sent!');
+                } else {
+                    showToast('Telegram test failed', 'error');
+                }
+            } catch(e) {
+                showToast('Telegram test error', 'error');
+            }
         }
 
         // Init

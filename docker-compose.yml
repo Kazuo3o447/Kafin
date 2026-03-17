@@ -12,6 +12,8 @@ services:
     env_file:
       - .env
     volumes:
+      - ./backend/app:/app/backend/app
+      - ./schemas:/app/schemas:ro
       - ./config:/app/config:ro
       - ./prompts:/app/prompts:ro
       - ./fixtures:/app/fixtures:ro

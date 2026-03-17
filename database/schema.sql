@@ -98,7 +98,6 @@ CREATE TABLE IF NOT EXISTS audit_reports (
     prompt_version TEXT,
     created_at TIMESTAMP DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_reports_ticker ON audit_reports(ticker, report_date);
 
 CREATE TABLE IF NOT EXISTS daily_snapshots (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -119,3 +118,4 @@ CREATE TABLE IF NOT EXISTS daily_snapshots (
     briefing_summary TEXT,
     created_at TIMESTAMP DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_reports_ticker ON audit_reports(ticker, report_date);

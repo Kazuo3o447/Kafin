@@ -9,7 +9,7 @@ from typing import Optional
 class EarningsExpectation(BaseModel):
     """Erwartungen vor den Earnings."""
     ticker: str
-    report_date: date
+    report_date: Optional[date] = None
     report_timing: Optional[str] = None       # "pre_market" | "after_hours"
     eps_consensus: Optional[float] = None
     eps_whisper: Optional[float] = None

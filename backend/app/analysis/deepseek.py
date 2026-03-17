@@ -50,12 +50,21 @@ async def call_deepseek(system_prompt: str, user_prompt: str) -> str:
     # very simple retry backoff
     for attempt in range(3):
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
                     f"{base_url}/chat/completions",
                     headers=headers,
                     json=payload
                 )
+                
+                # Check for HTTP errors and log response body if available
+                if response.status_code != 200:
+                    try:
+                        error_detail = response.json()
+                    except Exception:
+                        error_detail = response.text
+                    logger.error(f"DeepSeek API Error (Status {response.status_code}): {error_detail}")
+                
                 response.raise_for_status()
                 data = response.json()
                 

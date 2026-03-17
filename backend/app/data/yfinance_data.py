@@ -138,6 +138,27 @@ async def get_options_metrics(ticker: str) -> Optional[OptionsMetrics]:
         logger.error(f"yfinance Options Fehler für {ticker}: {e}")
         return None
 
+async def get_short_interest_yf(ticker: str) -> Optional[dict]:
+    """Short Interest via yfinance (kostenlos). Fallback für Finnhub Premium."""
+    if settings.use_mock_data:
+        return {"short_interest_percent": 15.5, "short_ratio": 3.2, "shares_short": 50000000}
+    
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        
+        short_pct = info.get("shortPercentOfFloat")
+        short_pct_value = (short_pct * 100) if short_pct else 0
+        
+        return {
+            "short_interest_percent": round(short_pct_value, 2),
+            "short_ratio": info.get("shortRatio", 0),
+            "shares_short": info.get("sharesShort", 0),
+        }
+    except Exception as e:
+        logger.error(f"yfinance short interest Fehler für {ticker}: {e}")
+        return None
+
 async def get_market_context() -> dict:
     """Holt die Performance der letzten 5 Handelstage für S&P 500, Nasdaq 100 und Gold."""
     if settings.use_mock_data:

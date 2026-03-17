@@ -130,6 +130,24 @@ async def generate_audit_report(ticker: str) -> str:
     history = await get_earnings_history(ticker)
     metrics = await get_key_metrics(ticker)
     short_interest = await get_short_interest(ticker)
+    
+    # Fallback auf yfinance wenn Finnhub short-interest fehlschlägt (403 Premium)
+    if short_interest is None:
+        from backend.app.data.yfinance_data import get_short_interest_yf
+        from schemas.sentiment import ShortInterestData
+        yf_si = await get_short_interest_yf(ticker)
+        if yf_si:
+            short_interest = ShortInterestData(
+                ticker=ticker,
+                short_interest=yf_si.get("shares_short", 0),
+                short_interest_percent=yf_si.get("short_interest_percent", 0),
+                days_to_cover=yf_si.get("short_ratio", 0),
+                trend="stable",
+                squeeze_risk="medium" if yf_si.get("short_interest_percent", 0) > 15 else "low"
+            )
+        else:
+            short_interest = ShortInterestData(ticker=ticker, short_interest=0, days_to_cover=0, trend="stable", squeeze_risk="low")
+    
     insiders = await get_insider_transactions(ticker)
     technicals = await get_technical_setup(ticker)
     

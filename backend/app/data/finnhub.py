@@ -126,44 +126,48 @@ async def get_short_interest(ticker: str) -> ShortInterestData:
             return ShortInterestData(**data)
         except Exception:
             return ShortInterestData(ticker=ticker, short_interest=0, days_to_cover=0, trend="stable", squeeze_risk="low")
+    
+    try:
+        url = f"https://finnhub.io/api/v1/stock/short-interest?symbol={ticker}&token={settings.finnhub_api_key}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
             
-    url = f"https://finnhub.io/api/v1/stock/short-interest?symbol={ticker}&token={settings.finnhub_api_key}"
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        data = response.json()
-        
-        info = data.get("data", [])
-        if not info:
-             return ShortInterestData(ticker=ticker, short_interest=0, days_to_cover=0, trend="stable", squeeze_risk="low")
+            info = data.get("data", [])
+            if not info:
+                 return ShortInterestData(ticker=ticker, short_interest=0, days_to_cover=0, trend="stable", squeeze_risk="low")
 
-        latest = info[0]
-        short_interest = latest.get("shortInterest", 0)
-        avg_volume = latest.get("volume", 1)
-        days_to_cover = short_interest / avg_volume if avg_volume > 0 else 0
-        
-        trend = "stable"
-        if len(info) >= 4:
-            if info[0].get("shortInterest", 0) > info[3].get("shortInterest", 0):
-                trend = "increasing"
-            elif info[0].get("shortInterest", 0) < info[3].get("shortInterest", 0):
-                trend = "decreasing"
-                
-        percent_of_float = latest.get("shortPercentOfFloat", 0)
-        if percent_of_float > 20:
-            sq_risk = "high"
-        elif percent_of_float >= 10:
-            sq_risk = "medium"
-        else:
-            sq_risk = "low"
-        
-        return ShortInterestData(
-            ticker=ticker,
-            short_interest=short_interest,
-            days_to_cover=days_to_cover,
-            trend=trend,
-            squeeze_risk=sq_risk
-        )
+            latest = info[0]
+            short_interest = latest.get("shortInterest", 0)
+            avg_volume = latest.get("volume", 1)
+            days_to_cover = short_interest / avg_volume if avg_volume > 0 else 0
+            
+            trend = "stable"
+            if len(info) >= 4:
+                if info[0].get("shortInterest", 0) > info[3].get("shortInterest", 0):
+                    trend = "increasing"
+                elif info[0].get("shortInterest", 0) < info[3].get("shortInterest", 0):
+                    trend = "decreasing"
+                    
+            percent_of_float = latest.get("shortPercentOfFloat", 0)
+            if percent_of_float > 20:
+                sq_risk = "high"
+            elif percent_of_float >= 10:
+                sq_risk = "medium"
+            else:
+                sq_risk = "low"
+            
+            return ShortInterestData(
+                ticker=ticker,
+                short_interest=short_interest,
+                days_to_cover=days_to_cover,
+                trend=trend,
+                squeeze_risk=sq_risk
+            )
+    except Exception as e:
+        logger.warning(f"Finnhub short-interest Fehler für {ticker}: {e} - Fallback auf yfinance")
+        return None
 
 @rate_limit("finnhub")
 async def get_insider_transactions(ticker: str) -> InsiderActivity:
@@ -173,13 +177,14 @@ async def get_insider_transactions(ticker: str) -> InsiderActivity:
             return InsiderActivity(**data)
         except Exception:
             return InsiderActivity(ticker=ticker, is_cluster_buy=False, is_cluster_sell=False, buy_volume_90d=0, sell_volume_90d=0)
-            
-    url = f"https://finnhub.io/api/v1/stock/insider-transactions?symbol={ticker}&token={settings.finnhub_api_key}"
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        data = response.json()
-        txs = data.get("data", [])
+    
+    try:
+        url = f"https://finnhub.io/api/v1/stock/insider-transactions?symbol={ticker}&token={settings.finnhub_api_key}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            txs = data.get("data", [])
         
         now_ts = time.time()
         days_90_ts = now_ts - (90 * 24 * 3600)
@@ -218,6 +223,9 @@ async def get_insider_transactions(ticker: str) -> InsiderActivity:
              buy_volume_90d=buy_vol,
              sell_volume_90d=sell_vol
         )
+    except Exception as e:
+        logger.warning(f"Finnhub insider-transactions Fehler für {ticker}: {e}")
+        return InsiderActivity(ticker=ticker, is_cluster_buy=False, is_cluster_sell=False, buy_volume_90d=0, sell_volume_90d=0)
 
 @rate_limit("finnhub")
 async def get_social_sentiment(ticker: str) -> Optional[SocialSentiment]:

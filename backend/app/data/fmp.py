@@ -216,11 +216,15 @@ async def get_sector_pe(sector: str) -> float | None:
 @rate_limit("fmp")
 async def get_analyst_grades(ticker: str) -> list[dict]:
     """
-    Holt aktuelle Analysten-Ratings und Upgrades/Downgrades für einen Ticker.
-    FMP Endpoint: /stable/grades
+    Holt aktuelle Analysten-Ratings (Upgrades/Downgrades) für einen Ticker.
+    FMP Endpoint: /stable/grades?symbol=TICKER
+    Returns: Liste von dicts mit gradingCompany, previousGrade, newGrade, action, date
     """
     if settings.use_mock_data:
-        return [{"gradingCompany": "Morgan Stanley", "previousGrade": "Equal-Weight", "newGrade": "Overweight", "action": "upgrade", "date": "2026-03-15"}]
+        return [
+            {"gradingCompany": "Morgan Stanley", "previousGrade": "Equal-Weight", "newGrade": "Overweight", "action": "upgrade", "date": "2026-03-15"},
+            {"gradingCompany": "Goldman Sachs", "previousGrade": "Neutral", "newGrade": "Buy", "action": "upgrade", "date": "2026-03-12"}
+        ]
 
     try:
         url = f"https://financialmodelingprep.com/stable/grades?symbol={ticker}&limit=5&apikey={settings.fmp_api_key}"
@@ -228,9 +232,11 @@ async def get_analyst_grades(ticker: str) -> list[dict]:
             response = await client.get(url)
             if response.status_code == 200:
                 data = response.json()
-                return data[:5] if isinstance(data, list) else []
+                if isinstance(data, list):
+                    return data[:5]
+                return []
             else:
-                logger.warning(f"FMP grades für {ticker}: HTTP {response.status_code}")
+                logger.debug(f"FMP grades für {ticker}: HTTP {response.status_code}")
                 return []
     except Exception as e:
         logger.error(f"FMP grades Fehler für {ticker}: {e}")

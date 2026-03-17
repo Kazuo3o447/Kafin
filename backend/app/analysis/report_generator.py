@@ -519,23 +519,39 @@ async def generate_morning_briefing() -> str:
     from backend.app.data.fmp import get_analyst_grades, get_price_target_consensus
 
     analyst_lines = []
-    for ticker in wl_tickers[:10]:  # Max 10 um API-Calls zu sparen
+    cutoff_7d = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    for ticker in wl_tickers[:10]:
         try:
             grades = await get_analyst_grades(ticker)
             pt = await get_price_target_consensus(ticker)
 
-            recent_grades = [g for g in grades if g.get("date", "") >= (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")]
+            # Nur Ratings der letzten 7 Tage
+            recent_grades = [g for g in grades if g.get("date", "") >= cutoff_7d]
             for g in recent_grades:
-                analyst_lines.append(
-                    f"[{ticker}] {g.get('gradingCompany', '?')}: {g.get('previousGrade', '?')} → {g.get('newGrade', '?')} ({g.get('action', '?')}) am {g.get('date', '?')}"
-                )
+                company = g.get("gradingCompany", "Unbekannt")
+                prev = g.get("previousGrade", "?")
+                new = g.get("newGrade", "?")
+                action = g.get("action", "?")
+                date = g.get("date", "?")
+                analyst_lines.append(f"[{ticker}] {company}: {prev} → {new} ({action}) am {date}")
 
+            # Price Target nur wenn vorhanden
             if pt and pt.get("targetConsensus"):
-                analyst_lines.append(f"[{ticker}] Price Target Konsens: ${pt['targetConsensus']:.0f} (Range: ${pt.get('targetLow', 0):.0f}-${pt.get('targetHigh', 0):.0f})")
+                consensus = pt["targetConsensus"]
+                low = pt.get("targetLow", 0)
+                high = pt.get("targetHigh", 0)
+                analyst_lines.append(f"[{ticker}] PT-Konsens: ${consensus:.0f} (Range: ${low:.0f}-${high:.0f})")
+
         except Exception as e:
             logger.debug(f"Analysten-Daten für {ticker} nicht verfügbar: {e}")
 
-    analyst_str = "\n".join(analyst_lines) if analyst_lines else "Keine aktuellen Analysten-Änderungen für Watchlist-Ticker."
+    if analyst_lines:
+        analyst_str = "\n".join(analyst_lines)
+        logger.info(f"Analysten-Daten: {len(analyst_lines)} Einträge für Watchlist geladen")
+    else:
+        analyst_str = "Keine aktuellen Analysten-Änderungen für Watchlist-Ticker."
+        logger.info("Keine Analysten-Daten verfügbar")
 
     # 6. Wirtschaftskalender heute
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -606,6 +622,20 @@ async def generate_morning_briefing() -> str:
     # Prompt laden und befüllen
     MORNING_PROMPT_PATH = os.path.join(ROOT_DIR, "prompts", "morning_briefing.md")
     sys_prompt, user_tmpl = _read_prompt(MORNING_PROMPT_PATH)
+
+    # Sicherheitsnetz: Alle Template-Variablen müssen definiert sein
+    if 'analyst_str' not in locals():
+        analyst_str = "Analysten-Daten nicht verfügbar."
+    if 'yesterday_str' not in locals():
+        yesterday_str = "Kein Vergleichs-Snapshot verfügbar."
+    if 'watchlist_news_str' not in locals():
+        watchlist_news_str = "Keine Watchlist-News."
+    if 'macro_events_str' not in locals():
+        macro_events_str = "Keine Makro-Events."
+    if 'general_news_str' not in locals():
+        general_news_str = "Keine allgemeinen Nachrichten."
+    if 'todays_events_str' not in locals():
+        todays_events_str = "Keine Termine heute."
 
     user_prompt = user_tmpl \
         .replace("{{date}}", datetime.now().strftime("%d.%m.%Y")) \

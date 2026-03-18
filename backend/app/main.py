@@ -25,6 +25,10 @@ from backend.app.init_db import (
     log_custom_search_terms_sql,
 )
 from backend.app.analysis.post_earnings_review import run_post_earnings_review
+from backend.app.analysis.shadow_portfolio import (
+    get_shadow_portfolio_summary,
+    get_weekly_shadow_report,
+)
 from backend.app.memory.long_term import get_insights
 from backend.app.db import get_supabase_client
 from backend.app.cache import cache_get, cache_set
@@ -143,7 +147,6 @@ async def api_finbert_analyze(text: str):
 
 from fastapi import APIRouter, Query
 from typing import List, Optional
-import pandas as pd
 
 from backend.app.data.finnhub import (
     get_earnings_calendar, get_company_news, get_short_interest, get_insider_transactions,
@@ -624,6 +627,230 @@ async def api_sparkline(ticker: str, days: int = 7):
     except Exception as e:
         logger.debug(f"Sparkline Fehler für {ticker}: {e}")
         return {"ticker": ticker, "data": []}
+
+
+@app.get("/api/shadow-portfolio")
+async def api_shadow_portfolio_summary():
+    cache_key = "shadow_portfolio_summary"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
+    result = await get_shadow_portfolio_summary()
+    cache_set(cache_key, result, ttl_seconds=120)
+    return result
+
+
+@data_router.get("/quick-snapshot/{ticker}")
+async def api_quick_snapshot(ticker: str):
+    ticker = ticker.upper().strip()
+    cache_key = f"quick_snapshot_{ticker}"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
+
+    import asyncio
+    from backend.app.data.yfinance_data import get_technical_setup
+    from backend.app.data.fmp import get_analyst_estimates, get_earnings_history
+    from backend.app.data.finnhub import get_short_interest
+    from backend.app.memory.watchlist import get_watchlist
+
+    try:
+        results = await asyncio.gather(
+            get_technical_setup(ticker),
+            get_analyst_estimates(ticker),
+            get_earnings_history(ticker, limit=4),
+            get_short_interest(ticker),
+            get_watchlist(),
+            return_exceptions=True,
+        )
+
+        tech = results[0] if not isinstance(results[0], Exception) else None
+        estimates = results[1] if not isinstance(results[1], Exception) else None
+        history = results[2] if not isinstance(results[2], Exception) else None
+        short_int = results[3] if not isinstance(results[3], Exception) else None
+        watchlist = results[4] if not isinstance(results[4], Exception) else []
+
+        is_on_watchlist = any(
+            w.get("ticker", "").upper() == ticker
+            for w in (watchlist if isinstance(watchlist, list) else [])
+        )
+
+        last_surprise = None
+        last_beat = None
+        avg_surprise = None
+        beats_of_8 = None
+        if history and not isinstance(history, Exception):
+            avg_surprise = getattr(history, "avg_surprise_percent", None)
+            beats_of_8 = getattr(history, "quarters_beat", None)
+            last_q = getattr(history, "last_quarter", None)
+            if last_q:
+                last_surprise = getattr(last_q, "eps_surprise_percent", None)
+                if last_surprise is not None:
+                    last_beat = last_surprise > 0
+
+        iv_rank = None
+        try:
+            import yfinance as yf
+            stock = yf.Ticker(ticker)
+            opts = stock.options
+            if opts:
+                nearest_exp = opts[0]
+                chain = stock.option_chain(nearest_exp)
+                calls = chain.calls
+                if not calls.empty and "impliedVolatility" in calls.columns:
+                    atm_iv = float(calls["impliedVolatility"].median()) * 100
+                    iv_rank = round(atm_iv, 1)
+        except Exception:
+            pass
+
+        snapshot = {
+            "ticker": ticker,
+            "is_on_watchlist": is_on_watchlist,
+            "price": round(tech.current_price, 2) if tech and tech.current_price else None,
+            "change_pct": None,
+            "rsi": round(tech.rsi_14, 1) if tech and tech.rsi_14 else None,
+            "trend": tech.trend if tech else None,
+            "sma_50": round(tech.sma_50, 2) if tech and tech.sma_50 else None,
+            "sma_200": round(tech.sma_200, 2) if tech and tech.sma_200 else None,
+            "high_52w": round(tech.high_52w, 2) if tech and getattr(tech, "high_52w", None) else None,
+            "low_52w": round(tech.low_52w, 2) if tech and getattr(tech, "low_52w", None) else None,
+            "next_earnings_date": str(estimates.report_date) if estimates and estimates.report_date else None,
+            "report_timing": getattr(estimates, "report_timing", None) if estimates else None,
+            "eps_consensus": estimates.eps_consensus if estimates else None,
+            "revenue_consensus": estimates.revenue_consensus if estimates else None,
+            "last_eps_surprise_pct": round(last_surprise, 1) if last_surprise is not None else None,
+            "last_beat": last_beat,
+            "avg_surprise_pct": round(avg_surprise, 1) if avg_surprise is not None else None,
+            "beats_of_8": beats_of_8,
+            "short_interest_pct": getattr(short_int, "short_interest_percent", None) if short_int else None,
+            "days_to_cover": getattr(short_int, "days_to_cover", None) if short_int else None,
+            "iv_approx": iv_rank,
+        }
+
+        if snapshot["next_earnings_date"]:
+            try:
+                from datetime import date
+                earnings_dt = date.fromisoformat(snapshot["next_earnings_date"])
+                days_until = (earnings_dt - date.today()).days
+                snapshot["earnings_countdown_days"] = days_until
+                snapshot["earnings_today"] = days_until == 0
+                snapshot["earnings_this_week"] = 0 <= days_until <= 7
+            except Exception:
+                snapshot["earnings_countdown_days"] = None
+                snapshot["earnings_today"] = False
+                snapshot["earnings_this_week"] = False
+
+        cache_set(cache_key, snapshot, ttl_seconds=300)
+        return snapshot
+    except Exception as e:
+        return {"ticker": ticker, "error": str(e), "price": None}
+
+
+@data_router.get("/earnings-radar")
+async def api_earnings_radar(days: int = 14):
+    from datetime import datetime, timedelta
+    from backend.app.data.finnhub import get_earnings_calendar
+    from backend.app.memory.watchlist import get_watchlist
+
+    cache_key = f"earnings_radar_{days}"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
+
+    now = datetime.now()
+    from_date = now.strftime("%Y-%m-%d")
+    to_date = (now + timedelta(days=days)).strftime("%Y-%m-%d")
+
+    import asyncio
+    cal_result, watchlist = await asyncio.gather(
+        get_earnings_calendar(from_date, to_date),
+        get_watchlist(),
+        return_exceptions=True,
+    )
+
+    if isinstance(cal_result, Exception):
+        return {"entries": [], "error": str(cal_result)}
+
+    watchlist = watchlist if isinstance(watchlist, list) else []
+
+    wl_tickers = {w.get("ticker", "").upper() for w in watchlist}
+    cross_signal_map: dict[str, list[str]] = {}
+    for w in watchlist:
+        for cs in (w.get("cross_signal_tickers") or []):
+            cs_upper = cs.upper()
+            if cs_upper not in cross_signal_map:
+                cross_signal_map[cs_upper] = []
+            cross_signal_map[cs_upper].append(w.get("ticker", "").upper())
+
+    entries = []
+    today_str = now.strftime("%Y-%m-%d")
+
+    for item in (cal_result if isinstance(cal_result, list) else []):
+        ticker = getattr(item, "ticker", None)
+        if not ticker:
+            continue
+        ticker = ticker.upper()
+
+        report_date = getattr(item, "date", None)
+        date_str = str(report_date) if report_date else None
+        if not date_str:
+            continue
+
+        try:
+            from datetime import date
+            dt = date.fromisoformat(date_str)
+            days_until = (dt - date.today()).days
+        except Exception:
+            days_until = None
+
+        entry = {
+            "ticker": ticker,
+            "report_date": date_str,
+            "report_timing": getattr(item, "report_timing", None),
+            "eps_consensus": getattr(item, "eps_consensus", None),
+            "revenue_consensus": getattr(item, "revenue_consensus", None),
+            "is_watchlist": ticker in wl_tickers,
+            "cross_signal_for": cross_signal_map.get(ticker, []),
+            "is_today": date_str == today_str,
+            "days_until": days_until,
+        }
+        entries.append(entry)
+
+    entries.sort(key=lambda e: (e.get("days_until") or 999))
+
+    result = {
+        "entries": entries,
+        "total": len(entries),
+        "from_date": from_date,
+        "to_date": to_date,
+        "watchlist_count": sum(1 for e in entries if e["is_watchlist"]),
+        "today_count": sum(1 for e in entries if e["is_today"]),
+    }
+
+    cache_set(cache_key, result, ttl_seconds=600)
+    return result
+
+
+@app.get("/api/shadow-portfolio/trades")
+async def api_shadow_portfolio_trades(status: str = "all"):
+    try:
+        db = get_supabase_client()
+        if db is None:
+            raise ValueError("Supabase nicht verfügbar")
+        query = db.table("shadow_trades").select("*").order("created_at", desc=True)
+        if status in ("open", "closed"):
+            query = query.eq("status", status)
+        result = query.limit(100).execute()
+        data = result.data or []
+        return {"trades": data, "count": len(data)}
+    except Exception as exc:  # noqa: BLE001
+        return {"trades": [], "count": 0, "error": str(exc)}
+
+
+@app.get("/api/shadow-portfolio/weekly-report")
+async def api_shadow_portfolio_weekly():
+    report = await get_weekly_shadow_report()
+    return {"report": report}
 
 
 @app.post("/api/signals/scan")

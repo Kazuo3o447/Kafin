@@ -10,12 +10,15 @@ import {
   LineChart,
   Terminal,
   Settings,
+  CalendarDays,
+  Search,
 } from "lucide-react";
 import { useMemo } from "react";
 
 const navItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Watchlist", href: "/watchlist", icon: ListChecks },
+  { label: "Earnings-Radar", href: "/earnings", icon: CalendarDays },
   { label: "Reports", href: "/reports", icon: FileText },
   { label: "News", href: "/news", icon: Newspaper },
   { label: "Performance", href: "/performance", icon: LineChart },
@@ -58,6 +61,23 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="mt-8">
+        <button
+          onClick={() => {
+            window.dispatchEvent(new KeyboardEvent('keydown', {
+              key: 'k', metaKey: true, bubbles: true
+            }))
+          }}
+          className="flex items-center gap-3 w-full rounded-xl px-4 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border)] transition-colors"
+        >
+          <Search size={16} className="text-[var(--text-muted)]" />
+          <span className="flex-1 text-left">Schnellsuche</span>
+          <span className="text-xs text-[var(--text-muted)] font-mono bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded border border-[var(--border)]">
+            ⌘K
+          </span>
+        </button>
+      </div>
 
       <div className="mt-auto space-y-4 rounded-xl border border-[var(--border)] bg-[var(--bg-tertiary)] p-5 text-sm">
         <div className="flex items-center gap-3">

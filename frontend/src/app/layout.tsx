@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
+import { CommandPaletteWrapper } from "@/components/CommandPaletteWrapper";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "Kafin Command Center",
@@ -21,7 +25,8 @@ export default function RootLayout({
             <div className="mx-auto max-w-7xl p-8">{children}</div>
           </main>
         </div>
-      </body>
-    </html>
+      <CommandPaletteWrapper />
+    </body>
+  </html>
   );
 }

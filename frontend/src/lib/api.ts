@@ -40,6 +40,9 @@ export const api = {
   getLongTermMemory: (ticker: string) => fetchAPI(`/api/data/long-term-memory/${ticker}`),
   getTickerTrackRecord: (ticker: string) => fetchAPI(`/api/data/ticker-track-record/${ticker}`),
   getPerformance: () => fetchAPI("/api/data/performance"),
+  getShadowPortfolio: () => fetchAPI("/api/shadow-portfolio"),
+  getShadowTrades: (status = "all") => fetchAPI(`/api/shadow-portfolio/trades?status=${status}`),
+  getShadowWeeklyReport: () => fetchAPI("/api/shadow-portfolio/weekly-report"),
 
   // Actions
   runNewsScan: () => fetchAPI("/api/news/scan", { method: "POST" }),
@@ -69,6 +72,8 @@ export const api = {
   getOhlcv: (ticker: string, period = "6mo", interval = "1d") =>
     fetchAPI(`/api/data/ohlcv/${ticker}?period=${period}&interval=${interval}`),
   getChartOverlays: (ticker: string) => fetchAPI(`/api/data/chart-overlays/${ticker}`),
+  getQuickSnapshot: (ticker: string) => fetchAPI(`/api/data/quick-snapshot/${ticker.toUpperCase()}`),
+  getEarningsRadar: (days = 14) => fetchAPI(`/api/data/earnings-radar?days=${days}`),
 
   // Google News Search Terms
   getSearchTerms: () => fetchAPI("/api/google-news/search-terms"),

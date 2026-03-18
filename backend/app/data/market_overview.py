@@ -14,6 +14,7 @@ import os
 from datetime import datetime
 from backend.app.config import settings
 from backend.app.logger import get_logger
+from backend.app.cache import cache_get, cache_set
 
 logger = get_logger(__name__)
 
@@ -147,6 +148,12 @@ async def get_market_overview() -> dict:
         except Exception:
             return {"error": "Mock-Daten nicht verfügbar"}
 
+    cache_key = "market:overview"
+    cached = cache_get(cache_key)
+    if cached:
+        logger.debug("Marktübersicht aus Cache")
+        return cached
+
     logger.info("Erstelle Marktübersicht...")
 
     result = {"timestamp": datetime.now().isoformat(), "indices": {}, "sectors": {}, "macro": {}}
@@ -182,6 +189,7 @@ async def get_market_overview() -> dict:
         result["macro"][symbol] = data
 
     logger.info("Marktübersicht erstellt.")
+    cache_set(cache_key, result, ttl_seconds=300)
     return result
 
 

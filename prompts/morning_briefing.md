@@ -52,6 +52,9 @@ NACHRICHTEN (allgemein):
 WATCHLIST-NEWS (24h, aus KI-Gedächtnis):
 {{watchlist_news}}
 
+Google News (Politik, Geopolitik, Watchlist):
+{{google_news}}
+
 MAKRO-EVENTS (48h):
 {{macro_events}}
 

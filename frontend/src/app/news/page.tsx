@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Newspaper, Play, Filter, Circle, Activity, Radar, Sparkles } from "lucide-react";
+import { Newspaper, Play, Filter, Circle, Activity, Radar, Sparkles, Globe } from "lucide-react";
 import { api } from "@/lib/api";
 
 type NewsBullet = {
@@ -20,6 +20,15 @@ type SignalItem = {
   alert_text: string;
 };
 
+type GoogleNewsItem = {
+  headline: string;
+  source: string;
+  url: string;
+  category: string;
+  related_ticker?: string;
+  sentiment_score?: number;
+};
+
 export default function NewsPage() {
   const [news, setNews] = useState<NewsBullet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,10 +37,13 @@ export default function NewsPage() {
   const [filterMaterial, setFilterMaterial] = useState(false);
   const [scanResult, setScanResult] = useState("");
   const [watchlist, setWatchlist] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<"news" | "signals">("news");
+  const [activeTab, setActiveTab] = useState<"news" | "google" | "signals">("news");
   const [signals, setSignals] = useState<SignalItem[]>([]);
   const [signalStatus, setSignalStatus] = useState<string>("");
   const [signalLoading, setSignalLoading] = useState(false);
+  const [googleNews, setGoogleNews] = useState<GoogleNewsItem[]>([]);
+  const [googleStatus, setGoogleStatus] = useState("");
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
     loadNews();
@@ -46,6 +58,28 @@ export default function NewsPage() {
       console.error("Watchlist fetch error", error);
     }
   }
+
+  async function runGoogleNewsScan() {
+    setGoogleLoading(true);
+    setGoogleStatus("Google News Scan läuft...");
+    try {
+      const result = await api.scanGoogleNews();
+      setGoogleNews(result.articles || []);
+      setGoogleStatus(`Google News Scan: ${result.count || 0} Artikel`);
+    } catch (error) {
+      console.error("Google News scan error", error);
+      setGoogleStatus("Fehler beim Google News Scan");
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
+  const googleByCategory = googleNews.reduce<Record<string, GoogleNewsItem[]>>((acc, item) => {
+    const category = item.category || "general";
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(item);
+    return acc;
+  }, {});
 
   async function runSignalScan() {
     setSignalLoading(true);
@@ -155,6 +189,9 @@ export default function NewsPage() {
     if (activeTab === "signals" && signals.length === 0 && !signalLoading) {
       runSignalScan();
     }
+    if (activeTab === "google" && googleNews.length === 0 && !googleLoading) {
+      runGoogleNewsScan();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -175,6 +212,14 @@ export default function NewsPage() {
             <Newspaper size={14} /> News
           </button>
           <button
+            onClick={() => setActiveTab("google")}
+            className={`flex items-center gap-2 rounded-full px-4 py-1 ${
+              activeTab === "google" ? "bg-[var(--accent-teal)] text-white" : "text-[var(--text-secondary)]"
+            }`}
+          >
+            <Globe size={14} /> Google News
+          </button>
+          <button
             onClick={() => setActiveTab("signals")}
             className={`flex items-center gap-2 rounded-full px-4 py-1 ${
               activeTab === "signals" ? "bg-[var(--accent-purple)] text-white" : "text-[var(--text-secondary)]"
@@ -185,7 +230,7 @@ export default function NewsPage() {
         </div>
       </div>
 
-      {activeTab === "news" ? (
+      {activeTab === "news" && (
         <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
           <div className="space-y-6">
             <div className="card p-5">
@@ -314,6 +359,14 @@ export default function NewsPage() {
                   <Play size={18} />
                   Macro Scan
                 </button>
+                <button
+                  onClick={runGoogleNewsScan}
+                  disabled={googleLoading}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-green)] px-4 py-3 text-sm font-medium text-white shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
+                >
+                  {googleLoading ? <Activity size={18} className="animate-spin" /> : <Globe size={18} />}
+                  {googleLoading ? "Google Scan läuft..." : "Google News Scan"}
+                </button>
               </div>
               {scanResult && (
                 <div className="mt-4 rounded-lg bg-[var(--bg-tertiary)] p-4 text-sm text-[var(--text-primary)]">
@@ -323,7 +376,83 @@ export default function NewsPage() {
             </div>
           </div>
         </div>
-      ) : (
+      )}
+
+      {activeTab === "google" && (
+        <div className="space-y-6">
+          <div className="card p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-[var(--text-primary)]">Google News Feed</h2>
+                <p className="text-sm text-[var(--text-secondary)]">Dynamische Headlines aus Watchlist + Custom Keywords</p>
+              </div>
+              <button
+                onClick={runGoogleNewsScan}
+                disabled={googleLoading}
+                className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-90 disabled:opacity-50"
+              >
+                {googleLoading ? <Activity size={16} className="animate-spin" /> : <Globe size={16} />}
+                {googleLoading ? "Scan läuft..." : "Google News Scan"}
+              </button>
+            </div>
+
+            {googleStatus && (
+              <div className="rounded-lg bg-[var(--bg-tertiary)] px-4 py-2 text-sm text-[var(--text-primary)]">
+                {googleStatus}
+              </div>
+            )}
+
+            {googleNews.length === 0 ? (
+              <p className="text-sm text-[var(--text-muted)]">Noch keine Google-News geladen – starte einen Scan.</p>
+            ) : (
+              <div className="space-y-4">
+                {Object.entries(googleByCategory).map(([category, items]) => (
+                  <div key={category} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <span className="badge badge-info uppercase">{category}</span>
+                      <span className="text-xs text-[var(--text-muted)]">{items.length} Artikel</span>
+                    </div>
+                    <div className="space-y-3">
+                      {items.map((item, idx) => (
+                        <div key={`${category}-${idx}`} className="rounded-xl bg-[var(--bg-tertiary)] p-4">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+                            <span className="font-medium text-[var(--text-primary)]">{item.source}</span>
+                            {item.related_ticker && <span className="badge badge-neutral">{item.related_ticker}</span>}
+                            {typeof item.sentiment_score === "number" && (
+                              <span
+                                className={`font-semibold ${
+                                  item.sentiment_score > 0.2
+                                    ? "text-[var(--accent-green)]"
+                                    : item.sentiment_score < -0.2
+                                    ? "text-[var(--accent-red)]"
+                                    : "text-[var(--text-secondary)]"
+                                }`}
+                              >
+                                {item.sentiment_score.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">{item.headline}</p>
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-2 inline-flex items-center gap-2 text-sm text-[var(--accent-blue)] hover:underline"
+                          >
+                            <Globe size={14} /> Artikel lesen
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "signals" && (
         <div className="space-y-6">
           <div className="card p-6">
             <div className="flex items-center justify-between">

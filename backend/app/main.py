@@ -21,10 +21,12 @@ from backend.app.init_db import (
     ensure_daily_snapshots_table,
     log_schema_extension_sql,
     get_schema_extension_sql,
+    log_custom_search_terms_sql,
 )
 from backend.app.analysis.post_earnings_review import run_post_earnings_review
 from backend.app.memory.long_term import get_insights
 from backend.app.db import get_supabase_client
+from backend.app.cache import cache_get, cache_set
 from schemas.base import HealthCheckResponse
 
 logger = get_logger(__name__)
@@ -66,6 +68,9 @@ async def health_check():
 async def api_admin_init_tables():
     """Gibt das SQL für Phase-4A Tabellen zurück."""
     sql = get_schema_extension_sql()
+    logger.info("Phase-4A Tabellen SQL — bitte in Supabase ausführen:")
+    logger.info("\n" + get_schema_extension_sql())
+    log_custom_search_terms_sql()
     logger.info("API Call: admin init tables SQL ausgegeben")
     return {"status": "success", "sql": sql}
 
@@ -84,7 +89,7 @@ async def api_finbert_analyze(text: str):
     score = analyze_sentiment(text)
     return {"text": text, "sentiment_score": score}
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from typing import List
 
 from backend.app.data.finnhub import (
@@ -98,6 +103,12 @@ from backend.app.data.yfinance_data import (
     get_risk_metrics, get_atm_implied_volatility, get_historical_volatility
 )
 from backend.app.analysis.scoring import calculate_quality_score, calculate_mismatch_score
+from backend.app.data.google_news import (
+    scan_google_news,
+    get_custom_search_terms,
+    add_custom_search_term,
+    remove_custom_search_term,
+)
 
 from schemas.earnings import EarningsExpectation, EarningsHistorySummary
 from schemas.sentiment import NewsBulletPoint, ShortInterestData, InsiderActivity
@@ -106,6 +117,45 @@ from schemas.macro import MacroSnapshot
 from schemas.options import OptionsData
 
 data_router = APIRouter(prefix="/api/data", tags=["data"])
+google_news_router = APIRouter(prefix="/api/google-news", tags=["google-news"])
+
+
+@google_news_router.get("/scan")
+async def api_google_news_scan():
+    """Scannt Google News und kombiniert Topics, Custom Terms und Watchlist."""
+    from backend.app.memory.watchlist import get_watchlist
+
+    watchlist = await get_watchlist()
+    wl_items = [
+        {
+            "ticker": item.get("ticker", ""),
+            "company_name": item.get("company_name", ""),
+        }
+        for item in watchlist
+    ]
+    articles = await scan_google_news(wl_items)
+    return {"status": "success", "count": len(articles), "articles": articles}
+
+
+@google_news_router.get("/search-terms")
+async def api_get_search_terms():
+    """Gibt alle aktiven benutzerdefinierten Suchbegriffe zurück."""
+    terms = await get_custom_search_terms()
+    return {"terms": terms}
+
+
+@google_news_router.post("/search-terms")
+async def api_add_search_term(term: str = Query(..., min_length=3), category: str = Query("custom")):
+    """Fügt einen neuen Suchbegriff hinzu oder reaktiviert ihn."""
+    success = await add_custom_search_term(term.strip(), category.strip() or "custom")
+    return {"status": "success" if success else "error"}
+
+
+@google_news_router.delete("/search-terms")
+async def api_remove_search_term(term: str = Query(..., min_length=3)):
+    """Deaktiviert einen bestehenden Suchbegriff."""
+    success = await remove_custom_search_term(term.strip())
+    return {"status": "success" if success else "error"}
 
 @data_router.get("/earnings-calendar", response_model=List[EarningsExpectation])
 async def api_earnings_calendar(from_date: str, to_date: str):
@@ -277,6 +327,10 @@ async def api_score_delta(ticker: str):
 async def api_sparkline(ticker: str, days: int = 7):
     """Gibt den 7-Tage-Kursverlauf für Sparkline-Charts zurück."""
     logger.info(f"API Call: sparkline for {ticker} ({days}d)")
+    cache_key = f"sparkline:{ticker.upper()}:{days}"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
     try:
         stock = yf.Ticker(ticker)
         hist = stock.history(period=f"{max(days, 2)}d")
@@ -292,7 +346,9 @@ async def api_sparkline(ticker: str, days: int = 7):
                 "date": str(date_value),
                 "price": round(float(price), 2)
             })
-        return {"ticker": ticker, "data": data[-days:]}
+        result = {"ticker": ticker, "data": data[-days:]}
+        cache_set(cache_key, result, ttl_seconds=300)
+        return result
     except Exception as e:
         logger.debug(f"Sparkline Fehler für {ticker}: {e}")
         return {"ticker": ticker, "data": []}
@@ -360,6 +416,7 @@ async def api_contrarian_opportunities(min_mismatch_score: float = 50.0):
     
     try:
         from backend.app.memory.watchlist import get_watchlist
+        from backend.app.memory.short_term import get_bullet_points
         
         watchlist = await get_watchlist()
         opportunities = []
@@ -369,7 +426,7 @@ async def api_contrarian_opportunities(min_mismatch_score: float = 50.0):
             
             try:
                 # 1. Sentiment (letzte 7 Tage)
-                news_memory = await get_memory_for_ticker(ticker)
+                news_memory = await get_bullet_points(ticker)
                 if not news_memory:
                     continue
                 
@@ -660,6 +717,70 @@ async def api_macro_calendar_scan():
     stats = await fetch_global_macro_events()
     return {"status": "success", "stats": stats}
 
+
+@news_router.post("/scan-weekend")
+async def api_news_scan_weekend():
+    """Wochenend-Scan: Nur Google News + Sentiment-Alerts, kein voller Ticker-Scan."""
+    logger.info("API Call: news-scan-weekend")
+
+    from backend.app.memory.watchlist import get_watchlist
+    from backend.app.data.google_news import scan_google_news
+    from backend.app.analysis.finbert import analyze_sentiment_batch
+    from backend.app.alerts.telegram import send_telegram_alert
+    from html import escape
+    from backend.app.data.macro_processor import fetch_global_macro_events
+
+    wl = await get_watchlist()
+    wl_items = [
+        {
+            "ticker": item.get("ticker", ""),
+            "company_name": item.get("company_name", ""),
+        }
+        for item in wl
+    ]
+
+    google_news = await scan_google_news(wl_items)
+    macro_events_saved = 0
+    try:
+        macro_stats = await fetch_global_macro_events()
+        macro_events_saved = macro_stats.get("events_saved", 0)
+    except Exception as exc:
+        logger.debug(f"Weekend Macro Fetch Fehler: {exc}")
+    alerts_sent = 0
+
+    if google_news:
+        headlines = [n["headline"] for n in google_news]
+        scores = analyze_sentiment_batch(headlines)
+        for item, score in zip(google_news, scores):
+            if abs(score) > 0.4:
+                direction = "📈" if score > 0 else "📉"
+                ticker_tag = f" [{item.get('related_ticker')}]" if item.get("related_ticker") else ""
+                url = item.get("url", "")
+                link_line = f'\n🔗 <a href="{url}">Artikel lesen</a>' if url else ""
+                headline = escape(item["headline"])
+                source = escape(item.get("source", "unbekannt"))
+                alert_text = (
+                    f"{direction} Weekend News{ticker_tag}: {headline}\n"
+                    f"Quelle: {source} | Sentiment: {score:.2f}"
+                    f"{link_line}"
+                )
+                try:
+                    await send_telegram_alert(alert_text)
+                    alerts_sent += 1
+                except Exception as exc:  # pragma: no cover
+                    logger.debug(f"Telegram Weekend Alert Fehler: {exc}")
+
+    count = len(google_news) if google_news else 0
+    logger.info(
+        f"Weekend News-Scan abgeschlossen: {count} Artikel, {alerts_sent} Alerts gesendet, Macro Events {macro_events_saved}"
+    )
+    return {
+        "status": "success",
+        "google_news_count": count,
+        "alerts_sent": alerts_sent,
+        "macro_events_saved": macro_events_saved,
+    }
+
 app.include_router(news_router)
 
 from backend.app.n8n_setup import setup_workflows
@@ -839,8 +960,9 @@ async def api_market_overview():
     overview = await fetch_market_overview()
     return overview
 
+app.include_router(admin_router)
 app.include_router(data_router)
-app.include_router(watchlist_router)
+app.include_router(google_news_router)
 app.include_router(reports_router)
 
 # Diagnostics Router

@@ -241,7 +241,7 @@ async def _generate_review(
     )
 
     try:
-        result = await call_deepseek(system_prompt, user_prompt)
+        result = await call_deepseek(system_prompt, user_prompt, model="deepseek-reasoner")
         if "---LESSONS---" in result:
             review, lessons = result.split("---LESSONS---", 1)
             return review.strip(), lessons.strip()

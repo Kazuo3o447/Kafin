@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Play, CheckCircle, XCircle, AlertTriangle, Database } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Play, CheckCircle, XCircle, AlertTriangle, Database, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 
 type DiagnosticResult = {
@@ -19,10 +19,23 @@ type DbStatus = {
   tables?: Array<{ table_name: string; row_count: number }>;
 };
 
+type SearchTerm = {
+  id?: string;
+  term: string;
+  category?: string;
+  is_active?: boolean;
+  created_at?: string;
+};
+
 export default function SettingsPage() {
   const [diagnostics, setDiagnostics] = useState<DiagnosticResult>({});
   const [dbStatus, setDbStatus] = useState<DbStatus>({});
   const [loading, setLoading] = useState(false);
+  const [termsLoading, setTermsLoading] = useState(false);
+  const [searchTerms, setSearchTerms] = useState<SearchTerm[]>([]);
+  const [newTerm, setNewTerm] = useState("");
+  const [newCategory, setNewCategory] = useState("macro");
+  const [termAction, setTermAction] = useState<string | null>(null);
 
   async function runDiagnostics() {
     setLoading(true);
@@ -43,6 +56,48 @@ export default function SettingsPage() {
             latency: `${latency}ms`
           };
         }
+
+  async function loadSearchTerms() {
+    setTermsLoading(true);
+    try {
+      const result = await api.getSearchTerms();
+      setSearchTerms(result.terms || []);
+    } catch (error) {
+      console.error("Search terms load error", error);
+    } finally {
+      setTermsLoading(false);
+    }
+  }
+
+  async function handleAddTerm() {
+    if (!newTerm.trim()) return;
+    setTermAction("add");
+    try {
+      await api.addSearchTerm(newTerm.trim(), newCategory);
+      setNewTerm("");
+      await loadSearchTerms();
+    } catch (error) {
+      alert("Fehler beim Hinzufügen des Suchbegriffs.");
+    } finally {
+      setTermAction(null);
+    }
+  }
+
+  async function handleRemoveTerm(term: string) {
+    setTermAction(term);
+    try {
+      await api.removeSearchTerm(term);
+      await loadSearchTerms();
+    } catch (error) {
+      alert("Fehler beim Entfernen des Suchbegriffs.");
+    } finally {
+      setTermAction(null);
+    }
+  }
+
+  useEffect(() => {
+    loadSearchTerms();
+  }, []);
       });
       
       setDiagnostics(resultsWithLatency);
@@ -148,6 +203,94 @@ export default function SettingsPage() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-[var(--text-primary)]">🔍 Google News Suchbegriffe</h2>
+            <p className="text-sm text-[var(--text-secondary)]">Benutzerdefinierte Suchbegriffe für den RSS-Scanner (Watchlist-Ticker werden automatisch ergänzt).</p>
+          </div>
+          <button
+            onClick={loadSearchTerms}
+            disabled={termsLoading}
+            className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-50"
+          >
+            {termsLoading ? "Lädt..." : "Reload"}
+          </button>
+        </div>
+
+        <div className="card space-y-4 p-6">
+          <div className="grid gap-4 md:grid-cols-[2fr_1fr_auto]">
+            <input
+              value={newTerm}
+              onChange={(e) => setNewTerm(e.target.value)}
+              placeholder="Suchbegriff (z.B. Federal Reserve rates)"
+              className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+            />
+            <select
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+            >
+              {["macro", "geopolitik", "sector", "earnings", "commodities", "custom"].map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleAddTerm}
+              disabled={!newTerm.trim() || termAction === "add"}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-90 disabled:opacity-50"
+            >
+              <Plus size={16} /> {termAction === "add" ? "Hinzufügen..." : "Hinzufügen"}
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-[var(--border)]">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold text-[var(--text-secondary)]">Begriff</th>
+                  <th className="px-4 py-3 text-left font-semibold text-[var(--text-secondary)]">Kategorie</th>
+                  <th className="px-4 py-3 text-left font-semibold text-[var(--text-secondary)]">Hinzugefügt</th>
+                  <th className="px-4 py-3 text-right font-semibold text-[var(--text-secondary)]">Aktionen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {termsLoading ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-[var(--text-muted)]">Lade Suchbegriffe...</td>
+                  </tr>
+                ) : searchTerms.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-[var(--text-muted)]">Noch keine benutzerdefinierten Begriffe.</td>
+                  </tr>
+                ) : (
+                  searchTerms.map((term) => (
+                    <tr key={term.id || term.term} className="border-b border-[var(--border)] hover:bg-[var(--bg-tertiary)]">
+                      <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{term.term}</td>
+                      <td className="px-4 py-3 text-[var(--text-secondary)] capitalize">{term.category || "custom"}</td>
+                      <td className="px-4 py-3 text-[var(--text-secondary)]">
+                        {term.created_at ? new Date(term.created_at).toLocaleDateString("de-DE") : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleRemoveTerm(term.term)}
+                          disabled={termAction === term.term}
+                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] disabled:opacity-50"
+                        >
+                          <Trash2 size={14} /> {termAction === term.term ? "Entferne..." : "Entfernen"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

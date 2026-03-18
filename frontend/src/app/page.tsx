@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { TrendingUp, TrendingDown, Activity, DollarSign, Percent, Circle, RefreshCw } from "lucide-react";
-import { ArrowDownRight, ArrowUpRight, Info, Calendar as CalendarIcon } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, DollarSign, Percent, Circle, RefreshCw, ArrowDownRight, ArrowUpRight, Info, Calendar as CalendarIcon } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { api } from "@/lib/api";
 

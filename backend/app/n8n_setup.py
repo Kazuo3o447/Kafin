@@ -29,14 +29,20 @@ async def setup_workflows():
     # Try basic auth first
     async with httpx.AsyncClient(base_url=N8N_URL, auth=auth, timeout=30.0) as client:
 
-        # Workflow 1: News-Pipeline alle 30 Minuten
-        news_workflow = {
-            "name": "Kafin: News-Pipeline (30min)",
+        # Workflow 1a: News-Pipeline Werktags (Mo-Fr 13:00-22:30 CET, alle 30 Minuten)
+        weekday_news_workflow = {
+            "name": "Kafin: News-Pipeline Werktags (30min)",
             "active": True,
             "nodes": [
                 {
-                    "parameters": {"rule": {"interval": [{"field": "minutes", "minutesInterval": 30}]}},
-                    "name": "Trigger: Alle 30 Minuten",
+                    "parameters": {
+                        "rule": {
+                            "interval": [
+                                {"field": "cronExpression", "expression": "*/30 13-22 * * 1-5"}
+                            ]
+                        }
+                    },
+                    "name": "Trigger: Mo-Fr 13:00-22:30 CET alle 30min",
                     "type": "n8n-nodes-base.scheduleTrigger",
                     "position": [250, 300],
                     "typeVersion": 1
@@ -45,16 +51,51 @@ async def setup_workflows():
                     "parameters": {
                         "url": "http://api:8000/api/news/scan",
                         "method": "POST",
-                        "options": {}
+                        "options": {"timeout": 120000}
                     },
-                    "name": "News-Scan ausführen",
+                    "name": "News-Scan (Werktag)",
                     "type": "n8n-nodes-base.httpRequest",
                     "position": [450, 300],
                     "typeVersion": 1
                 }
             ],
             "connections": {
-                "Trigger: Alle 30 Minuten": {"main": [[{"node": "News-Scan ausführen", "type": "main", "index": 0}]]}
+                "Trigger: Mo-Fr 13:00-22:30 CET alle 30min": {"main": [[{"node": "News-Scan (Werktag)", "type": "main", "index": 0}]]}
+            }
+        }
+
+        # Workflow 1b: News-Pipeline Wochenende (Sa-So 10/14/18/22 CET — nur Google News)
+        weekend_news_workflow = {
+            "name": "Kafin: News-Pipeline Wochenende (Google News)",
+            "active": True,
+            "nodes": [
+                {
+                    "parameters": {
+                        "rule": {
+                            "interval": [
+                                {"field": "cronExpression", "expression": "0 10,14,18,22 * * 0,6"}
+                            ]
+                        }
+                    },
+                    "name": "Trigger: Wochenende alle 4h",
+                    "type": "n8n-nodes-base.scheduleTrigger",
+                    "position": [250, 300],
+                    "typeVersion": 1
+                },
+                {
+                    "parameters": {
+                        "url": "http://api:8000/api/news/scan-weekend",
+                        "method": "POST",
+                        "options": {"timeout": 60000}
+                    },
+                    "name": "Weekend Google News Scan",
+                    "type": "n8n-nodes-base.httpRequest",
+                    "position": [450, 300],
+                    "typeVersion": 1
+                }
+            ],
+            "connections": {
+                "Trigger: Wochenende alle 4h": {"main": [[{"node": "Weekend Google News Scan", "type": "main", "index": 0}]]}
             }
         }
 
@@ -87,14 +128,14 @@ async def setup_workflows():
             }
         }
 
-        # Workflow 3: Sonntags-Report um 20:00 Uhr
+        # Workflow 3: Sonntags-Report um 19:00 Uhr
         sunday_workflow = {
             "name": "Kafin: Sonntags-Report",
             "active": True,
             "nodes": [
                 {
-                    "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "0 20 * * 0"}]}},
-                    "name": "Trigger: Sonntag 20:00",
+                    "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "0 19 * * 0"}]}},
+                    "name": "Trigger: Sonntag 19:00",
                     "type": "n8n-nodes-base.scheduleTrigger",
                     "position": [250, 300],
                     "typeVersion": 1
@@ -112,7 +153,7 @@ async def setup_workflows():
                 }
             ],
             "connections": {
-                "Trigger: Sonntag 20:00": {"main": [[{"node": "Sonntags-Report generieren", "type": "main", "index": 0}]]}
+                "Trigger: Sonntag 19:00": {"main": [[{"node": "Sonntags-Report generieren", "type": "main", "index": 0}]]}
             }
         }
 
@@ -141,7 +182,7 @@ async def setup_workflows():
                 }
             ],
             "connections": {
-                "Trigger: Mo-Fr 07:00 CET": {"main": [[{"node": "Morning Briefing generieren", "type": "main", "index": 0}]]}
+                "Trigger: Mo-Fr 08:00 CET": {"main": [[{"node": "Morning Briefing generieren", "type": "main", "index": 0}]]}
             }
         }
 
@@ -174,7 +215,7 @@ async def setup_workflows():
             }
         }
 
-        for wf in [news_workflow, sec_workflow, sunday_workflow, morning_workflow, earnings_review_workflow]:
+        for wf in [weekday_news_workflow, weekend_news_workflow, sec_workflow, sunday_workflow, morning_workflow, earnings_review_workflow]:
             try:
                 response = await client.post("/api/v1/workflows", json=wf)
                 if response.status_code in (200, 201):

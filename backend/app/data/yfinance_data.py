@@ -16,6 +16,7 @@ from schemas.technicals import TechnicalSetup, OptionsMetrics
 from schemas.options import OptionsData, OptionChainSummary
 from backend.app.config import settings
 from backend.app.logger import get_logger
+from backend.app.cache import cache_get, cache_set
 import numpy as np
 
 logger = get_logger(__name__)
@@ -33,6 +34,12 @@ async def get_technical_setup(ticker: str) -> TechnicalSetup:
             return TechnicalSetup(**data)
         except Exception:
             return TechnicalSetup(ticker=ticker, current_price=0.0)
+
+    cache_key = f"yf:technicals:{ticker.upper()}"
+    cached = cache_get(cache_key)
+    if cached:
+        logger.debug(f"yfinance Cache-Hit für {ticker}")
+        return TechnicalSetup(**cached)
 
     try:
         stock = yf.Ticker(ticker)
@@ -66,7 +73,7 @@ async def get_technical_setup(ticker: str) -> TechnicalSetup:
 
         distance_to_52w_high = ((current_price - high_52w) / high_52w) * 100 if high_52w else None
 
-        return TechnicalSetup(
+        result = TechnicalSetup(
             ticker=ticker,
             current_price=current_price,
             sma_50=round(sma_50, 2) if sma_50 else None,
@@ -79,6 +86,8 @@ async def get_technical_setup(ticker: str) -> TechnicalSetup:
             above_sma50=current_price > sma_50 if sma_50 else False,
             above_sma200=current_price > sma_200 if sma_200 else False,
         )
+        cache_set(cache_key, result.dict(), ttl_seconds=300)
+        return result
     except Exception as e:
         logger.error(f"yfinance Fehler für {ticker}: {e}")
         return TechnicalSetup(ticker=ticker, current_price=0.0)
@@ -331,6 +340,12 @@ async def get_fundamentals_yf(ticker: str) -> Optional[dict]:
             "number_of_analysts": 45,
         }
 
+    cache_key = f"yf:fundamentals:{ticker.upper()}"
+    cached = cache_get(cache_key)
+    if cached:
+        logger.debug(f"yfinance Fundamentals Cache-Hit für {ticker}")
+        return cached
+
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
@@ -338,7 +353,7 @@ async def get_fundamentals_yf(ticker: str) -> Optional[dict]:
         if not info or not info.get("regularMarketPrice"):
             return None
 
-        return {
+        result = {
             "pe_ratio": info.get("trailingPE") or info.get("forwardPE"),
             "ps_ratio": info.get("priceToSalesTrailing12Months"),
             "market_cap": info.get("marketCap"),
@@ -356,6 +371,8 @@ async def get_fundamentals_yf(ticker: str) -> Optional[dict]:
             "analyst_recommendation": info.get("recommendationKey"),
             "number_of_analysts": info.get("numberOfAnalystOpinions"),
         }
+        cache_set(cache_key, result, ttl_seconds=3600)
+        return result
     except Exception as e:
         logger.error(f"yfinance Fundamentals Fehler für {ticker}: {e}")
         return None

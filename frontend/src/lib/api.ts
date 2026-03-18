@@ -39,9 +39,11 @@ export const api = {
 
   // Actions
   runNewsScan: () => fetchAPI("/api/news/scan", { method: "POST" }),
+  runNewsScanWeekend: () => fetchAPI("/api/news/scan-weekend", { method: "POST" }),
   runSecScan: () => fetchAPI("/api/news/sec-scan", { method: "POST" }),
   runMacroScan: () => fetchAPI("/api/news/macro-scan", { method: "POST" }),
   runSignalScan: () => fetchAPI("/api/signals/scan", { method: "POST" }),
+  scanGoogleNews: () => fetchAPI("/api/google-news/scan"),
   setupN8n: () => fetchAPI("/api/n8n/setup", { method: "POST" }),
 
   // Diagnostics
@@ -60,4 +62,13 @@ export const api = {
   getSparkline: (ticker: string, days = 7) => fetchAPI(`/api/data/sparkline/${ticker}?days=${days}`),
   getChartAnalysis: (ticker: string) => fetchAPI(`/api/chart-analysis/${ticker}`),
   getChartAnalysisTop: (limit = 5) => fetchAPI(`/api/chart-analysis-top?limit=${limit}`),
+
+  // Google News Search Terms
+  getSearchTerms: () => fetchAPI("/api/google-news/search-terms"),
+  addSearchTerm: (term: string, category = "custom") =>
+    fetchAPI(`/api/google-news/search-terms?term=${encodeURIComponent(term)}&category=${encodeURIComponent(category)}`, {
+      method: "POST",
+    }),
+  removeSearchTerm: (term: string) =>
+    fetchAPI(`/api/google-news/search-terms?term=${encodeURIComponent(term)}`, { method: "DELETE" }),
 };

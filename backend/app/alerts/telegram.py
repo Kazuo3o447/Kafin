@@ -26,7 +26,8 @@ async def _send_message_sync(text: str, token: str, chat_id: str) -> bool:
     payload = {
         "chat_id": chat_id,
         "text": text,
-        "parse_mode": "HTML"
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
     }
     
     async with httpx.AsyncClient() as client:
@@ -62,18 +63,25 @@ def format_torpedo_alert(ticker: str, score: float, reasons: List[str]) -> str:
         
     return alert_text
 
-def format_narrative_shift_alert(ticker: str, shift_type: str, reasoning: str, headline: str, url: str) -> str:
+def format_narrative_shift_alert(ticker: str, shift_type: str, reasoning: str, headline: str, url: str, rss_url: str = "") -> str:
     """Formatiert einen priorisierten Alert für einen fundamentalen Narrative Shift."""
+    from html import escape
+    
+    ticker_safe = escape(ticker)
+    shift_type_safe = escape(shift_type)
+    headline_safe = escape(headline)
+    reasoning_safe = escape(reasoning) if reasoning else ""
+    
     if shift_type == "Strategic-Downsizing":
         alert_text = f"🚨 <b>TORPEDO-ALERT: INVESTITIONS-RÜCKBAU</b> 🚨\n"
-        alert_text += f"Ticker: <b>{ticker}</b>\n\n"
+        alert_text += f"Ticker: <b>{ticker_safe}</b>\n\n"
     else:
         alert_text = f"🌀 <b>NARRATIVE SHIFT ERKANNT</b> 🌀\n"
-        alert_text += f"Ticker: <b>{ticker}</b> | Typ: <i>{shift_type}</i>\n\n"
+        alert_text += f"Ticker: <b>{ticker_safe}</b> | Typ: <i>{shift_type_safe}</i>\n\n"
         
-    alert_text += f"<b>Headline:</b> {headline}\n"
-    if reasoning:
-        alert_text += f"<b>KI Analyse:</b> <i>{reasoning}</i>\n"
+    alert_text += f"<b>Headline:</b> {headline_safe}\n"
+    if reasoning_safe:
+        alert_text += f"<b>KI Analyse:</b> <i>{reasoning_safe}</i>\n"
         
     if url:
         alert_text += f"\n<a href='{url}'>Zur Meldung</a>"

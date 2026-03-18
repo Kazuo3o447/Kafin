@@ -88,6 +88,29 @@ CREATE TABLE IF NOT EXISTS score_history (
 );
 """
 
+CUSTOM_SEARCH_TERMS_SQL = """
+CREATE TABLE IF NOT EXISTS custom_search_terms (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    term TEXT NOT NULL UNIQUE,
+    category TEXT DEFAULT 'custom',
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+INSERT INTO custom_search_terms (term, category) VALUES
+    ('Federal Reserve interest rates', 'macro'),
+    ('US tariffs trade war', 'geopolitik'),
+    ('sanctions geopolitical', 'geopolitik'),
+    ('oil OPEC production', 'commodities'),
+    ('inflation CPI consumer prices', 'macro'),
+    ('jobs NFP unemployment', 'macro'),
+    ('earnings season results', 'earnings'),
+    ('recession economic slowdown', 'macro'),
+    ('US China relations', 'geopolitik'),
+    ('semiconductor chip shortage', 'sector')
+ON CONFLICT (term) DO NOTHING;
+"""
+
 
 def get_schema_extension_sql() -> str:
     """Gibt das SQL für Phase-4A-Tabellen zurück."""
@@ -98,6 +121,41 @@ def log_schema_extension_sql():
     """Loggt das benötigte SQL, damit es im Supabase Dashboard ausgeführt werden kann."""
     logger.info("Phase-4A Tabellen SQL — bitte in Supabase ausführen:")
     logger.info("\n" + get_schema_extension_sql())
+    logger.info("\nScore History SQL (für delta tracking):\n"
+                "CREATE TABLE IF NOT EXISTS score_history (\n"
+                "    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,\n"
+                "    ticker TEXT NOT NULL,\n"
+                "    date DATE NOT NULL,\n"
+                "    opportunity_score FLOAT,\n"
+                "    torpedo_score FLOAT,\n"
+                "    price FLOAT,\n"
+                "    rsi FLOAT,\n"
+                "    trend TEXT,\n"
+                "    created_at TIMESTAMP DEFAULT NOW(),\n"
+                "    UNIQUE(ticker, date)\n"
+                ");")
+
+
+def get_custom_search_terms_sql() -> str:
+    """Gibt das SQL für benutzerdefinierte News-Suchbegriffe zurück."""
+    return CUSTOM_SEARCH_TERMS_SQL.strip()
+
+
+def log_custom_search_terms_sql():
+    """Loggt das SQL für die custom_search_terms-Tabelle zur manuellen Ausführung."""
+    logger.info("Custom Search Terms SQL — bitte in Supabase ausführen:")
+    logger.info("\n" + get_custom_search_terms_sql())
+    logger.info("\nNarrative Shift Migration SQL — bitte in Supabase ausführen:")
+    logger.info("""
+ALTER TABLE short_term_memory 
+ADD COLUMN IF NOT EXISTS url TEXT,
+ADD COLUMN IF NOT EXISTS is_narrative_shift BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS shift_type TEXT,
+ADD COLUMN IF NOT EXISTS shift_confidence FLOAT,
+ADD COLUMN IF NOT EXISTS shift_reasoning TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_stm_narrative_shift ON short_term_memory(ticker, is_narrative_shift) WHERE is_narrative_shift = true;
+    """)
 
 
 async def ensure_daily_snapshots_table():

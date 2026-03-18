@@ -19,6 +19,7 @@ from backend.app.logger import get_logger
 from backend.app.alerts.telegram import send_telegram_alert
 from backend.app.memory.watchlist import get_watchlist
 from backend.app.db import get_supabase_client
+from backend.app.cache import cache_get, cache_set
 
 logger = get_logger(__name__)
 
@@ -50,6 +51,10 @@ async def _check_ticker_signals(ticker: str) -> List[Dict]:
     signals: List[Dict] = []
 
     try:
+        cache_key = f"signals:{ticker.upper()}"
+        if cache_get(cache_key):
+            return []
+
         stock = yf.Ticker(ticker)
         hist = stock.history(period="1mo")
         if hist.empty or len(hist) < 5:
@@ -175,8 +180,10 @@ async def _check_ticker_signals(ticker: str) -> List[Dict]:
                                 "→ Risiko hat sich deutlich erhöht!"
                             ),
                         })
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"Score-History Check {ticker}: {exc}")
+
+        cache_set(cache_key, True, ttl_seconds=300)
 
     except Exception as exc:  # noqa: BLE001
         logger.debug(f"Signal-Check für {ticker} fehlgeschlagen: {exc}")

@@ -105,7 +105,7 @@ async def scan_upcoming_opportunities(days_ahead: int = 7, max_results: int = 5)
     top = candidates[:max_results]
 
     if top:
-        top = await _enrich_with_analysis(top)
+        await _enrich_with_analysis(top)
 
     logger.info(f"Opportunity-Scanner: {len(top)} Kandidaten gefunden")
     return top
@@ -131,10 +131,9 @@ async def _enrich_with_analysis(candidates: List[Dict]) -> List[Dict]:
             "Du bist ein Trader-Scout. Bewerte Earnings-Setups kurz und präzise.",
             prompt,
         )
-        if candidates:
-            candidates[0]["analysis_full"] = result
-        for c in candidates:
-            c["analysis"] = "Analyse verfügbar"
+        summaries = [line for line in result.split("\n") if line.strip()]
+        for idx, c in enumerate(candidates):
+            c["analysis"] = summaries[idx] if idx < len(summaries) else "Analyse verfügbar"
     except Exception as exc:  # noqa: BLE001
         logger.debug(f"Opportunity-Analyse Fehler: {exc}")
         for c in candidates:

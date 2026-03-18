@@ -151,7 +151,8 @@ async def process_news_for_ticker(ticker: str) -> dict:
                     shift_type=shift_type,
                     reasoning=shift_reasoning,
                     headline=news_item.headline,
-                    url=getattr(news_item, "url", "")
+                    url=getattr(news_item, "url", ""),
+                    rss_url=getattr(news_item, "rss_url", "")
                 )
                 await send_telegram_alert(alert_text)
                 stats["alerts_sent"] += 1
@@ -273,8 +274,6 @@ async def run_news_pipeline(tickers: list[str]) -> list[dict]:
     total_fetched = sum(r["total_fetched"] for r in results)
     total_relevant = sum(r["passed_finbert"] for r in results)
     total_alerts = sum(r["alerts_sent"] for r in results)
-
-    logger.info(f"News-Pipeline abgeschlossen: {total_fetched} geholt, {total_relevant} relevant, {total_alerts} Alerts")
     
     # -------------------------------------------------------------
     # MAKRO-KALENDER: Globale Events unter GENERAL_MACRO speichern
@@ -294,6 +293,89 @@ async def run_news_pipeline(tickers: list[str]) -> list[dict]:
         await check_torpedo_updates()
     except Exception as e:
         logger.error(f"Fehler im Torpedo-Monitor: {e}")
+
+    # -------------------------------------------------------------
+    # GOOGLE NEWS: Dynamische Suche + Alerts + Memory
+    # -------------------------------------------------------------
+    google_news_results = []
+    google_alerts_sent = 0
+    try:
+        from backend.app.data.google_news import scan_google_news
+        from backend.app.memory.watchlist import get_watchlist as get_wl_for_gnews
+
+        wl_for_gnews = await get_wl_for_gnews()
+        wl_items = [
+            {"ticker": item.get("ticker", ""), "company_name": item.get("company_name", "")}
+            for item in wl_for_gnews
+        ]
+        raw_google_news = await scan_google_news(wl_items)
+
+        if raw_google_news:
+            from backend.app.analysis.finbert import analyze_sentiment_batch
+
+            headlines = [n["headline"] for n in raw_google_news]
+            scores = analyze_sentiment_batch(headlines)
+
+            relevance_threshold = 0.15
+            for news_item, score in zip(raw_google_news, scores):
+                if abs(score) >= relevance_threshold:
+                    google_news_results.append({**news_item, "sentiment_score": score})
+
+            logger.info(
+                f"Google News: {len(raw_google_news)} gescannt, {len(google_news_results)} relevant nach FinBERT"
+            )
+
+            from backend.app.memory.short_term import save_bullet_points
+
+            for gn in google_news_results:
+                related_ticker = gn.get("related_ticker", "GENERAL_MACRO") or "GENERAL_MACRO"
+                try:
+                    await save_bullet_points(
+                        ticker=related_ticker,
+                        date=datetime.now(),
+                        source=f"google_news:{gn.get('source', 'unknown')}",
+                        bullet_points=[gn["headline"]],
+                        sentiment_score=gn["sentiment_score"],
+                        category=gn.get("category", "general"),
+                        url=gn.get("url", "") or gn.get("rss_url", ""),
+                        is_material=abs(gn["sentiment_score"]) > 0.5,
+                    )
+                except Exception as e:
+                    logger.debug(f"Google News Speicher-Fehler: {e}")
+
+            strong_news = [gn for gn in google_news_results if abs(gn["sentiment_score"]) > 0.4]
+            if strong_news:
+                from html import escape
+
+                for gn in strong_news[:5]:
+                    direction = "📈" if gn["sentiment_score"] > 0 else "📉"
+                    related = gn.get("related_ticker")
+                    ticker_tag = f" [{related}]" if related and related != "GENERAL_MACRO" else ""
+                    url = gn.get("url", "") or gn.get("rss_url", "")
+                    headline = escape(gn["headline"])
+                    source = escape(gn.get("source", "unbekannt"))
+                    link_line = f'\n🔗 <a href="{url}">Artikel lesen</a>' if url else ""
+                    alert_text = (
+                        f"{direction} News{ticker_tag}: {headline}\n"
+                        f"Quelle: {source} | Sentiment: {gn['sentiment_score']:.2f}"
+                        f"{link_line}"
+                    )
+                    try:
+                        from backend.app.alerts.telegram import send_telegram_alert
+
+                        await send_telegram_alert(alert_text)
+                        google_alerts_sent += 1
+                    except Exception:
+                        pass
+
+    except Exception as e:
+        logger.warning(f"Google News Pipeline-Fehler: {e}")
+
+    total_google = len(google_news_results)
+    total_alerts += google_alerts_sent
+    logger.info(
+        f"News-Pipeline komplett: Finnhub={total_fetched} relevant={total_relevant}, Google News={total_google}, Alerts={total_alerts}"
+    )
 
     # -------------------------------------------------------------
     # SIGNAL-SCANNER: Technische & Score-basierte Alerts

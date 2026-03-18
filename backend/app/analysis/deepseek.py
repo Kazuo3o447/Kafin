@@ -15,7 +15,13 @@ def _load_deepseek_config():
         config = yaml.safe_load(f)
         return config.get("deepseek", {})
 
-async def call_deepseek(system_prompt: str, user_prompt: str) -> str:
+async def call_deepseek(
+    system_prompt: str,
+    user_prompt: str,
+    model: str = "deepseek-chat",
+    temperature: float = 0.3,
+    max_tokens: int = 4096,
+) -> str:
     if settings.use_mock_data:
         logger.info("[MOCK] DeepSeek called via use_mock_data")
         return "MOCK_REPORT: Da use_mock_data aktiv ist, wird kein echter Request an DeepSeek gesendet.\nDies ist eine Platzhalter-Antwort."
@@ -27,10 +33,15 @@ async def call_deepseek(system_prompt: str, user_prompt: str) -> str:
         logger.error("DEEPSEEK_API_KEY is not set.")
         return "ERROR: DEEPSEEK_API_KEY is missing."
 
-    model = configs.get("model", "deepseek-chat")
+    if not model:
+        model = configs.get("model", "deepseek-chat")
     base_url = configs.get("base_url", "https://api.deepseek.com/1")
-    max_tokens = configs.get("max_tokens", 2000)
-    temperature = configs.get("temperature", 0.7)
+    if not max_tokens:
+        max_tokens = configs.get("max_tokens", 2000)
+    if model == "deepseek-chat" and temperature is None:
+        temperature = configs.get("temperature", 0.7)
+    if model == "deepseek-reasoner":
+        temperature = 0.0
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -44,7 +55,8 @@ async def call_deepseek(system_prompt: str, user_prompt: str) -> str:
             {"role": "user", "content": user_prompt}
         ],
         "temperature": temperature,
-        "max_tokens": max_tokens
+        "max_tokens": max_tokens,
+        "stream": False,
     }
 
     # very simple retry backoff
@@ -71,8 +83,11 @@ async def call_deepseek(system_prompt: str, user_prompt: str) -> str:
                 # Logging limits & tokens
                 usage = data.get("usage", {})
                 logger.info(f"DeepSeek success. Tokens: {usage.get('total_tokens', 'N/A')}")
-                
-                return data["choices"][0]["message"]["content"]
+                message = data["choices"][0]["message"]
+                reasoning = message.get("reasoning_content")
+                if reasoning:
+                    logger.debug(f"DeepSeek Reasoner Denkprozess: {len(reasoning)} Zeichen")
+                return message.get("content", "")
                 
         except Exception as e:
             logger.warning(f"DeepSeek call failed (attempt {attempt+1}): {str(e)}")

@@ -117,7 +117,7 @@ async def generate_macro_header() -> str:
 
     logger.debug(f"Makro-Prompt an DeepSeek:\n{user_prompt[:500]}...")
 
-    result = await call_deepseek(sys_prompt, user_prompt)
+    result = await call_deepseek(sys_prompt, user_prompt, model="deepseek-reasoner")
     return result
 
 async def generate_audit_report(ticker: str) -> str:
@@ -225,6 +225,17 @@ async def generate_audit_report(ticker: str) -> str:
     from backend.app.memory.short_term import get_bullet_points
     news_memory = await get_bullet_points(ticker)
     
+    google_news_for_ticker: list[str] = []
+    if news_memory:
+        for nm in news_memory:
+            source = str(nm.get("source", ""))
+            if source.startswith("google_news:"):
+                bp_data = nm.get("bullet_points", [])
+                if isinstance(bp_data, list):
+                    google_news_for_ticker.extend(bp_data)
+                elif isinstance(bp_data, str):
+                    google_news_for_ticker.append(bp_data)
+    
     news_list = None
     if not news_memory:
         news_list = await get_company_news(ticker, month_ago.strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d"))
@@ -263,6 +274,18 @@ async def generate_audit_report(ticker: str) -> str:
     torp_score = await calculate_torpedo_score(ticker, data_ctx)
     rec = await get_recommendation(opp_score, torp_score)
     
+    # 2.5 Langzeit-Gedächtnis laden
+    lt_memory = ""
+    try:
+        lt_insights = await get_all_insights_for_report(ticker)
+        if lt_insights:
+            lt_memory = "\n".join([f"- {ins.get('insight_text', '')}" for ins in lt_insights[:5]])
+        else:
+            lt_memory = "Keine Langzeit-Insights vorhanden."
+    except Exception as e:
+        logger.debug(f"Langzeit-Gedächtnis für {ticker}: {e}")
+        lt_memory = "Langzeit-Gedächtnis nicht verfügbar."
+    
     # 3. Prompt replacement
     sys_prompt, user_tmpl = _read_prompt(AUDIT_PROMPT_PATH)
     
@@ -292,6 +315,10 @@ async def generate_audit_report(ticker: str) -> str:
              news_str = "Keine relevanten Nachrichten in den letzten 30 Tagen."
     else:
         news_str = "\n".join([f"- {n.headline}: {n.summary[:100]}..." for n in news_list[:5]]) if news_list else "Keine relevanten Nachrichten in den letzten 30 Tagen."
+
+    if google_news_for_ticker:
+        gn_str = "\n".join([f"- [Google News] {headline}" for headline in google_news_for_ticker[:5]])
+        news_str = f"{news_str}\n\nGoogle News (extern):\n{gn_str}"
     
     # Letzte Earnings aus History extrahieren
     last_actual = "N/A"
@@ -408,7 +435,7 @@ async def generate_audit_report(ticker: str) -> str:
         .replace("{{opportunity_score}}", str(opp_score.total_score if opp_score else 0.0)) \
         .replace("{{torpedo_score}}", str(torp_score.total_score if torp_score else 0.0))
         
-    result = await call_deepseek(sys_prompt, user_prompt)
+    result = await call_deepseek(sys_prompt, user_prompt, model="deepseek-reasoner")
     if "MOCK_REPORT:" in result:
         # Erweitere den Mock-Bericht um unsere Daten zur Validierung
         mock_response = f"{result}\n\n[MOCK DATA CHECK]\nTicker: {ticker}\nEmpfehlung: {rec.recommendation if rec else 'N/A'} ({rec.reasoning if rec else 'N/A'})\nOS: {opp_score.total_score if opp_score else 0.0} | TS: {torp_score.total_score if torp_score else 0.0}"
@@ -553,45 +580,39 @@ async def generate_weekly_summary() -> str:
     return result
 
 async def generate_sunday_report(tickers: list[str]) -> str:
-    """
-    Erstellt den wöchentlichen kompletten Sunday-Report, der den 
-    Makro-Header sowie die Audit-Reports der abgefragten Ticker aggregiert.
-    """
-    logger.info(f"Sunday Report: {len(tickers)} Ticker erhalten: {tickers}")
-    
-    # Pre-Flight Check: Makro-Events für die nächste Woche holen und ins Gedächtnis schreiben
-    try:
-        from backend.app.data.macro_processor import fetch_global_macro_events
-        await fetch_global_macro_events()
-        logger.info("Pre-Flight Check: fetch_global_macro_events abgeschlossen.")
-    except Exception as e:
-        logger.error(f"Fehler beim Pre-Flight Check (Wirtschaftskalender): {e}")
+    """Wöchentlicher Audit-Report nur für Watchlist-Ticker."""
+    logger.info(f"Sunday Audit Report: {len(tickers)} Ticker: {tickers}")
 
     if not tickers:
-        logger.warning("Keine Ticker für Audit-Reports. Prüfe Watchlist.")
-    
-    # 1. Makro-Header
-    header = await generate_macro_header()
-    
-    # 2. Wochenzusammenfassung (NEU)
-    weekly = await generate_weekly_summary()
-    
-    # 3. Audit-Reports
+        logger.warning("Keine Ticker für Audit-Reports.")
+        return "# KAFIN SONNTAGS-AUDIT\n\nKeine Ticker in der Watchlist."
+
+    performance_summary = ""
+    try:
+        db = get_supabase_client()
+        if db:
+            perf = db.table("performance_tracking").select("*").order("period", desc=True).limit(1).execute()
+            if perf.data:
+                p = perf.data[0]
+                accuracy = p.get("accuracy_percent", 0)
+                total = p.get("total_predictions", 0)
+                performance_summary = f"Bisherige Trefferquote: {accuracy:.0f}% ({total} Reviews)"
+    except Exception as exc:
+        logger.debug(f"Performance Summary nicht verfügbar: {exc}")
+
     reports = []
     for t in tickers:
         try:
-            r = await generate_audit_report(t)
-            reports.append(r)
+            reports.append(await generate_audit_report(t))
         except Exception as e:
             logger.error(f"Audit-Report für {t} fehlgeschlagen: {e}")
             reports.append(f"## {t}\n\nReport-Generierung fehlgeschlagen: {str(e)}")
-        
-    full_report = f"# KAFIN SONNTAGS-REPORT\n\n"
-    full_report += f"## MAKRO-REGIME\n\n{header}\n\n---\n\n"
-    full_report += f"## WOCHENZUSAMMENFASSUNG\n\n{weekly}\n\n---\n\n"
-    full_report += f"## AUDIT-REPORTS\n\n"
+
+    full_report = "# KAFIN SONNTAGS-AUDIT\n\n"
+    if performance_summary:
+        full_report += f"📊 {performance_summary}\n\n---\n\n"
+    full_report += "## AUDIT-REPORTS\n\n"
     full_report += "\n\n---\n\n".join(reports)
-    
     return full_report
 
 
@@ -637,9 +658,38 @@ async def generate_morning_briefing() -> str:
     # 3. Allgemeine Nachrichten (Geopolitik, Politik)
     general_news = await get_general_market_news()
 
-    # 4. Watchlist-News aus dem Gedächtnis (letzte 24h)
     wl = await get_watchlist()
     wl_tickers = [item["ticker"] for item in wl]
+
+    # 3b. Google News (Politik, Geopolitik, Watchlist-spezifisch)
+    google_news_str = "Keine Google News verfügbar."
+    try:
+        from backend.app.data.google_news import scan_google_news
+
+        wl_items = [
+            {"ticker": item.get("ticker", ""), "company_name": item.get("company_name", "")}
+            for item in wl
+        ]
+        google_results = await scan_google_news(wl_items)
+
+        if google_results:
+            by_category = {}
+            for gn in google_results[:20]:
+                cat = gn.get("category", "general")
+                if cat not in by_category:
+                    by_category[cat] = []
+                by_category[cat].append(f"[{gn.get('source', '??')}] {gn['headline']}")
+
+            lines = []
+            for cat, items in by_category.items():
+                lines.append(f"--- {cat.upper()} ---")
+                for item in items[:5]:
+                    lines.append(f"  - {item}")
+            google_news_str = "\n".join(lines)
+    except Exception as e:
+        logger.debug(f"Google News für Morning Briefing: {e}")
+
+    # 4. Watchlist-News aus dem Gedächtnis (letzte 24h)
     watchlist_news = []
     for ticker in wl_tickers:
         bullets = await get_bullet_points(ticker)
@@ -780,6 +830,81 @@ async def generate_morning_briefing() -> str:
     if 'todays_events_str' not in locals():
         todays_events_str = "Keine Termine heute."
 
+    # Contrarian-Setups laden (falls vorhanden) - inline um Circular Import zu vermeiden
+    contrarian_str = "Keine Contrarian-Opportunities gefunden."
+    try:
+        from backend.app.memory.short_term import get_bullet_points as get_memory_for_ticker
+        from backend.app.data.yfinance_data import get_risk_metrics
+        from backend.app.data.fmp import get_key_metrics
+        from backend.app.data.yfinance_data import get_atm_implied_volatility
+        from backend.app.analysis.scoring import calculate_quality_score, calculate_mismatch_score
+        
+        opportunities = []
+        for item in wl[:5]:  # Nur Top 5 prüfen für Performance
+            ticker = item.get("ticker")
+            try:
+                news_memory = await get_memory_for_ticker(ticker)
+                if not news_memory:
+                    continue
+                recent_bullets = news_memory[:7]
+                sentiment_scores = [b.get("sentiment_score", 0) for b in recent_bullets if b.get("sentiment_score") is not None]
+                if not sentiment_scores:
+                    continue
+                avg_sentiment = sum(sentiment_scores) / len(sentiment_scores)
+                if avg_sentiment >= -0.5:
+                    continue
+                risk_data = await get_risk_metrics(ticker)
+                beta = risk_data.get("beta")
+                if beta is None or beta < 1.2:
+                    continue
+                key_metrics = await get_key_metrics(ticker)
+                if not key_metrics:
+                    continue
+                quality_score = calculate_quality_score(
+                    debt_to_equity=key_metrics.debt_to_equity,
+                    current_ratio=key_metrics.current_ratio,
+                    free_cash_flow_yield=key_metrics.free_cash_flow_yield,
+                    pe_ratio=key_metrics.pe_ratio
+                )
+                if quality_score < 6.0:
+                    continue
+                options_data = await get_atm_implied_volatility(ticker)
+                iv_atm = options_data.implied_volatility_atm if options_data else None
+                hist_vol = options_data.historical_volatility if options_data else None
+                mismatch_score = calculate_mismatch_score(
+                    sentiment_score=avg_sentiment,
+                    quality_score=quality_score,
+                    beta=beta,
+                    iv_atm=iv_atm,
+                    hist_vol=hist_vol
+                )
+                if mismatch_score < 50.0:
+                    continue
+                material_count = sum(1 for b in recent_bullets if b.get("is_material", False))
+                opportunities.append({
+                    "ticker": ticker,
+                    "mismatch_score": mismatch_score,
+                    "sentiment_7d": round(avg_sentiment, 2),
+                    "quality_score": quality_score,
+                    "beta": beta,
+                    "material_news_count": material_count,
+                })
+            except Exception:
+                continue
+        
+        if opportunities:
+            opportunities.sort(key=lambda x: x["mismatch_score"], reverse=True)
+            contrarian_lines = []
+            for opp in opportunities[:3]:
+                contrarian_lines.append(
+                    f"• {opp['ticker']} — Mismatch: {opp['mismatch_score']:.0f}/100 | "
+                    f"Beta: {opp['beta']:.1f} | Quality: {opp['quality_score']:.1f}/10 | "
+                    f"Sentiment 7T: {opp['sentiment_7d']:.2f} ({opp['material_news_count']} Material Events)"
+                )
+            contrarian_str = "\n".join(contrarian_lines)
+    except Exception as e:
+        logger.debug(f"Contrarian-Opportunities nicht verfügbar: {e}")
+
     user_prompt = user_tmpl \
         .replace("{{date}}", datetime.now().strftime("%d.%m.%Y")) \
         .replace("{{index_data}}", index_str) \
@@ -793,9 +918,11 @@ async def generate_morning_briefing() -> str:
         .replace("{{analyst_ratings}}", analyst_str) \
         .replace("{{general_news}}", general_news_str) \
         .replace("{{watchlist_news}}", watchlist_news_str) \
+        .replace("{{google_news}}", google_news_str) \
         .replace("{{macro_events}}", macro_events_str) \
         .replace("{{todays_events}}", todays_events_str) \
-        .replace("{{yesterday_snapshot}}", yesterday_str)
+        .replace("{{yesterday_snapshot}}", yesterday_str) \
+        .replace("{{contrarian_setups}}", contrarian_str)
 
     # Platzhalter-Check
     if "{{" in user_prompt:

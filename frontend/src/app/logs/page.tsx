@@ -1,13 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { RefreshCw, Circle } from "lucide-react";
+import { Info, AlertTriangle, XCircle, Circle, Filter, Download, Search, RefreshCw } from "lucide-react";
+import { api } from "@/lib/api";
 
 type LogEntry = {
   timestamp?: string;
   level?: string;
   logger?: string;
   event?: string;
+  source?: string;
+  ticker?: string;
 };
 
 export default function LogsPage() {
@@ -15,24 +18,16 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [activeFilter, setActiveFilter] = useState<string>("all");
-
-  useEffect(() => {
-    loadLogs();
-    if (autoRefresh) {
-      const interval = setInterval(() => {
-        loadLogs();
-      }, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [autoRefresh]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [severityFilter, setSeverityFilter] = useState<string>("all");
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
   async function loadLogs() {
     setLoading(true);
     try {
-      const result = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/logs`).then((r) =>
-        r.json()
-      );
-      setLogs(result.logs || []);
+      const data = await api.getLogs();
+      setLogs(data);
+      setLastUpdate(new Date());
     } catch (error) {
       console.error("Logs fetch error", error);
     } finally {
@@ -40,9 +35,49 @@ export default function LogsPage() {
     }
   }
 
+  useEffect(() => {
+    loadLogs();
+  }, []);
+
+  // Auto-Refresh alle 5 Sekunden
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const interval = setInterval(() => {
+      loadLogs();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [autoRefresh]);
+
+  const exportLogs = () => {
+    const dataStr = JSON.stringify(filteredLogs, null, 2);
+    const dataBlob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `kafin-logs-${new Date().toISOString()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const filteredLogs = logs.filter((log) => {
-    if (activeFilter === "all") return true;
-    return log.level === activeFilter;
+    // Level Filter
+    if (activeFilter !== "all" && log.level !== activeFilter) return false;
+    
+    // Severity Filter
+    if (severityFilter !== "all" && log.level !== severityFilter) return false;
+    
+    // Search Query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const eventMatch = log.event?.toLowerCase().includes(query);
+      const loggerMatch = log.logger?.toLowerCase().includes(query);
+      const tickerMatch = log.ticker?.toLowerCase().includes(query);
+      if (!eventMatch && !loggerMatch && !tickerMatch) return false;
+    }
+    
+    return true;
   });
 
   const getLevelBadgeClass = (level?: string) => {
@@ -75,6 +110,33 @@ export default function LogsPage() {
       </div>
 
       <div className="card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <Search size={18} className="text-[var(--text-muted)]" />
+            <input
+              type="text"
+              placeholder="Suche in Logs..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)] w-80"
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            {lastUpdate && (
+              <span className="text-xs text-[var(--text-muted)]">
+                Zuletzt: {lastUpdate.toLocaleTimeString("de-DE")}
+              </span>
+            )}
+            <button
+              onClick={exportLogs}
+              className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] shadow-sm hover:bg-[var(--bg-tertiary)] transition-all"
+            >
+              <Download size={16} />
+              Export
+            </button>
+          </div>
+        </div>
+
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <button

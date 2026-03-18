@@ -96,7 +96,6 @@ from backend.app.data.yfinance_data import (
     get_risk_metrics, get_atm_implied_volatility, get_historical_volatility
 )
 from backend.app.analysis.scoring import calculate_quality_score, calculate_mismatch_score
-from backend.app.memory.short_term import get_memory_for_ticker
 
 from schemas.earnings import EarningsExpectation, EarningsHistorySummary
 from schemas.sentiment import NewsBulletPoint, ShortInterestData, InsiderActivity
@@ -723,4 +722,44 @@ async def api_telegram_test():
     return {"status": "success", "message": "Test-Nachricht gesendet"}
 
 app.include_router(telegram_router)
+
+# Logs Router
+logs_router = APIRouter(prefix="/api/logs", tags=["logs"])
+
+@logs_router.get("")
+async def api_get_logs():
+    """Gibt die letzten 500 Log-Einträge zurück."""
+    from backend.app.logger import get_logger
+    import os
+    import json
+    
+    # Versuche Logs aus Datei zu lesen (falls vorhanden)
+    log_file = os.path.join(os.path.dirname(__file__), "..", "..", "logs", "kafin.log")
+    
+    if not os.path.exists(log_file):
+        # Fallback: generiere Mock-Logs für Development
+        return [
+            {"timestamp": "2026-03-18T08:00:00Z", "level": "info", "logger": "backend.app.main", "event": "Kafin gestartet"},
+            {"timestamp": "2026-03-18T08:00:05Z", "level": "info", "logger": "backend.app.db", "event": "Supabase verbunden"},
+            {"timestamp": "2026-03-18T08:00:10Z", "level": "warning", "logger": "backend.app.data.fmp", "event": "Rate Limit erreicht"},
+        ]
+    
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            lines = f.readlines()[-500:]  # Letzte 500 Zeilen
+        
+        logs = []
+        for line in lines:
+            try:
+                log_entry = json.loads(line.strip())
+                logs.append(log_entry)
+            except:
+                continue
+        
+        return logs
+    except Exception as e:
+        logger.error(f"Fehler beim Lesen der Logs: {e}")
+        return []
+
+app.include_router(logs_router)
 

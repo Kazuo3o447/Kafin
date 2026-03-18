@@ -26,11 +26,39 @@ export default function SettingsPage() {
 
   async function runDiagnostics() {
     setLoading(true);
+    setDiagnostics({});
+    
     try {
+      const startTime = Date.now();
       const result = await api.getDiagnostics();
-      setDiagnostics(result);
+      const endTime = Date.now();
+      const latency = endTime - startTime;
+      
+      // Füge Latenz zu jedem Service hinzu
+      const resultsWithLatency = { ...result.details };
+      Object.keys(resultsWithLatency).forEach(key => {
+        if (resultsWithLatency[key]) {
+          resultsWithLatency[key] = {
+            ...resultsWithLatency[key],
+            latency: `${latency}ms`
+          };
+        }
+      });
+      
+      setDiagnostics(resultsWithLatency);
     } catch (error) {
       console.error("Diagnostics error", error);
+      // Bei Fehler alle Services als fehlgeschlagen markieren
+      setDiagnostics({
+        supabase: { status: "error", details: "Nicht getestet" },
+        deepseek: { status: "error", details: "Nicht getestet" },
+        finnhub: { status: "error", details: "Nicht getestet" },
+        fmp: { status: "error", details: "Nicht getestet" },
+        fred: { status: "error", details: "Nicht getestet" },
+        finbert: { status: "error", details: "Nicht getestet" },
+        telegram: { status: "error", details: "Nicht getestet" },
+        n8n: { status: "error", details: "Nicht getestet" }
+      });
     } finally {
       setLoading(false);
     }

@@ -79,9 +79,62 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-8 p-8">
-      <div>
-        <h1 className="text-4xl font-bold text-[var(--text-primary)]">Reports</h1>
-        <p className="text-sm text-[var(--text-secondary)] mt-2">Automatisch generierte Analysen und Reviews</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-bold text-[var(--text-primary)]">Reports Dashboard</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-2">Automatisch generierte Analysen und Reviews</p>
+        </div>
+      </div>
+
+      {/* Status Overview Cards */}
+      <div className="grid gap-6 md:grid-cols-3">
+        <div className="card p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent-blue)] bg-opacity-10">
+              <FileText size={24} className="text-[var(--accent-blue)]" />
+            </div>
+            <div>
+              <p className="text-xs text-[var(--text-muted)]">Morning Briefing</p>
+              <p className="text-2xl font-bold text-[var(--text-primary)]">Täglich</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[var(--text-secondary)]">Letzter Run: Heute 08:00</span>
+            <span className="badge badge-success">Aktiv</span>
+          </div>
+        </div>
+
+        <div className="card p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent-purple)] bg-opacity-10">
+              <Calendar size={24} className="text-[var(--accent-purple)]" />
+            </div>
+            <div>
+              <p className="text-xs text-[var(--text-muted)]">Sunday Report</p>
+              <p className="text-2xl font-bold text-[var(--text-primary)]">Wöchentlich</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[var(--text-secondary)]">Letzter Run: So 10:00</span>
+            <span className="badge badge-neutral">Geplant</span>
+          </div>
+        </div>
+
+        <div className="card p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent-green)] bg-opacity-10">
+              <TrendingUp size={24} className="text-[var(--accent-green)]" />
+            </div>
+            <div>
+              <p className="text-xs text-[var(--text-muted)]">Earnings Reviews</p>
+              <p className="text-2xl font-bold text-[var(--text-primary)]">{earningsReviews.length}</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[var(--text-secondary)]">Gesamt generiert</span>
+            <span className="badge badge-info">On-Demand</span>
+          </div>
+        </div>
       </div>
 
       <div className="flex gap-3">

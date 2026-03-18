@@ -47,4 +47,7 @@ export const api = {
   getDiagnostics: () => fetchAPI("/api/diagnostics/full"),
   getDbStatus: () => fetchAPI("/api/diagnostics/db"),
   testTelegram: () => fetchAPI("/api/telegram/test", { method: "POST" }),
+  
+  // Logs
+  getLogs: () => fetchAPI("/api/logs"),
 };

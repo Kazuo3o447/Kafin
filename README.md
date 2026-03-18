@@ -2,6 +2,29 @@
 
 Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intelligence.
 
+## 🚀 Phase 5: Client-Side Navigation Caching (Abgeschlossen)
+
+### Neue Features
+- **Client-Side Cache**: Modul-level Map mit TTL für schnelle Seitenwechsel
+- **CacheStatus UI**: Zeigt Cache-Alter und manuellen Refresh-Button
+- **Intelligentes Caching**: Dashboard, Watchlist, News, Performance Seiten
+- **Automatische Invalidierung**: Bei manuellen Aktionen (Ticker hinzufügen, Scans)
+- **TTL-basierte Strategie**: 60s (Watchlist), 120s (News/Overview), 300s (Performance)
+
+### Frontend Erweiterungen
+- `frontend/src/lib/clientCache.ts` - Cache-Modul mit `cachedFetch`
+- `frontend/src/components/CacheStatus.tsx` - UI Komponente
+- Dashboard mit Cache-Status und manueller Invalidierung
+- Watchlist invalidiert Cache bei add/remove
+- News invalidiert bei Scans (News/SEC/Macro)
+- Performance mit 5-minütiger Cache-Dauer
+
+### Performance Vorteile
+- **Sofortige Navigation**: Seitenwechsel ohne Ladeverzögerung
+- **Intelligentes Refresh**: Nur bei abgelaufenem TTL oder manueller Aktion
+- **Keine Persistenz**: Cache leert sich bei Tab-Schließen (gewollt)
+- **Module-Level Persistence**: Überlebt Next.js App Router Navigation
+
 ## 🚀 Phase 4: Signal Intelligence (Abgeschlossen)
 
 ### Neue Features
@@ -49,6 +72,7 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - [x] n8n Workflow Automatisierung
 - [x] Redis Cache Layer
 - [x] Signal Intelligence Features
+- [x] Client-Side Navigation Caching
 
 ## 🛠️ Quick Start
 
@@ -86,5 +110,5 @@ docker-compose up -d kafin-frontend
 
 ---
 
-**Version**: 4.0 - Signal Intelligence Complete  
+**Version**: 5.0 - Client-Side Navigation Caching Complete  
 **Letztes Update**: 2026-03-18

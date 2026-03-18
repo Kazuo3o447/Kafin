@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { TrendingUp, TrendingDown, Activity, DollarSign, Percent, Circle, RefreshCw, ArrowDownRight, ArrowUpRight, Info, Calendar as CalendarIcon } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, DollarSign, Percent, Circle, RefreshCw, ArrowDownRight, ArrowUpRight, Info, Calendar as CalendarIcon, Clock } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { api } from "@/lib/api";
+import { cachedFetch, cacheAge, cacheInvalidateAll } from "@/lib/clientCache";
+import { CacheStatus } from "@/components/CacheStatus";
 
 type IndexData = {
   name: string;
@@ -74,21 +76,22 @@ async function fetchJSON<T>(endpoint: string, revalidate = 60): Promise<T> {
   return res.json();
 }
 
-async function getDashboardData() {
+async function getDashboardData(invalidate = false) {
+  if (invalidate) cacheInvalidateAll();
+
   try {
-    const [macro, overview, report, watchlistResp, opportunitiesResp] = await Promise.all([
-      fetchJSON<MacroSnapshot>("/api/data/macro", 120),
-      fetchJSON<{ indices: Record<string, IndexData>; sector_ranking_5d: SectorRank[]; macro: Record<string, IndexData> }>(
-        "/api/data/market-overview",
-        120
-      ),
-      fetchJSON<{ report?: string }>("/api/reports/latest", 30).catch(() => ({ report: "" })),
-      fetchJSON<WatchlistResponse>("/api/watchlist/enriched", 60).catch(() => ({
-        watchlist: [],
-        concentration_warning: null,
-        sector_distribution: {},
-      })),
-      fetchJSON<{ opportunities?: OpportunityItem[] }>("/api/opportunities", 120).catch(() => ({ opportunities: [] })),
+    const [
+      { data: macro, fromCache: macroFromCache },
+      { data: overview },
+      { data: report },
+      { data: watchlistResp },
+      { data: opportunitiesResp }
+    ] = await Promise.all([
+      cachedFetch("dashboard:macro", () => fetchJSON<MacroSnapshot>("/api/data/macro"), 120),
+      cachedFetch("dashboard:overview", () => fetchJSON<{ indices: Record<string, IndexData>; sector_ranking_5d: SectorRank[]; macro: Record<string, IndexData> }>("/api/data/market-overview"), 120),
+      cachedFetch("dashboard:report", () => fetchJSON<{ report?: string }>("/api/reports/latest").catch(() => ({ report: "" })), 60),
+      cachedFetch("dashboard:watchlist", () => fetchJSON<WatchlistResponse>("/api/watchlist/enriched").catch(() => ({ watchlist: [], concentration_warning: null, sector_distribution: {} })), 60),
+      cachedFetch("dashboard:opportunities", () => fetchJSON<{ opportunities?: OpportunityItem[] }>("/api/opportunities").catch(() => ({ opportunities: [] })), 120),
     ]);
 
     return {
@@ -99,6 +102,7 @@ async function getDashboardData() {
       concentrationWarning: watchlistResp.concentration_warning,
       sectorDistribution: watchlistResp.sector_distribution || {},
       opportunities: opportunitiesResp.opportunities || [],
+      macroFromCache,
     };
   } catch (error) {
     console.error("Dashboard fetch error", error);
@@ -110,6 +114,7 @@ async function getDashboardData() {
       concentrationWarning: null,
       sectorDistribution: {},
       opportunities: [] as OpportunityItem[],
+      macroFromCache: false,
     };
   }
 }

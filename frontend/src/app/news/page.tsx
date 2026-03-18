@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Newspaper, Play, Filter, Circle, Activity, Radar, Sparkles, Globe } from "lucide-react";
 import { api } from "@/lib/api";
+import { cachedFetch, cacheAge, cacheInvalidate, cacheInvalidateAll } from "@/lib/clientCache";
+import { CacheStatus } from "@/components/CacheStatus";
 
 type NewsBullet = {
   id?: string;
@@ -44,20 +46,24 @@ export default function NewsPage() {
   const [googleNews, setGoogleNews] = useState<GoogleNewsItem[]>([]);
   const [googleStatus, setGoogleStatus] = useState("");
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [fromCache, setFromCache] = useState(false);
+  const [dataAge, setDataAge] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadNews();
     loadWatchlist();
   }, []);
 
-  async function loadWatchlist() {
+  const loadWatchlist = useCallback(async (invalidate = false) => {
+    if (invalidate) cacheInvalidate('news:watchlist');
     try {
-      const data = await api.getWatchlist();
-      setWatchlist(data);
+      const { data } = await cachedFetch("news:watchlist", () => api.getWatchlist(), 300);
+      setWatchlist(data || []);
     } catch (error) {
       console.error("Watchlist fetch error", error);
     }
-  }
+  }, []);
 
   async function runGoogleNewsScan() {
     setGoogleLoading(true);
@@ -96,14 +102,19 @@ export default function NewsPage() {
     }
   }
 
-  async function loadNews() {
+  const loadNews = useCallback(async (invalidate = false) => {
+    if (invalidate) {
+      cacheInvalidate('news:bullets');
+      setRefreshing(true);
+    }
+    setLoading(!invalidate && news.length === 0);
     try {
-      const wl = await api.getWatchlist();
+      const { data: wl } = await cachedFetch("news:watchlist", () => api.getWatchlist(), 300);
       const allNews: NewsBullet[] = [];
 
-      for (const item of wl) {
+      for (const item of wl || []) {
         try {
-          const data = await api.getNewsMemory(item.ticker);
+          const { data } = await cachedFetch(`news:memory:${item.ticker}`, () => api.getNewsMemory(item.ticker), 120);
           if (data.bullet_points) {
             allNews.push(...data.bullet_points);
           }
@@ -119,12 +130,16 @@ export default function NewsPage() {
       });
 
       setNews(allNews);
+      
+      setDataAge(cacheAge("news:watchlist"));
+      setFromCache(cacheAge("news:watchlist") !== null);
     } catch (error) {
       console.error("News load error", error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }
+  }, [news.length]);
 
   async function runNewsScan() {
     setLoading(true);
@@ -132,6 +147,7 @@ export default function NewsPage() {
     try {
       const result = await api.runNewsScan();
       setScanResult(`News-Scan abgeschlossen. ${result.results?.length || 0} Ticker gescannt.`);
+      cacheInvalidateAll(); // Invalidates memory and bullets
       loadNews();
     } catch (error) {
       setScanResult("Fehler beim News-Scan.");
@@ -146,6 +162,7 @@ export default function NewsPage() {
     try {
       const result = await api.runSecScan();
       setScanResult(`SEC-Scan abgeschlossen. ${result.filings_found || 0} Filings gefunden.`);
+      cacheInvalidateAll();
       loadNews();
     } catch (error) {
       setScanResult("Fehler beim SEC-Scan.");
@@ -160,6 +177,7 @@ export default function NewsPage() {
     try {
       const result = await api.runMacroScan();
       setScanResult(`Makro-Scan abgeschlossen. ${result.stats?.events_saved || 0} Events gespeichert.`);
+      cacheInvalidateAll();
       loadNews();
     } catch (error) {
       setScanResult("Fehler beim Makro-Scan.");

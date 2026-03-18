@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Plus, Trash2, Search } from "lucide-react";
 import { api } from "@/lib/api";
+import { cachedFetch, cacheAge, cacheInvalidate } from "@/lib/clientCache";
+import { CacheStatus } from "@/components/CacheStatus";
 
 type WatchlistItem = {
   ticker: string;
@@ -23,21 +25,33 @@ export default function WatchlistPage() {
   const [search, setSearch] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTicker, setNewTicker] = useState({ ticker: "", company_name: "", sector: "", notes: "" });
+  const [fromCache, setFromCache] = useState(false);
+  const [dataAge, setDataAge] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadWatchlist();
   }, []);
 
-  async function loadWatchlist() {
+  const loadWatchlist = useCallback(async (invalidate = false) => {
+    if (invalidate) {
+      cacheInvalidate('watchlist:list');
+      cacheInvalidate('watchlist:enriched');
+      setRefreshing(true);
+    }
+    setLoading(!invalidate && watchlist.length === 0);
     try {
-      const data = await api.getWatchlist();
-      setWatchlist(data);
+      const { data, fromCache: isCached } = await cachedFetch("watchlist:list", () => api.getWatchlist(), 60);
+      setWatchlist(data || []);
+      setFromCache(isCached);
+      setDataAge(cacheAge("watchlist:list"));
     } catch (error) {
       console.error("Watchlist fetch error", error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }
+  }, [watchlist.length]);
 
   async function handleAddTicker() {
     if (!newTicker.ticker) return;
@@ -45,6 +59,8 @@ export default function WatchlistPage() {
       await api.addTicker(newTicker);
       setShowAddModal(false);
       setNewTicker({ ticker: "", company_name: "", sector: "", notes: "" });
+      cacheInvalidate('watchlist:list');
+      cacheInvalidate('watchlist:enriched');
       loadWatchlist();
     } catch (error) {
       console.error("Add ticker error", error);
@@ -55,6 +71,8 @@ export default function WatchlistPage() {
     if (!confirm(`${ticker} wirklich entfernen?`)) return;
     try {
       await api.removeTicker(ticker);
+      cacheInvalidate('watchlist:list');
+      cacheInvalidate('watchlist:enriched');
       loadWatchlist();
     } catch (error) {
       console.error("Remove ticker error", error);
@@ -82,6 +100,7 @@ export default function WatchlistPage() {
           <h1 className="text-3xl font-semibold text-[var(--text-primary)]">Alle Ticker</h1>
           <p className="text-sm text-[var(--text-secondary)]">{watchlist.length} Symbole unter Beobachtung</p>
         </div>
+        <CacheStatus fromCache={fromCache} ageSeconds={dataAge} onRefresh={() => loadWatchlist(true)} refreshing={refreshing || loading} />
         <div className="flex gap-2">
           <button
             onClick={() => setShowAddModal(true)}

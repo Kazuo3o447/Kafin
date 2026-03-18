@@ -41,6 +41,7 @@ export const api = {
   runNewsScan: () => fetchAPI("/api/news/scan", { method: "POST" }),
   runSecScan: () => fetchAPI("/api/news/sec-scan", { method: "POST" }),
   runMacroScan: () => fetchAPI("/api/news/macro-scan", { method: "POST" }),
+  runSignalScan: () => fetchAPI("/api/signals/scan", { method: "POST" }),
   setupN8n: () => fetchAPI("/api/n8n/setup", { method: "POST" }),
 
   // Diagnostics
@@ -50,4 +51,13 @@ export const api = {
   
   // Logs
   getLogs: () => fetchAPI("/api/logs"),
+
+  // Watchlist & Opportunities
+  getWatchlistEnriched: () => fetchAPI("/api/watchlist/enriched"),
+  getOpportunities: (days = 7) => fetchAPI(`/api/opportunities?days=${days}`),
+
+  // Charts
+  getSparkline: (ticker: string, days = 7) => fetchAPI(`/api/data/sparkline/${ticker}?days=${days}`),
+  getChartAnalysis: (ticker: string) => fetchAPI(`/api/chart-analysis/${ticker}`),
+  getChartAnalysisTop: (limit = 5) => fetchAPI(`/api/chart-analysis-top?limit=${limit}`),
 };

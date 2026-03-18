@@ -294,6 +294,15 @@ async def run_news_pipeline(tickers: list[str]) -> list[dict]:
         await check_torpedo_updates()
     except Exception as e:
         logger.error(f"Fehler im Torpedo-Monitor: {e}")
+
+    # -------------------------------------------------------------
+    # SIGNAL-SCANNER: Technische & Score-basierte Alerts
+    # -------------------------------------------------------------
+    try:
+        from backend.app.analysis.signal_scanner import scan_all_signals
+        await scan_all_signals()
+    except Exception as e:
+        logger.debug(f"Signal-Scanner Fehler: {e}")
         
     return results
 

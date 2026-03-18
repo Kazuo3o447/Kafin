@@ -434,6 +434,25 @@ async def generate_audit_report(ticker: str) -> str:
     except Exception as e:
         logger.debug(f"Audit-Report DB-Speicher: {e}")
 
+    # Score-History speichern für Delta-Tracking
+    try:
+        from datetime import date as date_type
+        from backend.app.db import get_supabase_client
+
+        db = get_supabase_client()
+        if db:
+            db.table("score_history").upsert({
+                "ticker": ticker,
+                "date": date_type.today().isoformat(),
+                "opportunity_score": opp_score.total_score if opp_score else None,
+                "torpedo_score": torp_score.total_score if torp_score else None,
+                "price": getattr(technicals, "current_price", None) if technicals else None,
+                "rsi": getattr(technicals, "rsi_14", None) if technicals else None,
+                "trend": getattr(technicals, "trend", None) if technicals else None,
+            }, on_conflict="ticker,date").execute()
+    except Exception as e:
+        logger.debug(f"Score-History Speicher-Fehler: {e}")
+
     return mock_response
 
 async def generate_weekly_summary() -> str:

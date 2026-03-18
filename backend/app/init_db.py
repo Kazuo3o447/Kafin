@@ -72,6 +72,20 @@ CREATE TABLE IF NOT EXISTS performance_tracking (
     created_at TIMESTAMP DEFAULT NOW(),
     UNIQUE(period)
 );
+
+-- Score-History: Zeitreihe der Opportunity- und Torpedo-Scores
+CREATE TABLE IF NOT EXISTS score_history (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    ticker TEXT NOT NULL,
+    date DATE NOT NULL,
+    opportunity_score FLOAT,
+    torpedo_score FLOAT,
+    price FLOAT,
+    rsi FLOAT,
+    trend TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(ticker, date)
+);
 """
 
 

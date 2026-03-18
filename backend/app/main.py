@@ -9,6 +9,8 @@ API:    Keine externen (nur intern)
 """
 from datetime import datetime
 
+import yfinance as yf
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.config import settings
@@ -198,6 +200,151 @@ async def api_risk_metrics(ticker: str):
     }
 
 
+@data_router.get("/score-delta/{ticker}")
+async def api_score_delta(ticker: str):
+    """Gibt aktuelle Scores und deren Veränderung vs. gestern/letzte Woche zurück."""
+    logger.info(f"API Call: score-delta for {ticker}")
+    db = get_supabase_client()
+    if not db:
+        return {"error": "Supabase nicht verfügbar"}
+
+    try:
+        result = (
+            db.table("score_history")
+            .select("*")
+            .eq("ticker", ticker)
+            .order("date", desc=True)
+            .limit(7)
+            .execute()
+        )
+        history = result.data if result and result.data else []
+    except Exception as e:
+        logger.error(f"Score-Delta Fehler für {ticker}: {e}")
+        return {"error": str(e)}
+
+    if not history:
+        return {"ticker": ticker, "current": None, "delta_1d": None, "delta_7d": None, "history": []}
+
+    current = history[0]
+    yesterday = history[1] if len(history) > 1 else None
+    last_week = history[-1] if len(history) >= 5 else None
+
+    def calc_delta(current_val, prev_val):
+        if current_val is not None and prev_val is not None:
+            return round(current_val - prev_val, 2)
+        return None
+
+    def calc_price_pct(curr_price, prev_price):
+        if curr_price and prev_price:
+            try:
+                return round(((curr_price - prev_price) / prev_price) * 100, 2)
+            except ZeroDivisionError:
+                return None
+        return None
+
+    delta_1d = None
+    if yesterday:
+        delta_1d = {
+            "opportunity_score": calc_delta(current.get("opportunity_score"), yesterday.get("opportunity_score")),
+            "torpedo_score": calc_delta(current.get("torpedo_score"), yesterday.get("torpedo_score")),
+            "price_pct": calc_price_pct(current.get("price"), yesterday.get("price")),
+        }
+
+    delta_7d = None
+    if last_week:
+        delta_7d = {
+            "opportunity_score": calc_delta(current.get("opportunity_score"), last_week.get("opportunity_score")),
+            "torpedo_score": calc_delta(current.get("torpedo_score"), last_week.get("torpedo_score")),
+        }
+
+    return {
+        "ticker": ticker,
+        "current": {
+            "opportunity_score": current.get("opportunity_score"),
+            "torpedo_score": current.get("torpedo_score"),
+            "price": current.get("price"),
+            "rsi": current.get("rsi"),
+            "trend": current.get("trend"),
+            "date": current.get("date"),
+        },
+        "delta_1d": delta_1d,
+        "delta_7d": delta_7d,
+        "history": history,
+    }
+
+
+@data_router.get("/sparkline/{ticker}")
+async def api_sparkline(ticker: str, days: int = 7):
+    """Gibt den 7-Tage-Kursverlauf für Sparkline-Charts zurück."""
+    logger.info(f"API Call: sparkline for {ticker} ({days}d)")
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period=f"{max(days, 2)}d")
+        if hist.empty:
+            return {"ticker": ticker, "data": []}
+        data = []
+        for idx, price in zip(hist.index, hist["Close"]):
+            try:
+                date_value = idx.date() if hasattr(idx, "date") else idx
+            except Exception:
+                date_value = str(idx)
+            data.append({
+                "date": str(date_value),
+                "price": round(float(price), 2)
+            })
+        return {"ticker": ticker, "data": data[-days:]}
+    except Exception as e:
+        logger.debug(f"Sparkline Fehler für {ticker}: {e}")
+        return {"ticker": ticker, "data": []}
+
+
+@app.post("/api/signals/scan")
+async def api_signal_scan():
+    """Manueller Signal-Scan für alle Watchlist-Ticker."""
+    from backend.app.analysis.signal_scanner import scan_all_signals
+
+    logger.info("API Call: signals-scan")
+    signals = await scan_all_signals()
+    return {
+        "status": "success",
+        "signals_found": len(signals),
+        "signals": signals,
+    }
+
+
+@app.get("/api/opportunities")
+async def api_opportunities(days: int = 7):
+    """Scannt nach interessanten Earnings-Setups."""
+    from backend.app.analysis.opportunity_scanner import scan_upcoming_opportunities
+
+    logger.info(f"API Call: opportunities (days={days})")
+    results = await scan_upcoming_opportunities(days_ahead=days)
+    return {
+        "status": "success",
+        "count": len(results),
+        "opportunities": results,
+    }
+
+
+@app.get("/api/chart-analysis/{ticker}")
+async def api_chart_analysis(ticker: str):
+    """Technische Chartanalyse mit konkreten Levels."""
+    from backend.app.analysis.chart_analyst import analyze_chart
+
+    logger.info(f"API Call: chart-analysis for {ticker}")
+    return await analyze_chart(ticker)
+
+
+@app.get("/api/chart-analysis-top")
+async def api_chart_analysis_top(limit: int = 5):
+    """Chartanalyse für die Top-N Watchlist-Ticker."""
+    from backend.app.analysis.chart_analyst import analyze_top_watchlist
+
+    logger.info(f"API Call: chart-analysis-top (limit={limit})")
+    results = await analyze_top_watchlist(limit)
+    return {"status": "success", "analyses": results}
+
+
 @data_router.get("/contrarian-opportunities")
 async def api_contrarian_opportunities(min_mismatch_score: float = 50.0):
     """
@@ -343,6 +490,96 @@ class WatchlistItemUpdate(BaseModel):
 async def api_get_watchlist():
     logger.info("API Call: get-watchlist")
     return await get_watchlist()
+
+
+@watchlist_router.get("/enriched")
+async def api_watchlist_enriched():
+    """Gibt Watchlist inklusive aktueller Kurse, Scores und Earnings-Countdown zurück."""
+    logger.info("API Call: watchlist-enriched")
+    watchlist = await get_watchlist()
+    enriched = []
+    sectors: dict[str, int] = {}
+    db = get_supabase_client()
+
+    for item in watchlist:
+        ticker = item.get("ticker")
+        if not ticker:
+            continue
+        entry = dict(item)
+
+        # Kursdaten via yfinance
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info or {}
+            entry["price"] = info.get("regularMarketPrice") or info.get("currentPrice")
+            entry["change_pct"] = info.get("regularMarketChangePercent")
+            entry["market_cap_b"] = round(info.get("marketCap", 0) / 1e9, 1) if info.get("marketCap") else None
+
+            calendar = getattr(stock, "calendar", None)
+            earnings_date = None
+            if calendar is not None:
+                cal_data = calendar
+                if hasattr(calendar, "to_dict"):
+                    cal_data = {k: (v.tolist() if hasattr(v, "tolist") else v) for k, v in calendar.to_dict().items()}
+                if isinstance(cal_data, dict):
+                    earnings_field = cal_data.get("Earnings Date")
+                    if isinstance(earnings_field, list) and earnings_field:
+                        earnings_date = earnings_field[0]
+                    elif hasattr(earnings_field, "date"):
+                        earnings_date = earnings_field
+                if earnings_date is not None and hasattr(earnings_date, "date"):
+                    earnings_date = earnings_date.date()
+                if earnings_date:
+                    from datetime import datetime as dt
+                    days_until = (earnings_date - dt.now().date()).days
+                    entry["earnings_date"] = str(earnings_date)
+                    entry["earnings_countdown"] = days_until
+        except Exception as exc:
+            logger.debug(f"Watchlist Enrichment Kursdaten für {ticker} fehlgeschlagen: {exc}")
+
+        # Score-Deltas via Supabase
+        try:
+            if db:
+                res = (
+                    db.table("score_history")
+                    .select("*")
+                    .eq("ticker", ticker)
+                    .order("date", desc=True)
+                    .limit(2)
+                    .execute()
+                )
+                rows = res.data if res and res.data else []
+                if rows:
+                    latest = rows[0]
+                    entry["opportunity_score"] = latest.get("opportunity_score")
+                    entry["torpedo_score"] = latest.get("torpedo_score")
+                    entry["rsi"] = latest.get("rsi")
+                    entry["trend"] = latest.get("trend")
+                    if len(rows) > 1:
+                        prev = rows[1]
+                        entry["opp_delta"] = round((latest.get("opportunity_score") or 0) - (prev.get("opportunity_score") or 0), 1)
+                        entry["torp_delta"] = round((latest.get("torpedo_score") or 0) - (prev.get("torpedo_score") or 0), 1)
+        except Exception as exc:
+            logger.debug(f"Watchlist Enrichment Scores für {ticker} fehlgeschlagen: {exc}")
+
+        sectors_key = entry.get("sector") or "Unknown"
+        sectors[sectors_key] = sectors.get(sectors_key, 0) + 1
+        enriched.append(entry)
+
+    concentration_warning = None
+    if enriched:
+        dominant_sector = max(sectors, key=sectors.get)
+        concentration_pct = (sectors[dominant_sector] / len(enriched)) * 100
+        if concentration_pct > 60:
+            concentration_warning = (
+                f"⚠️ Klumpenrisiko: {concentration_pct:.0f}% der Watchlist ist im Sektor '{dominant_sector}'. Diversifikation prüfen."
+            )
+
+    return {
+        "watchlist": enriched,
+        "concentration_warning": concentration_warning,
+        "sector_distribution": sectors,
+    }
 
 @watchlist_router.post("")
 async def api_add_watchlist_item(item: WatchlistItemCreate):

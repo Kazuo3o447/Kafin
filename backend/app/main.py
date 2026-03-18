@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 
 import yfinance as yf
 import pandas as pd
+import asyncio
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -1342,8 +1343,8 @@ watchlist_router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 
 class WatchlistItemCreate(BaseModel):
     ticker: str
-    company_name: str
-    sector: str
+    company_name: Optional[str] = None
+    sector: Optional[str] = "Unknown"
     notes: Optional[str] = ""
     cross_signals: Optional[List[str]] = []
 
@@ -1359,76 +1360,143 @@ async def api_get_watchlist():
     return await get_watchlist()
 
 
-@watchlist_router.get("/enriched")
-async def api_watchlist_enriched():
-    """Gibt Watchlist inklusive aktueller Kurse, Scores und Earnings-Countdown zurück."""
-    logger.info("API Call: watchlist-enriched")
-    watchlist = await get_watchlist()
-    enriched = []
-    sectors: dict[str, int] = {}
-    db = get_supabase_client()
+def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
+    """
+    Synchrone Hilfsfunktion für yfinance-Calls.
+    Wird via asyncio.to_thread() im Thread-Pool ausgeführt.
+    """
+    import yfinance as yf
+    from datetime import datetime as dt
 
-    for item in watchlist:
-        ticker = item.get("ticker")
-        if not ticker:
-            continue
-        entry = dict(item)
+    stock = yf.Ticker(ticker)
 
-        # Kursdaten via yfinance
+    # --- Kursdaten via fast_info (10x schneller als stock.info) ---
+    try:
+        fi = stock.fast_info
+        if hasattr(fi, "last_price") and fi.last_price:
+            entry["price"] = round(float(fi.last_price), 2)
+        if hasattr(fi, "regular_market_day_change_percent") and fi.regular_market_day_change_percent:
+            entry["change_pct"] = round(float(fi.regular_market_day_change_percent) * 100, 2)
+        if hasattr(fi, "market_cap") and fi.market_cap:
+            entry["market_cap_b"] = round(float(fi.market_cap) / 1e9, 1)
+    except Exception:
+        # Fallback: 2-Tage-History (schneller als stock.info)
         try:
-            stock = yf.Ticker(ticker)
-            info = stock.info or {}
-            entry["price"] = info.get("regularMarketPrice") or info.get("currentPrice")
-            entry["change_pct"] = info.get("regularMarketChangePercent")
-            entry["market_cap_b"] = round(info.get("marketCap", 0) / 1e9, 1) if info.get("marketCap") else None
+            hist = stock.history(period="2d")
+            if not hist.empty:
+                entry["price"] = round(float(hist["Close"].iloc[-1]), 2)
+                if len(hist) >= 2:
+                    prev_close = float(hist["Close"].iloc[-2])
+                    curr_close = float(hist["Close"].iloc[-1])
+                    if prev_close:
+                        entry["change_pct"] = round(
+                            ((curr_close - prev_close) / prev_close) * 100, 2
+                        )
+        except Exception:
+            pass
 
-            calendar = getattr(stock, "calendar", None)
-            earnings_date = None
-            if calendar is not None:
-                cal_data = calendar
-                if hasattr(calendar, "to_dict"):
-                    cal_data = {k: (v.tolist() if hasattr(v, "tolist") else v) for k, v in calendar.to_dict().items()}
-                if isinstance(cal_data, dict):
-                    earnings_field = cal_data.get("Earnings Date")
-                    if isinstance(earnings_field, list) and earnings_field:
-                        earnings_date = earnings_field[0]
-                    elif hasattr(earnings_field, "date"):
-                        earnings_date = earnings_field
+    # --- Earnings-Datum via calendar ---
+    try:
+        calendar = getattr(stock, "calendar", None)
+        if calendar is not None:
+            cal_data = calendar
+            if hasattr(calendar, "to_dict"):
+                cal_data = {
+                    k: (v.tolist() if hasattr(v, "tolist") else v)
+                    for k, v in calendar.to_dict().items()
+                }
+            if isinstance(cal_data, dict):
+                earnings_field = cal_data.get("Earnings Date")
+                earnings_date = None
+                if isinstance(earnings_field, list) and earnings_field:
+                    earnings_date = earnings_field[0]
+                elif hasattr(earnings_field, "date"):
+                    earnings_date = earnings_field
                 if earnings_date is not None and hasattr(earnings_date, "date"):
                     earnings_date = earnings_date.date()
                 if earnings_date:
-                    from datetime import datetime as dt
                     days_until = (earnings_date - dt.now().date()).days
                     entry["earnings_date"] = str(earnings_date)
                     entry["earnings_countdown"] = days_until
-        except Exception as exc:
-            logger.debug(f"Watchlist Enrichment Kursdaten für {ticker} fehlgeschlagen: {exc}")
+    except Exception:
+        pass
 
-        # Score-Deltas via Supabase
-        try:
-            if db:
-                res = (
-                    db.table("score_history")
-                    .select("*")
-                    .eq("ticker", ticker)
-                    .order("date", desc=True)
-                    .limit(2)
-                    .execute()
-                )
-                rows = res.data if res and res.data else []
-                if rows:
-                    latest = rows[0]
-                    entry["opportunity_score"] = latest.get("opportunity_score")
-                    entry["torpedo_score"] = latest.get("torpedo_score")
-                    entry["rsi"] = latest.get("rsi")
-                    entry["trend"] = latest.get("trend")
-                    if len(rows) > 1:
-                        prev = rows[1]
-                        entry["opp_delta"] = round((latest.get("opportunity_score") or 0) - (prev.get("opportunity_score") or 0), 1)
-                        entry["torp_delta"] = round((latest.get("torpedo_score") or 0) - (prev.get("torpedo_score") or 0), 1)
-        except Exception as exc:
-            logger.debug(f"Watchlist Enrichment Scores für {ticker} fehlgeschlagen: {exc}")
+    return entry
 
+
+async def _enrich_single(item: dict, db) -> dict:
+    """
+    Enriched einen einzelnen Watchlist-Ticker mit Kursdaten + Scores.
+    Wird parallel via asyncio.gather aufgerufen.
+    """
+    ticker = item.get("ticker")
+    if not ticker:
+        return item
+
+    entry = dict(item)
+
+    # yfinance läuft synchron → in Thread-Pool auslagern
+    try:
+        entry = await asyncio.to_thread(_fetch_ticker_data_sync, ticker, entry)
+    except Exception as exc:
+        logger.debug(f"Enrich yfinance {ticker}: {exc}")
+
+    # Score-Deltas aus Supabase score_history
+    try:
+        if db:
+            res = (
+                db.table("score_history")
+                .select("*")
+                .eq("ticker", ticker)
+                .order("date", desc=True)
+                .limit(2)
+                .execute()
+            )
+            rows = res.data if res and res.data else []
+            if rows:
+                latest = rows[0]
+                entry["opportunity_score"] = latest.get("opportunity_score")
+                entry["torpedo_score"] = latest.get("torpedo_score")
+                entry["rsi"] = latest.get("rsi")
+                entry["trend"] = latest.get("trend")
+                if len(rows) > 1:
+                    prev = rows[1]
+                    entry["opp_delta"] = round(
+                        (latest.get("opportunity_score") or 0)
+                        - (prev.get("opportunity_score") or 0), 1
+                    )
+                    entry["torp_delta"] = round(
+                        (latest.get("torpedo_score") or 0)
+                        - (prev.get("torpedo_score") or 0), 1
+                    )
+    except Exception as exc:
+        logger.debug(f"Enrich scores {ticker}: {exc}")
+
+    return entry
+
+
+@watchlist_router.get("/enriched")
+async def api_watchlist_enriched():
+    """Gibt Watchlist inkl. Kurse, Scores und Earnings-Countdown zurück."""
+    logger.info("API Call: watchlist-enriched")
+
+    watchlist = await get_watchlist()
+    db = get_supabase_client()
+
+    # ALLE Ticker parallel enrichen (statt sequenziell)
+    results = await asyncio.gather(
+        *[_enrich_single(item, db) for item in watchlist],
+        return_exceptions=True,
+    )
+
+    enriched = []
+    sectors: dict[str, int] = {}
+
+    for r in results:
+        if isinstance(r, Exception):
+            logger.debug(f"Enrich gather Exception: {r}")
+            continue
+        entry = r
         sectors_key = entry.get("sector") or "Unknown"
         sectors[sectors_key] = sectors.get(sectors_key, 0) + 1
         enriched.append(entry)
@@ -1439,7 +1507,8 @@ async def api_watchlist_enriched():
         concentration_pct = (sectors[dominant_sector] / len(enriched)) * 100
         if concentration_pct > 60:
             concentration_warning = (
-                f"⚠️ Klumpenrisiko: {concentration_pct:.0f}% der Watchlist ist im Sektor '{dominant_sector}'. Diversifikation prüfen."
+                f"⚠️ Klumpenrisiko: {concentration_pct:.0f}% der Watchlist "
+                f"ist im Sektor '{dominant_sector}'. Diversifikation prüfen."
             )
 
     return {
@@ -1451,8 +1520,12 @@ async def api_watchlist_enriched():
 @watchlist_router.post("")
 async def api_add_watchlist_item(item: WatchlistItemCreate):
     logger.info(f"API Call: add-watchlist-item {item.ticker}")
+    # Wenn kein Firmenname: Ticker als Name verwenden
+    company_name = item.company_name or item.ticker.upper()
+    sector = item.sector or "Unknown"
     return await add_ticker(
-        item.ticker, item.company_name, item.sector, item.notes, item.cross_signals
+        item.ticker, company_name, sector,
+        item.notes or "", item.cross_signals or []
     )
 
 @watchlist_router.get("/earnings-this-week")
@@ -1774,6 +1847,7 @@ app.include_router(admin_router)
 app.include_router(data_router)
 app.include_router(google_news_router)
 app.include_router(reports_router)
+app.include_router(watchlist_router)   # <-- DIESER EINE ZEILE
 
 # Diagnostics Router
 diagnostics_router = APIRouter(prefix="/api/diagnostics", tags=["diagnostics"])

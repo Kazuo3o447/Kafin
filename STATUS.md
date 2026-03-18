@@ -1,6 +1,6 @@
 # KAFIN - PROJEKTSTATUS
 
-Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Admin-Panel).
+Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Web-Dashboard).
 
 ## ✅ Abgeschlossene Meilensteine
 
@@ -16,13 +16,13 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 *   **DeepSeek**: KI-Anbindung (`deepseek-chat`) für automatisierte Analysen erfolgreich getestet.
 *   **Telegram**: Bot-Integration (Token + Chat-ID) inklusive automatischer Chat-ID Ermittlung und Versandtest abgeschlossen.
 
-### 4. Sonntags-Report Stabilität & Korrekturen
+### 3. Sonntags-Report Stabilität & Korrekturen
 *   **FRED Fallback**: 10-Tage Lookback-Logik für lückenlose Makro-Daten inklusive Datumsstempel-Injektion.
 *   **Platzhalter-Fixes**: Dynamische Befüllung von `{{upcoming_events}}` (Earnings) und `{{macro_bullets}}` (KI-Gedächtnis).
 *   **Anti-Index-Short-Regel**: Strenges Verbot von breiten Index-Shorts im Prompt-Template v0.2 zur Optimierung des Risk/Reward.
 *   **Error-Handling**: Try-Except Absicherung für jeden Audit-Report; der Gesamt-Report bricht bei Einzelfehlern nicht mehr ab.
 
-## ✅ Phase 3: Real-Time Monitoring & Alerts
+### 4. Phase 3: Real-Time Monitoring & Alerts
 - [x] **Phase 3A:** Implementierung von FinBERT für Sentiment-Analyse.
 - [x] **Phase 3A:** News Pipeline inkl. Watchlist-Scanning, FinBERT-Filterung, und DeepSeek Stichpunktextraktion.
 - [x] **Phase 3A:** Kurzzeit-Speicher (Supabase) für die gewonnenen News-Stichpunkte.
@@ -37,7 +37,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 - [x] **Phase 3B:** Options- & Social-Sentiment Analyse (Zero-Cost via yfinance/Finnhub).
 - [x] **Stabilität:** 5 kritische Fixes für Makro-Daten und Prompt-Resilience abgeschlossen.
 
-### 8. Phase 4C: Chart Intelligence System (lightweight-charts)
+### 5. Phase 4C: Chart Intelligence System (lightweight-charts)
 - [x] TradingView Lightweight Charts Integration (npm: lightweight-charts)
 - [x] OHLCV-Endpoint mit SMA50/200 (pandas rolling mean, None-Werte gefiltert)
 - [x] Chart-Overlays-Endpoint (Earnings, Torpedo, Narrative, Insider aus Supabase)
@@ -45,7 +45,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 - [x] Frontend: Candlestick + Volume + SMA + Marker + KI-Levels + Tooltip
 - [x] Timeframe-Toggle 6M/2J mit interval-Wechsel (1d/1wk)
 
-### 5. Tägliches Morning Briefing
+### 6. Tägliches Morning Briefing
 *   **Marktübersicht**: `market_overview.py` — Index-Chartanalyse (SPY, QQQ, DIA, IWM), 11 Sektor-ETFs mit Rotationsranking, 5 Makro-Proxys (VIX, TLT, UUP, GLD, USO) via yfinance.
 *   **Allgemeine Nachrichten**: Finnhub General News Endpoint mit Qualitätsfilter (Reuters, Bloomberg, CNBC etc.).
 *   **Tages-Snapshot**: `daily_snapshots`-Tabelle in Supabase für Vergleich "gestern vs. heute" mit automatischer Regime-Erkennung.
@@ -55,7 +55,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 *   **Telegram**: Automatischer Versand mit Chunking für lange Briefings.
 *   **API-Endpoints**: `POST /api/reports/generate-morning`, `GET /api/data/market-overview`.
 
-### 6. Phase 4A: Feedback-Loop
+### 7. Phase 4A: Feedback-Loop
 *   **Langzeit-Gedächtnis**: Audit-Prompt erweitert, DeepSeek-Report speichert Insights + vollständige Reports in Supabase.
 *   **Post-Earnings Review**: Neues Modul inkl. Prompt, Performance-Tracking und Lessons Learned Speicherung.
 *   **APIs**: `POST /api/reports/post-earnings-review/{ticker}`, `POST /api/reports/scan-earnings-results`, `GET /api/data/long-term-memory/{ticker}`, `GET /api/data/performance`.
@@ -63,26 +63,61 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 *   **Automatisierung**: n8n Workflow (Mo-Fr 22:00 CET) triggert automatischen Earnings-Scan und Reviews.
 *   **Supabase**: Tabellen `long_term_memory`, `earnings_reviews`, `performance_tracking` produktiv, Schema SQL loggable via API.
 
-### 7. Phase 4B: Web-Dashboard (Next.js)
-*   **Framework**: Next.js 15 mit TypeScript, Tailwind CSS, App Router, Server Components.
-*   **Design-System**: Bloomberg-Terminal-Ästhetik mit dunklem Theme, JetBrains Mono + Inter Fonts, Trading-Terminal-Farbschema.
-*   **Layout**: Feste Sidebar-Navigation (6 Tabs), responsive Grid-Layouts, Echtzeit-Statusanzeige.
+### 8. Phase 4B: Web-Dashboard (Next.js) - Komplett
+*   **Framework**: Next.js 15 mit TypeScript, Tailwind CSS v4, App Router, Server Components.
+*   **Design-System**: Modernes Dark Mode mit CSS-Variablen, JetBrains Mono + Inter Fonts, Trading-Terminal-Farbschema.
+*   **Layout**: Feste Sidebar-Navigation (220px breit), responsive Grid-Layouts, Echtzeit-Statusanzeige mit pulsierendem Online-Indikator.
 *   **Dashboard-Seite**: Makro-Regime-Banner, Index-/Sektor-/Makro-Karten, Morning-Briefing-Vorschau, Watchlist-Übersicht.
-*   **Watchlist-Seite**: Vollständige Tabelle mit Filtern, Ticker-Detail-Ansichten mit Profil/Technicals/News/Langzeit-Gedächtnis.
+*   **Watchlist-Seite**: Vollständige Tabelle mit Filtern, Ticker-Detail-Ansichten mit Profil/Technicals/News/Langzeit-Gedächtnis, **verbessertes Modal für Ticker-Hinzufügen** mit Validierung und Error-Feedback.
 *   **Reports-Seite**: 3 Tabs (Morning Briefing, Sonntags-Report, Post-Earnings Reviews) mit Generierungs-Buttons.
-*   **News-Seite**: Timeline aller News-Stichpunkte, Filter nach Ticker/Sentiment/Material-Events, Scan-Aktionen (News/SEC/Makro).
+*   **News-Seite**: **Redesign zu 2-Spalten-Layout** mit Filter/Scans (links) und integriertem Feed (News + Google News + Signale) ohne Tab-Wechsel.
 *   **Performance-Seite**: KPI-Karten (Trefferquote, Reviews, Best/Worst Calls), Performance-Historie-Tabelle.
 *   **Settings-Seite**: Systemcheck (8 Services), DB-Status, Telegram-Test, n8n-Setup, Live-Logs mit Auto-Refresh.
 *   **Backend-Integration**: CORS aktiviert, Log-Endpoint (`GET /api/logs`) für Live-Monitoring implementiert.
 *   **Docker**: Frontend-Container in `docker-compose.yml` integriert, Dockerfile + .dockerignore erstellt.
 *   **API-Layer**: Zentraler `api.ts` mit allen Endpoints, robuste Fehlerbehandlung, Next.js ISR/SSR-Caching.
 
-## 🚀 Nächste Schritte
-- Frontend lokal testen: `cd frontend && npm run dev` → http://localhost:3000
-- Docker-Build testen: `docker-compose build kafin-frontend && docker-compose up -d`
-- Feedback-Loop weiter verfeinern (mehr Automatisierung, Review-Historie im UI anzeigen).
-- Auswertung der Alert- & Review-Qualität im Produktivbetrieb.
+### 9. Frontend UX & Design Improvements (März 2026)
+*   **Dark Mode Overhaul**: Komplettes Design-System mit CSS-Variablen für konsistente Dunkel-Theme-Anwendung über alle 45+ Karten.
+*   **Sidebar Redesign**: Schmalere Sidebar (224px), neue Logo-Optik, aktive Navigation mit blauem Indikator, Schnellsuche mit CMD+K, Online-Status mit Animation.
+*   **Watchlist UX**: Modal für Ticker-Hinzufügen mit Validierung, Loading-States, Error-Feedback, Escape-Taste-Unterstützung.
+*   **News-Page UX**: 2-Spalten-Layout eliminiert Tab-Wechsel, alle Daten (News, Google News, Signale) gleichzeitig sichtbar.
+*   **Chart Integration**: Automatische Chart-Anzeige auf Ticker-Detailseiten, verbesserte Error-Handling bei fehlenden Daten.
+*   **Responsive Design**: Optimiert für Desktop mit festen Spaltenbreiten und flexiblen Inhaltsbereichen.
+
+## 🚀 Aktuelle Features (Stand März 2026)
+
+### Core Funktionalität
+- ✅ **Watchlist Management**: Hinzufügen/Entfernen von Tickern mit automatischer Datenanreicherung
+- ✅ **Real-time News**: FinBERT-gestützte Sentiment-Analyse mit Material-Event-Detection
+- ✅ **Chart Intelligence**: Interaktive Kurs-Charts mit SMA-Overlays und Event-Markern
+- ✅ **KI-Analysen**: DeepSeek-Integration für Reports und Stichpunkt-Extraktion
+- ✅ **Automatisierung**: n8n-Workflows für tägliche Briefings und wöchentliche Reports
+
+### Data Sources
+- ✅ **Marktdaten**: yfinance (Kurse, Volumen, Indikatoren)
+- ✅ **News**: Finnhub (Company & General News), Google News Integration
+- ✅ **Makro**: FRED (VIX, Zinsen, Rohstoffe), Finnhub Economic Calendar
+- ✅ **Regulatorisch**: SEC EDGAR (Form 8-K, 4) für Insider-Transaktionen
+- ✅ **Sentiment**: FinBERT für deutsche/englische News-Analyse
+
+### UI/UX
+- ✅ **Modern Dark Mode**: Konsistentes Design mit CSS-Variablen
+- ✅ **2-Spalten News-Layout**: Kein Tab-Wechsel mehr nötig
+- ✅ **Automatische Charts**: Direkte Anzeige auf Ticker-Detailseiten
+- ✅ **Error Handling**: Klare Fehlermeldungen und Loading-States
+- ✅ **Responsive**: Optimiert für Desktop-Anwendung
 
 ## 🛠️ System-Hinweis
 *   **Docker**: Backend, Redis, n8n und Frontend laufen stabil im Verbund.
 *   **Repository**: Alle Updates sind nach jeder Änderung direkt nach `Kazuo3o447/Kafin` gepusht worden.
+*   **Build**: Frontend wird per `docker-compose build kafin-frontend && docker-compose up -d kafin-frontend` deployed.
+*   **Zugriff**: http://localhost:3000 für das Web-Dashboard, http://localhost:8000 für die API-Dokumentation.
+
+## 🔄 Letzte Updates (18. März 2026)
+- Backend: Watchlist-Endpunkte mit optionalen Feldern robust gemacht
+- Frontend: Dark Mode Design-System implementiert
+- Frontend: News-Seite auf 2-Spalten-Layout umgestellt
+- Frontend: Chart-Integration und Error-Handling verbessert
+- Frontend: Watchlist-Modal UX überarbeitet
+- Dokumentation: STATUS.md und README.md aktualisiert

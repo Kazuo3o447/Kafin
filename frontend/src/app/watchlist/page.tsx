@@ -25,9 +25,19 @@ export default function WatchlistPage() {
   const [search, setSearch] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTicker, setNewTicker] = useState({ ticker: "", company_name: "", sector: "", notes: "" });
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
   const [dataAge, setDataAge] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && showAddModal) closeModal();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showAddModal]);
 
   useEffect(() => {
     loadWatchlist();
@@ -54,17 +64,54 @@ export default function WatchlistPage() {
   }, [watchlist.length]);
 
   async function handleAddTicker() {
-    if (!newTicker.ticker) return;
-    try {
-      await api.addTicker(newTicker);
-      setShowAddModal(false);
-      setNewTicker({ ticker: "", company_name: "", sector: "", notes: "" });
-      cacheInvalidate('watchlist:list');
-      cacheInvalidate('watchlist:enriched');
-      loadWatchlist();
-    } catch (error) {
-      console.error("Add ticker error", error);
+    const ticker = newTicker.ticker.trim().toUpperCase();
+
+    // Validierung
+    if (!ticker) {
+      setAddError("Ticker darf nicht leer sein.");
+      return;
     }
+    if (!/^[A-Z]{1,5}$/.test(ticker)) {
+      setAddError("Ungültiger Ticker — nur Buchstaben, max. 5 Zeichen (z.B. AAPL).");
+      return;
+    }
+
+    setAddLoading(true);
+    setAddError(null);
+
+    try {
+      await api.addTicker({
+        ticker,
+        company_name: newTicker.company_name || ticker,
+        sector: newTicker.sector || "Unknown",
+        notes: newTicker.notes || "",
+      });
+      // Erfolg
+      closeModal();
+      cacheInvalidate("watchlist:list");
+      cacheInvalidate("watchlist:enriched");
+      loadWatchlist();
+    } catch (err: any) {
+      const msg = err?.message || "";
+      if (msg.includes("409") || msg.toLowerCase().includes("duplicate")) {
+        setAddError(`${ticker} ist bereits auf der Watchlist.`);
+      } else if (msg.includes("422")) {
+        setAddError("Ungültige Eingabe — prüfe den Ticker.");
+      } else if (msg.includes("404")) {
+        setAddError("API-Endpoint nicht erreichbar — Backend läuft?");
+      } else {
+        setAddError(`Fehler beim Hinzufügen: ${msg || "Unbekannter Fehler"}`);
+      }
+    } finally {
+      setAddLoading(false);
+    }
+  }
+
+  function closeModal() {
+    setShowAddModal(false);
+    setNewTicker({ ticker: "", company_name: "", sector: "", notes: "" });
+    setAddError(null);
+    setAddLoading(false);
   }
 
   async function handleRemoveTicker(ticker: string) {
@@ -112,14 +159,14 @@ export default function WatchlistPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-2">
-        <Search size={16} className="text-[var(--text-muted)]" />
+      <div className="flex w-full items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-2">
+        <Search size={16} className="text-[var(--text-muted)] shrink-0" />
         <input
           type="text"
           placeholder="Ticker oder Name suchen..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
+          className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
         />
       </div>
 
@@ -203,53 +250,175 @@ export default function WatchlistPage() {
       </div>
 
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-6">
-            <h2 className="text-xl font-semibold text-[var(--text-primary)]">Ticker hinzufügen</h2>
-            <div className="mt-4 space-y-3">
-              <input
-                type="text"
-                placeholder="Ticker (z.B. AAPL)"
-                value={newTicker.ticker}
-                onChange={(e) => setNewTicker({ ...newTicker, ticker: e.target.value.toUpperCase() })}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-4 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
-              />
-              <input
-                type="text"
-                placeholder="Firmenname"
-                value={newTicker.company_name}
-                onChange={(e) => setNewTicker({ ...newTicker, company_name: e.target.value })}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-4 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
-              />
-              <input
-                type="text"
-                placeholder="Sektor"
-                value={newTicker.sector}
-                onChange={(e) => setNewTicker({ ...newTicker, sector: e.target.value })}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-4 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
-              />
-              <textarea
-                placeholder="Notizen"
-                value={newTicker.notes}
-                onChange={(e) => setNewTicker({ ...newTicker, notes: e.target.value })}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-4 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
-                rows={3}
-              />
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
+        >
+          <div className="w-full max-w-md rounded-2xl border border-[var(--border)]
+                          bg-[var(--bg-secondary)] p-6 shadow-2xl">
+
+            {/* Header */}
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+                Ticker hinzufügen
+              </h2>
+              <button
+                onClick={closeModal}
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]
+                           transition-colors"
+              >
+                ✕
+              </button>
             </div>
-            <div className="mt-6 flex gap-2">
+
+            {/* Felder */}
+            <div className="space-y-3">
+
+              {/* Ticker — wichtigstes Feld, hervorgehoben */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium
+                                  text-[var(--text-secondary)]">
+                  Ticker <span className="text-[var(--accent-red)]">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="z.B. MU, AAPL, NVDA"
+                  value={newTicker.ticker}
+                  onChange={(e) => {
+                    setNewTicker({ ...newTicker, ticker: e.target.value.toUpperCase() });
+                    setAddError(null);
+                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAddTicker(); }}
+                  autoFocus
+                  className="w-full rounded-lg border border-[var(--border)]
+                             bg-[var(--bg-tertiary)] px-4 py-2.5 text-sm
+                             font-mono font-semibold uppercase tracking-wider
+                             text-[var(--text-primary)] outline-none
+                             placeholder:text-[var(--text-muted)] placeholder:normal-case
+                             placeholder:font-normal placeholder:tracking-normal
+                             focus:border-[var(--accent-blue)]"
+                />
+              </div>
+
+              {/* Firmenname — optional */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium
+                                  text-[var(--text-secondary)]">
+                  Firmenname
+                  <span className="ml-1 text-[var(--text-muted)] font-normal">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Wird aus Ticker abgeleitet wenn leer"
+                  value={newTicker.company_name}
+                  onChange={(e) => setNewTicker({ ...newTicker, company_name: e.target.value })}
+                  className="w-full rounded-lg border border-[var(--border)]
+                             bg-[var(--bg-tertiary)] px-4 py-2.5 text-sm
+                             text-[var(--text-primary)] outline-none
+                             placeholder:text-[var(--text-muted)]
+                             focus:border-[var(--accent-blue)]"
+                />
+              </div>
+
+              {/* Sektor — optional */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium
+                                  text-[var(--text-secondary)]">
+                  Sektor
+                  <span className="ml-1 text-[var(--text-muted)] font-normal">(optional)</span>
+                </label>
+                <select
+                  value={newTicker.sector}
+                  onChange={(e) => setNewTicker({ ...newTicker, sector: e.target.value })}
+                  className="w-full rounded-lg border border-[var(--border)]
+                             bg-[var(--bg-tertiary)] px-4 py-2.5 text-sm
+                             text-[var(--text-primary)] outline-none
+                             focus:border-[var(--accent-blue)]"
+                >
+                  <option value="">Sektor auswählen...</option>
+                  <option value="Technology">Technology</option>
+                  <option value="Healthcare">Healthcare</option>
+                  <option value="Financials">Financials</option>
+                  <option value="Consumer Discretionary">Consumer Discretionary</option>
+                  <option value="Consumer Staples">Consumer Staples</option>
+                  <option value="Industrials">Industrials</option>
+                  <option value="Energy">Energy</option>
+                  <option value="Materials">Materials</option>
+                  <option value="Real Estate">Real Estate</option>
+                  <option value="Utilities">Utilities</option>
+                  <option value="Communication Services">Communication Services</option>
+                  <option value="Crypto">Crypto</option>
+                  <option value="Unknown">Unbekannt</option>
+                </select>
+              </div>
+
+              {/* Notizen */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium
+                                  text-[var(--text-secondary)]">
+                  Notizen
+                  <span className="ml-1 text-[var(--text-muted)] font-normal">(optional)</span>
+                </label>
+                <textarea
+                  placeholder="Trading-These, Catalyst, Erinnerung..."
+                  value={newTicker.notes}
+                  onChange={(e) => setNewTicker({ ...newTicker, notes: e.target.value })}
+                  rows={2}
+                  className="w-full rounded-lg border border-[var(--border)]
+                             bg-[var(--bg-tertiary)] px-4 py-2.5 text-sm
+                             text-[var(--text-primary)] outline-none resize-none
+                             placeholder:text-[var(--text-muted)]
+                             focus:border-[var(--accent-blue)]"
+                />
+              </div>
+            </div>
+
+            {/* Error-Anzeige */}
+            {addError && (
+              <div className="mt-3 rounded-lg border border-[var(--accent-red)]/30
+                              bg-[var(--accent-red)]/10 px-4 py-3 text-sm
+                              text-[var(--accent-red)]">
+                ⚠ {addError}
+              </div>
+            )}
+
+            {/* Buttons */}
+            <div className="mt-5 flex gap-3">
               <button
                 onClick={handleAddTicker}
-                className="flex-1 rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+                disabled={addLoading || !newTicker.ticker.trim()}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg
+                           bg-[var(--accent-blue)] px-4 py-2.5 text-sm font-semibold
+                           text-white transition-all hover:opacity-90
+                           disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Hinzufügen
+                {addLoading ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2
+                                    border-white/30 border-t-white" />
+                    Wird hinzugefügt...
+                  </>
+                ) : (
+                  <>+ Zur Watchlist</>
+                )}
               </button>
               <button
-                onClick={() => setShowAddModal(false)}
-                className="flex-1 rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+                onClick={closeModal}
+                disabled={addLoading}
+                className="rounded-lg border border-[var(--border)] px-4 py-2.5
+                           text-sm font-medium text-[var(--text-secondary)]
+                           transition-all hover:bg-[var(--bg-tertiary)]
+                           disabled:opacity-40"
               >
                 Abbrechen
               </button>
             </div>
+
+            {/* Hinweis */}
+            <p className="mt-3 text-center text-xs text-[var(--text-muted)]">
+              Nur Ticker ist Pflichtfeld · Escape zum Schließen
+            </p>
+
           </div>
         </div>
       )}

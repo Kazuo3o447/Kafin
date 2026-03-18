@@ -12,6 +12,7 @@ export default function InteractiveChart({ ticker }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [loading, setLoading] = useState(true);
+  const [chartError, setChartError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -67,6 +68,12 @@ export default function InteractiveChart({ ticker }: InteractiveChartProps) {
         if (ohlcv.candles) {
           candlestickSeries.setData(ohlcv.candles);
         }
+        if (!ohlcv.candles || ohlcv.candles.length === 0) {
+          setChartError("Keine Kerzen-Daten für " + ticker);
+          setLoading(false);
+          return;
+        }
+
         if (ohlcv.sma_50) {
           sma50Series.setData(ohlcv.sma_50);
         }
@@ -149,8 +156,13 @@ export default function InteractiveChart({ ticker }: InteractiveChartProps) {
         // Fit Content
         chart.timeScale().fitContent();
 
-      } catch (err) {
+      } catch (err: any) {
         console.error("Chart data fetch error", err);
+        setChartError(
+          err?.message?.includes("404")
+            ? "Chart-Endpoint nicht gefunden — Backend läuft?"
+            : "Keine Chartdaten verfügbar für " + ticker
+        );
       } finally {
         setLoading(false);
       }
@@ -173,6 +185,16 @@ export default function InteractiveChart({ ticker }: InteractiveChartProps) {
       }
     };
   }, [ticker]);
+
+  if (chartError) {
+    return (
+      <div className="flex h-[400px] items-center justify-center
+                      rounded-lg border border-[var(--border)]
+                      bg-[var(--bg-tertiary)]">
+        <p className="text-sm text-[var(--text-muted)]">{chartError}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative h-[400px] w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] p-2">

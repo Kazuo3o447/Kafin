@@ -1,114 +1,123 @@
 # Kafin Trading Platform
 
-Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intelligence.
+Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intelligence und modernem Dark Mode Dashboard.
 
-## 🚀 Phase 5: Client-Side Navigation Caching (Abgeschlossen)
+## 🚀 Aktuelle Features (März 2026)
 
-### Neue Features
-- **Client-Side Cache**: Modul-level Map mit TTL für schnelle Seitenwechsel
-- **CacheStatus UI**: Zeigt Cache-Alter und manuellen Refresh-Button
-- **Intelligentes Caching**: Dashboard, Watchlist, News, Performance Seiten
-- **Automatische Invalidierung**: Bei manuellen Aktionen (Ticker hinzufügen, Scans)
-- **TTL-basierte Strategie**: 60s (Watchlist), 120s (News/Overview), 300s (Performance)
+### Core Funktionalität
+- **Watchlist Management**: Hinzufügen/Entfernen von Tickern mit automatischer Datenanreicherung
+- **Real-time News**: FinBERT-gestützte Sentiment-Analyse mit Material-Event-Detection
+- **Chart Intelligence**: Interaktive Kurs-Charts mit SMA-Overlays und Event-Markern
+- **KI-Analysen**: DeepSeek-Integration für Reports und Stichpunkt-Extraktion
+- **Automatisierung**: n8n-Workflows für tägliche Briefings und wöchentliche Reports
 
-### Frontend Erweiterungen
-- `frontend/src/lib/clientCache.ts` - Cache-Modul mit `cachedFetch`
-- `frontend/src/components/CacheStatus.tsx` - UI Komponente
-- Dashboard mit Cache-Status und manueller Invalidierung
-- Watchlist invalidiert Cache bei add/remove
-- News invalidiert bei Scans (News/SEC/Macro)
-- Performance mit 5-minütiger Cache-Dauer
+### UI/UX Highlights
+- **Modern Dark Mode**: Konsistentes Design mit CSS-Variablen für alle 45+ Karten
+- **2-Spalten News-Layout**: Kein Tab-Wechsel mehr nötig - alle Daten gleichzeitig sichtbar
+- **Automatische Charts**: Direkte Anzeige auf Ticker-Detailseiten ohne Button-Klick
+- **Verbessertes Modal**: Ticker-Hinzufügen mit Validierung, Loading-States und Error-Feedback
+- **Responsive Design**: Optimiert für Desktop mit festen Spaltenbreiten und flexiblen Inhaltsbereichen
 
-### Performance Vorteile
-- **Sofortige Navigation**: Seitenwechsel ohne Ladeverzögerung
-- **Intelligentes Refresh**: Nur bei abgelaufenem TTL oder manueller Aktion
-- **Keine Persistenz**: Cache leert sich bei Tab-Schließen (gewollt)
-- **Module-Level Persistence**: Überlebt Next.js App Router Navigation
-
-## 🚀 Phase 4: Signal Intelligence (Abgeschlossen)
-
-### Neue Features
-- **Smart Alerts**: RSI, Volumen, SMA & Score-basierte Signale
-- **Opportunity Scanner**: Automatische Earnings-Setup-Erkennung  
-- **Chart Analyst**: DeepSeek technische Analyse mit konkreten Levels
-- **Google News Integration**: Dynamische News aus Watchlist + Custom Keywords
-- **Delta Tracking**: Score-Veränderungen über Zeit
-- **Narrative Intelligence**: Erkennung fundamentaler Unternehmensänderungen
-
-### Frontend Erweiterungen
-- Dashboard mit Watchlist Heatmap (Deltas, Sparklines, Earnings Countdown)
-- Opportunity-Sektion mit Top Earnings-Setups
-- Sektor-Konzentrations-Warnungen
-- News-Seite mit Google News & Signals Tabs
-- Chart-Analyse-Button pro Ticker
-- Settings-Seite für Custom Search Terms
-
-### Backend Erweiterungen
-- **Neue API Endpoints**:
-  - `/api/signals/scan` - Technische Signale
-  - `/api/opportunities` - Earnings Opportunities
-  - `/api/chart-analysis/{ticker}` - Chart Analyse
-  - `/api/google-news/scan` - Google News Scanner
-  - `/api/watchlist/enriched` - Watchlist mit Deltas
-  - `/api/data/sparkline/{ticker}` - Mini-Charts
-  - `/api/news/scan-weekend` - Wochenend-News
-
-### Automatisierung (n8n)
-- **News-Pipeline**: Mo-Fr 13:00-22:30 (alle 30min)
-- **Wochenend-News**: Sa-So 10/14/18/22 Uhr
-- **Morning Briefing**: Mo-Fr 08:00 Uhr
-- **Sonntags-Report**: Sonntag 19:00 Uhr
-- **Post-Earnings Review**: Mo-Fr 22:00 Uhr
-
-## 📊 Plattform-Setup
-- [x] Backend Projekt-Shell
-- [x] Konfigurations-Management (settings.yaml, .env)
-- [x] Zentraler structslog Logger mit In-Memory-Buffer
-- [x] Admin-Panel UI (/admin)
-- [x] Supabase Datenbank-Integration
-- [x] FastAPI Backend mit CORS
-- [x] Next.js Frontend mit Tailwind CSS
-- [x] Docker Containerisierung
-- [x] n8n Workflow Automatisierung
-- [x] Redis Cache Layer
-- [x] Signal Intelligence Features
-- [x] Client-Side Navigation Caching
+### Data Sources
+- **Marktdaten**: yfinance (Kurse, Volumen, Indikatoren)
+- **News**: Finnhub (Company & General News), Google News Integration
+- **Makro**: FRED (VIX, Zinsen, Rohstoffe), Finnhub Economic Calendar
+- **Regulatorisch**: SEC EDGAR (Form 8-K, 4) für Insider-Transaktionen
+- **Sentiment**: FinBERT für deutsche/englische News-Analyse
 
 ## 🛠️ Quick Start
 
-```bash
-# 1. Supabase Migration ausführen (wichtig!)
-# Siehe: database/migrations/add_narrative_shift_columns.sql
+### Voraussetzungen
+- Docker und Docker Compose
+- API Keys (siehe `.env.example`)
+- Supabase Projekt (optional für Persistenz)
 
-# 2. Backend starten
+### Installation
+
+```bash
+# 1. Repository klonen
+git clone https://github.com/Kazuo3o447/Kafin.git
+cd Kafin
+
+# 2. Umgebungsvariablen konfigurieren
+cp .env.example .env
+# .env mit deinen API Keys bearbeiten
+
+# 3. Backend starten
 docker-compose up -d kafin-backend
 
-# 3. Frontend starten (optional)
+# 4. Frontend starten
+docker-compose build kafin-frontend
 docker-compose up -d kafin-frontend
 
-# 4. n8n Dashboard
+# 5. n8n Dashboard (optional für Automatisierung)
 # http://localhost:5678 (admin/changeme)
 ```
 
-## 📚 Dokumentation
-- `Plattform-Spezifikation-v2.md` - Detaillierte Spezifikation
-- `database/schema.sql` - Datenbank-Schema
-- `prompts/` - KI-Prompt-Templates
-- `database/migrations/` - Schema-Migrationen
+### Zugriffe
+- **Web Dashboard**: http://localhost:3000
+- **API Dokumentation**: http://localhost:8000/docs
+- **n8n Workflows**: http://localhost:5678
 
-## 🔧 Konfiguration
+## 📊 Plattform-Architektur
+
+### Backend (FastAPI)
+- **API-Endpunkte**: RESTful APIs für Watchlist, News, Charts, Reports
+- **Datenanreicherung**: yfinance, Finnhub, FRED, SEC EDGAR Integration
+- **KI-Verarbeitung**: FinBERT Sentiment, DeepSeek Analysen
+- **Automatisierung**: n8n Workflow Integration
+
+### Frontend (Next.js 15)
+- **Framework**: TypeScript, Tailwind CSS v4, App Router
+- **Design-System**: Dark Mode mit CSS-Variablen
+- **State Management**: React Hooks, Client-Side Caching
+- **Charts**: Lightweight Charts mit Overlays und Markern
+
+### Datenbank (Supabase)
+- **Watchlist**: Ticker und Metadaten
+- **News**: Stichpunkte und Sentiment-Daten
+- **Reports**: Morning Briefings und Analysen
+- **Performance**: Tracking und Historie
+
+## 📚 Dokumentation
+
+### Wichtige Dateien
+- `STATUS.md` - Detaillierter Projektstatus und Meilensteine
+- `ARCHITECTURE.md` - Technische Architektur
+- `database/schema.sql` - Datenbank-Schema
+- `docs/apis/` - API-Dokumentationen
+- `prompts/` - KI-Prompt-Templates
+
+### Konfiguration
 - `.env` - API Keys und Secrets
 - `config/settings.yaml` - Plattform-Einstellungen
 - `config/apis.yaml` - API-Konfiguration
+- `docker-compose.yml` - Container-Konfiguration
 
-## 🐛 Bugfixes (Latest Release)
-- Variable `lt_memory` nicht definiert → behoben
-- Circular Import Risk → eliminiert  
-- HTML Escaping für Telegram → hinzugefügt
-- Fehlende API Endpoints → ergänzt
-- Supabase Schema Consistency → Migration erstellt
+## � Automatisierung (n8n)
+
+### Aktive Workflows
+- **Morning Briefing**: Mo-Fr 07:00 Uhr
+- **News-Pipeline**: Mo-Fr 13:00-22:30 (alle 30min)
+- **Wochenend-News**: Sa-So 10/14/18/22 Uhr
+- **Sonntags-Report**: Sonntag 19:00 Uhr
+- **Post-Earnings Review**: Mo-Fr 22:00 Uhr
+
+## 🐛 Letzte Fixes (18. März 2026)
+- Backend: Watchlist-Endpunkte mit optionalen Feldern robust gemacht
+- Frontend: Dark Mode Design-System implementiert
+- Frontend: News-Seite auf 2-Spalten-Layout umgestellt
+- Frontend: Chart-Integration und Error-Handling verbessert
+- Frontend: Watchlist-Modal UX überarbeitet
+
+## 🚀 Nächste Schritte
+- Performance-Optimierung und Caching-Strategien
+- Erweiterte Chart-Analysen mit weiteren Indikatoren
+- Mobile Responsive Views
+- Additional Data Sources (Options, Social Sentiment)
 
 ---
 
-**Version**: 5.0 - Client-Side Navigation Caching Complete  
-**Letztes Update**: 2026-03-18
+**Version**: 6.0 - Dark Mode & UX Overhaul Complete  
+**Letztes Update**: 2026-03-18  
+**Status**: Production Ready

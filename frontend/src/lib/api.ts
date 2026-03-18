@@ -1,4 +1,6 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = (typeof window === "undefined" && process.env.INTERNAL_API_URL) 
+  ? process.env.INTERNAL_API_URL 
+  : "";
 
 export async function fetchAPI(endpoint: string, options?: RequestInit) {
   const res = await fetch(`${API_BASE}${endpoint}`, {

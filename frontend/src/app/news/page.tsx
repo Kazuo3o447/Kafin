@@ -214,307 +214,303 @@ export default function NewsPage() {
   }, [activeTab]);
 
   return (
-    <div className="space-y-8 p-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-bold text-[var(--text-primary)]">Signal Intelligence</h1>
-          <p className="text-sm text-[var(--text-secondary)] mt-2">News & technische Signale in Echtzeit</p>
-        </div>
-        <div className="inline-flex rounded-full border border-[var(--border)] bg-[var(--bg-secondary)] p-1 text-sm">
-          <button
-            onClick={() => setActiveTab("news")}
-            className={`flex items-center gap-2 rounded-full px-4 py-1 ${
-              activeTab === "news" ? "bg-[var(--accent-blue)] text-white" : "text-[var(--text-secondary)]"
-            }`}
-          >
-            <Newspaper size={14} /> News
-          </button>
-          <button
-            onClick={() => setActiveTab("google")}
-            className={`flex items-center gap-2 rounded-full px-4 py-1 ${
-              activeTab === "google" ? "bg-[var(--accent-teal)] text-white" : "text-[var(--text-secondary)]"
-            }`}
-          >
-            <Globe size={14} /> Google News
-          </button>
-          <button
-            onClick={() => setActiveTab("signals")}
-            className={`flex items-center gap-2 rounded-full px-4 py-1 ${
-              activeTab === "signals" ? "bg-[var(--accent-purple)] text-white" : "text-[var(--text-secondary)]"
-            }`}
-          >
-            <Radar size={14} /> Signale
-          </button>
-        </div>
-      </div>
+    <div className="flex h-full gap-6">
 
-      {activeTab === "news" && (
-        <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-          <div className="space-y-6">
-            <div className="card p-5">
-              <div className="flex flex-wrap items-center gap-3">
-                <Filter size={18} className="text-[var(--text-muted)]" />
-                <select
-                  value={filterTicker}
-                  onChange={(e) => setFilterTicker(e.target.value)}
-                  className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-2 text-sm text-[var(--text-primary)] outline-none shadow-sm"
-                >
-                  <option value="">Alle Ticker</option>
-                  {watchlist.map((item) => (
-                    <option key={item.ticker} value={item.ticker}>
-                      {item.ticker}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={filterSentiment}
-                  onChange={(e) => setFilterSentiment(e.target.value as any)}
-                  className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-2 text-sm text-[var(--text-primary)] outline-none shadow-sm"
-                >
-                  <option value="all">Alle Sentiments</option>
-                  <option value="positive">Positiv</option>
-                  <option value="negative">Negativ</option>
-                </select>
-                <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                  <input
-                    type="checkbox"
-                    checked={filterMaterial}
-                    onChange={(e) => setFilterMaterial(e.target.checked)}
-                    className="h-4 w-4 rounded border-[var(--border)] accent-[var(--accent-blue)]"
-                  />
-                  Nur Material Events
-                </label>
-              </div>
+      {/* ── LINKE SPALTE: Filter + Scans ──────────────────── */}
+      <aside className="w-[220px] shrink-0 space-y-4">
+
+        {/* Filter-Karte */}
+        <div className="card p-4 space-y-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em]
+                        text-[var(--text-muted)]">Filter</p>
+
+          {/* Ticker */}
+          <div className="space-y-1.5">
+            <label className="text-xs text-[var(--text-secondary)]">Ticker</label>
+            <select
+              value={filterTicker}
+              onChange={(e) => setFilterTicker(e.target.value)}
+              className="w-full rounded-lg border border-[var(--border)]
+                         bg-[var(--bg-tertiary)] px-3 py-1.5 text-xs
+                         text-[var(--text-primary)] outline-none"
+            >
+              <option value="">Alle</option>
+              {watchlist.map((w: any) => (
+                <option key={w.ticker} value={w.ticker}>{w.ticker}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sentiment */}
+          <div className="space-y-1">
+            <label className="text-xs text-[var(--text-secondary)]">Sentiment</label>
+            {(["all", "positive", "negative"] as const).map((val) => (
+              <button
+                key={val}
+                onClick={() => setFilterSentiment(val)}
+                className={`w-full rounded-lg px-3 py-1.5 text-left text-xs
+                             transition-colors ${
+                  filterSentiment === val
+                    ? "bg-[var(--accent-blue)]/15 text-[var(--accent-blue)]"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+                }`}
+              >
+                {val === "all" ? "Alle" : val === "positive" ? "↑ Positiv" : "↓ Negativ"}
+              </button>
+            ))}
+          </div>
+
+          {/* Material Toggle */}
+          <label className="flex cursor-pointer items-center gap-2">
+            <div
+              onClick={() => setFilterMaterial(!filterMaterial)}
+              className={`relative h-5 w-9 rounded-full transition-colors ${
+                filterMaterial ? "bg-[var(--accent-blue)]" : "bg-[var(--bg-elevated)]"
+              }`}
+            >
+              <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white
+                               shadow transition-transform ${
+                filterMaterial ? "translate-x-4" : "translate-x-0.5"
+              }`} />
             </div>
+            <span className="text-xs text-[var(--text-secondary)]">
+              Nur Torpedo
+            </span>
+          </label>
+        </div>
 
-            <div className="max-h-[700px] space-y-4 overflow-y-auto">
-              {loading ? (
-                <div className="card p-6 text-center">
-                  <p className="text-sm text-[var(--text-muted)]">Lade News...</p>
+        {/* Scans-Karte */}
+        <div className="card p-4 space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em]
+                        text-[var(--text-muted)] mb-3">Scans</p>
+
+          {[
+            { label: "News-Scan",    action: runNewsScan,       color: "bg-[var(--accent-blue)]",   loading: loading },
+            { label: "SEC EDGAR",    action: runSecScan,        color: "bg-[var(--accent-amber)]",  loading: false   },
+            { label: "Google News",  action: runGoogleNewsScan, color: "bg-[var(--accent-green)]",  loading: googleLoading },
+            { label: "Makro",        action: runMacroScan,      color: "bg-[var(--accent-purple)]", loading: false   },
+            { label: "Signale",      action: runSignalScan,     color: "bg-[var(--accent-red)]",    loading: signalLoading },
+          ].map(({ label, action, color, loading: isLoading }) => (
+            <button
+              key={label}
+              onClick={action}
+              disabled={isLoading}
+              className={`flex w-full items-center justify-between rounded-lg
+                          px-3 py-2 text-xs font-medium text-white
+                          transition-all hover:opacity-85 disabled:opacity-40 ${color}`}
+            >
+              <span>{label}</span>
+              {isLoading
+                ? <div className="h-3 w-3 animate-spin rounded-full border
+                                  border-white/30 border-t-white" />
+                : <Play size={11} />
+              }
+            </button>
+          ))}
+
+          {scanResult && (
+            <p className="mt-2 text-[10px] text-[var(--text-muted)]">{scanResult}</p>
+          )}
+        </div>
+
+        <CacheStatus
+          fromCache={fromCache}
+          ageSeconds={dataAge}
+          onRefresh={() => loadNews(true)}
+          refreshing={refreshing}
+        />
+      </aside>
+
+      {/* ── RECHTE SPALTE: Feed ───────────────────────────── */}
+      <main className="flex-1 min-w-0 space-y-4 overflow-y-auto
+                       max-h-[calc(100vh-120px)]">
+
+        {/* Seiten-Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-[var(--text-primary)]">
+              News-Feed
+            </h1>
+            <p className="text-xs text-[var(--text-secondary)]">
+              {filtered.length} Einträge
+              {filterTicker && ` · ${filterTicker}`}
+              {filterMaterial && " · Nur Torpedo"}
+            </p>
+          </div>
+        </div>
+
+        {/* News-Stichpunkte */}
+        {loading ? (
+          <div className="space-y-3">
+            {[1,2,3,4,5].map(i => (
+              <div key={i} className="card p-4 animate-pulse">
+                <div className="h-3 w-16 rounded bg-[var(--bg-elevated)] mb-2" />
+                <div className="h-4 w-full rounded bg-[var(--bg-elevated)]" />
+              </div>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="card p-8 text-center">
+            <p className="text-sm text-[var(--text-muted)]">
+              Keine News gefunden.{" "}
+              <button
+                onClick={runNewsScan}
+                className="text-[var(--accent-blue)] underline hover:no-underline"
+              >
+                News-Scan starten
+              </button>
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filtered.map((item, idx) => (
+              <div
+                key={item.id || idx}
+                className={`card px-4 py-3 ${
+                  item.is_material
+                    ? "border-l-2 border-l-[var(--accent-red)]"
+                    : (item.sentiment_score ?? 0) > 0.3
+                    ? "border-l-2 border-l-[var(--accent-green)]"
+                    : (item.sentiment_score ?? 0) < -0.3
+                    ? "border-l-2 border-l-[var(--accent-amber)]"
+                    : ""
+                }`}
+              >
+                {/* Zeile 1: Meta */}
+                <div className="flex items-center gap-2 mb-1.5">
+                  {item.is_material && (
+                    <span className="badge badge-danger text-[9px] px-1.5 py-0.5">
+                      ⚠ TORPEDO
+                    </span>
+                  )}
+                  <span className="badge badge-neutral text-[9px] px-1.5 py-0.5">
+                    {item.ticker}
+                  </span>
+                  {item.category && (
+                    <span className="text-[10px] text-[var(--text-muted)]">
+                      {item.category}
+                    </span>
+                  )}
+                  <span className="ml-auto text-[10px] text-[var(--text-muted)]">
+                    {item.created_at
+                      ? new Date(item.created_at).toLocaleDateString("de-DE", {
+                          day: "2-digit", month: "short",
+                        })
+                      : "—"}
+                  </span>
+                  {/* Sentiment-Zahl */}
+                  <span className={`text-[10px] font-mono font-semibold ${
+                    (item.sentiment_score ?? 0) > 0.3
+                      ? "text-[var(--accent-green)]"
+                      : (item.sentiment_score ?? 0) < -0.3
+                      ? "text-[var(--accent-red)]"
+                      : "text-[var(--text-muted)]"
+                  }`}>
+                    {item.sentiment_score !== undefined
+                      ? (item.sentiment_score > 0 ? "+" : "") +
+                        item.sentiment_score.toFixed(2)
+                      : "—"}
+                  </span>
                 </div>
-              ) : filtered.length === 0 ? (
-                <div className="card p-6 text-center">
-                  <p className="text-sm text-[var(--text-muted)]">Keine News gefunden.</p>
-                </div>
-              ) : (
-                filtered.map((item, idx) => (
-                  <div
-                    key={item.id || idx}
-                    className={`card p-5 ${
-                      item.is_material ? "border-l-4 border-l-[var(--accent-red)]" : ""
-                    }`}
+
+                {/* Zeile 2: Text */}
+                <p className="text-sm text-[var(--text-primary)] leading-relaxed">
+                  {item.bullet_text}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Google News (immer sichtbar wenn Daten vorhanden) ── */}
+        {googleNews.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em]
+                          text-[var(--text-muted)] mt-6 mb-3">
+              🌐 Google News ({googleNews.length})
+            </p>
+            <div className="space-y-2">
+              {googleNews.slice(0, 15).map((item, idx) => (
+                <div key={idx}
+                     className="card px-4 py-3 border-l-2 border-l-blue-500/40">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] text-[var(--text-muted)]">
+                      {item.source}
+                    </span>
+                    {item.related_ticker && (
+                      <span className="badge badge-neutral text-[9px] px-1.5 py-0.5">
+                        {item.related_ticker}
+                      </span>
+                    )}
+                    {item.sentiment_score !== undefined && (
+                      <span className={`ml-auto text-[10px] font-mono font-semibold ${
+                        item.sentiment_score > 0.2
+                          ? "text-[var(--accent-green)]"
+                          : item.sentiment_score < -0.2
+                          ? "text-[var(--accent-red)]"
+                          : "text-[var(--text-muted)]"
+                      }`}>
+                        {item.sentiment_score > 0 ? "+" : ""}
+                        {item.sentiment_score.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm text-[var(--text-primary)] hover:text-[var(--accent-blue)]
+                               leading-relaxed transition-colors"
                   >
-                    <div className="flex items-start gap-4">
-                      <Circle
-                        size={8}
-                        className={`mt-2 flex-shrink-0 ${
-                          (item.sentiment_score ?? 0) > 0.3
-                            ? "fill-[var(--accent-green)] text-[var(--accent-green)]"
-                            : (item.sentiment_score ?? 0) < -0.3
-                            ? "fill-[var(--accent-red)] text-[var(--accent-red)]"
-                            : "fill-[var(--text-muted)] text-[var(--text-muted)]"
-                        }`}
-                      />
-                      <div className="flex-1">
-                        <div className="mb-2 flex items-center gap-2">
-                          <span className="badge badge-neutral">{item.ticker}</span>
-                          <span className="badge badge-info">{item.category || "News"}</span>
-                          {item.is_material && (
-                            <span className="badge badge-danger">TORPEDO</span>
-                          )}
-                          <span className="ml-auto text-xs text-[var(--text-muted)]">
-                            {item.created_at ? new Date(item.created_at).toLocaleString("de-DE") : "-"}
-                          </span>
-                        </div>
-                        <p className="text-sm text-[var(--text-primary)] leading-relaxed">{item.bullet_text}</p>
-                        <div className="mt-2 flex items-center gap-2">
-                          <span className="text-xs text-[var(--text-muted)]">Sentiment:</span>
-                          <span
-                            className={`text-sm font-bold ${
-                              (item.sentiment_score ?? 0) > 0.3
-                                ? "text-[var(--accent-green)]"
-                                : (item.sentiment_score ?? 0) < -0.3
-                                ? "text-[var(--accent-red)]"
-                                : "text-[var(--text-muted)]"
-                            }`}
-                          >
-                            {item.sentiment_score?.toFixed(2) || "0.00"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="card p-6">
-              <h2 className="text-lg font-bold text-[var(--text-primary)] mb-4">Scan Actions</h2>
-              <div className="space-y-3">
-                <button
-                  onClick={runNewsScan}
-                  disabled={loading}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-3 text-sm font-medium text-white shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
-                >
-                  <Play size={18} />
-                  News Scan
-                </button>
-                <button
-                  onClick={runSecScan}
-                  disabled={loading}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-amber)] px-4 py-3 text-sm font-medium text-white shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
-                >
-                  <Play size={18} />
-                  SEC Scan
-                </button>
-                <button
-                  onClick={runMacroScan}
-                  disabled={loading}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-purple)] px-4 py-3 text-sm font-medium text-white shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
-                >
-                  <Play size={18} />
-                  Macro Scan
-                </button>
-                <button
-                  onClick={runGoogleNewsScan}
-                  disabled={googleLoading}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-green)] px-4 py-3 text-sm font-medium text-white shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
-                >
-                  {googleLoading ? <Activity size={18} className="animate-spin" /> : <Globe size={18} />}
-                  {googleLoading ? "Google Scan läuft..." : "Google News Scan"}
-                </button>
-              </div>
-              {scanResult && (
-                <div className="mt-4 rounded-lg bg-[var(--bg-tertiary)] p-4 text-sm text-[var(--text-primary)]">
-                  {scanResult}
+                    {item.headline}
+                  </a>
                 </div>
-              )}
+              ))}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {activeTab === "google" && (
-        <div className="space-y-6">
-          <div className="card p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-[var(--text-primary)]">Google News Feed</h2>
-                <p className="text-sm text-[var(--text-secondary)]">Dynamische Headlines aus Watchlist + Custom Keywords</p>
-              </div>
-              <button
-                onClick={runGoogleNewsScan}
-                disabled={googleLoading}
-                className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-90 disabled:opacity-50"
-              >
-                {googleLoading ? <Activity size={16} className="animate-spin" /> : <Globe size={16} />}
-                {googleLoading ? "Scan läuft..." : "Google News Scan"}
-              </button>
-            </div>
-
-            {googleStatus && (
-              <div className="rounded-lg bg-[var(--bg-tertiary)] px-4 py-2 text-sm text-[var(--text-primary)]">
-                {googleStatus}
-              </div>
-            )}
-
-            {googleNews.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">Noch keine Google-News geladen – starte einen Scan.</p>
-            ) : (
-              <div className="space-y-4">
-                {Object.entries(googleByCategory).map(([category, items]) => (
-                  <div key={category} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className="badge badge-info uppercase">{category}</span>
-                      <span className="text-xs text-[var(--text-muted)]">{items.length} Artikel</span>
-                    </div>
-                    <div className="space-y-3">
-                      {items.map((item, idx) => (
-                        <div key={`${category}-${idx}`} className="rounded-xl bg-[var(--bg-tertiary)] p-4">
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
-                            <span className="font-medium text-[var(--text-primary)]">{item.source}</span>
-                            {item.related_ticker && <span className="badge badge-neutral">{item.related_ticker}</span>}
-                            {typeof item.sentiment_score === "number" && (
-                              <span
-                                className={`font-semibold ${
-                                  item.sentiment_score > 0.2
-                                    ? "text-[var(--accent-green)]"
-                                    : item.sentiment_score < -0.2
-                                    ? "text-[var(--accent-red)]"
-                                    : "text-[var(--text-secondary)]"
-                                }`}
-                              >
-                                {item.sentiment_score.toFixed(2)}
-                              </span>
-                            )}
-                          </div>
-                          <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">{item.headline}</p>
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-2 inline-flex items-center gap-2 text-sm text-[var(--accent-blue)] hover:underline"
-                          >
-                            <Globe size={14} /> Artikel lesen
-                          </a>
-                        </div>
-                      ))}
-                    </div>
+        {/* ── Signale (immer sichtbar wenn Daten vorhanden) ── */}
+        {signals.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em]
+                          text-[var(--text-muted)] mt-6 mb-3">
+              ⚡ Signale ({signals.length})
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {signals.map((signal, idx) => (
+                <div
+                  key={`${signal.ticker}-${idx}`}
+                  className={`rounded-xl p-4 ${signalColor(signal.type)}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-mono font-bold text-white">
+                      {signal.ticker}
+                    </span>
+                    <span className="text-[10px] text-white/70 uppercase">
+                      {signal.type}
+                    </span>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {activeTab === "signals" && (
-        <div className="space-y-6">
-          <div className="card p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-[var(--text-primary)]">Smart Alerts</h2>
-                <p className="text-sm text-[var(--text-secondary)]">RSI, Volumen, SMA & Score-basierte Signale</p>
-              </div>
-              <button
-                onClick={runSignalScan}
-                disabled={signalLoading}
-                className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent-green)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-              >
-                {signalLoading ? <Activity size={16} className="animate-spin" /> : <Sparkles size={16} />} 
-                {signalLoading ? "Scan läuft..." : "Signal-Scan jetzt"}
-              </button>
-            </div>
-            {signalStatus && (
-              <div className="mt-3 rounded-lg bg-[var(--bg-tertiary)] p-3 text-sm text-[var(--text-primary)]">
-                {signalStatus}
-              </div>
-            )}
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            {signals.length === 0 ? (
-              <div className="card p-6 text-center text-sm text-[var(--text-muted)]">
-                Noch keine Signale – starte einen Scan.
-              </div>
-            ) : (
-              signals.map((signal, idx) => (
-                <div key={`${signal.ticker}-${idx}`} className={`rounded-2xl p-5 ${signalColor(signal.type)}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">{signal.type}</p>
-                      <p className="text-2xl font-bold text-white">{signal.ticker}</p>
-                    </div>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-white whitespace-pre-line">{signal.alert_text}</p>
+                  <p className="text-xs text-white/90 leading-relaxed">
+                    {signal.alert_text}
+                  </p>
                 </div>
-              ))
-            )}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Leerer Gesamt-State */}
+        {!loading && filtered.length === 0 &&
+         googleNews.length === 0 && signals.length === 0 && (
+          <div className="card p-12 text-center">
+            <p className="text-sm text-[var(--text-muted)] mb-3">
+              Noch keine Daten. Starte einen Scan in der linken Spalte.
+            </p>
+          </div>
+        )}
+
+      </main>
     </div>
   );
 }

@@ -2,27 +2,27 @@
 
 ## Übersicht
 
-Kafin ist eine Next.js 15 Full-Stack Plattform für Earnings-basiertes Trading mit KI-Unterstützung.
+Kafin ist eine moderne Earnings-Trading-Plattform mit KI-Unterstützung, gebaut auf Next.js 15 und FastAPI mit einem fokussierten Dark Mode Dashboard.
 
 ## Tech Stack
 
 ### Frontend
 - **Framework**: Next.js 15 mit App Router
 - **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **UI Components**: Lucide Icons, Recharts
-- **State Management**: React Hooks
-- **API Client**: Custom fetch wrapper
-- **Caching**: Client-side Map mit TTL
+- **Styling**: Tailwind CSS v4 mit CSS-Variablen
+- **UI Components**: Lucide Icons, Lightweight Charts
+- **State Management**: React Hooks, Client-Side Caching
+- **API Client**: Custom fetch wrapper mit Error Handling
+- **Charts**: TradingView Lightweight Charts mit Overlays
 
 ### Backend
 - **Runtime**: Python 3.11
-- **Framework**: FastAPI
+- **Framework**: FastAPI mit AsyncIO
 - **Database**: Supabase (PostgreSQL)
 - **Cache**: Redis
 - **Logging**: structlog mit In-Memory Buffer
-- **Async**: AsyncIO
 - **Testing**: pytest
+- **Data Processing**: pandas, yfinance, Finnhub API
 
 ### Infrastructure
 - **Container**: Docker & Docker Compose
@@ -31,53 +31,67 @@ Kafin ist eine Next.js 15 Full-Stack Plattform für Earnings-basiertes Trading m
 
 ## Frontend Architektur
 
-### Client-Side Caching
-```typescript
-// frontend/src/lib/clientCache.ts
-const cache = new Map<string, CacheEntry<unknown>>()
-
-export async function cachedFetch<T>(
-  key: string,
-  fetcher: () => Promise<T>,
-  ttlSeconds = 60
-): Promise<{ data: T; fromCache: boolean }>
+### Design System (Dark Mode)
+```css
+/* CSS Variablen für konsistentes Dark Theme */
+:root {
+  --bg-primary:   #0B0F1A;   /* Seiten-Hintergrund */
+  --bg-secondary: #111827;   /* Karten, Sidebar */
+  --bg-tertiary:  #1A2235;   /* Inputs, Tabellen-Header */
+  --text-primary:   #F1F5F9;  /* Hauptinhalt, Zahlen */
+  --text-secondary: #94A3B8;  /* Labels, Beschriftungen */
+  --accent-blue:   #3B82F6;  /* Primär-Aktion, Navigation */
+  --accent-green:  #10B981;  /* Positiv, Buy */
+  --accent-red:    #F43F5E;  /* Negativ, Short, Alarm */
+}
 ```
-
-- **Module-level Map**: Überlebt Next.js Navigation
-- **TTL-basiert**: Automatische Invalidierung
-- **Kein localStorage**: Nur für aktuelle Session
-- **CacheStatus UI**: Zeigt Cache-Alter und Refresh
 
 ### Page Struktur
 ```
 src/app/
 ├── page.tsx              # Dashboard
 ├── watchlist/
-│   └── page.tsx          # Watchlist Management
+│   ├── page.tsx          # Watchlist Management
+│   └── [ticker]/
+│       └── page.tsx      # Ticker Detail mit Chart
 ├── news/
-│   └── page.tsx          # News & Signals
+│   └── page.tsx          # 2-Spalten News-Feed
 ├── performance/
 │   └── page.tsx          # Track Record & Shadow
 ├── earnings/
 │   └── page.tsx          # Earnings Radar
+├── reports/
+│   └── page.tsx          # Reports Generierung
 └── layout.tsx            # Root Layout
 ```
 
-### Components
+### Key Components
 ```
 src/components/
+├── sidebar.tsx           # Navigation (220px, Dark Mode)
 ├── CacheStatus.tsx       # Cache UI Indicator
-├── CommandPalette.tsx   # Cmd+K Quick Search
-├── sidebar.tsx          # Navigation
-└── ...
+├── InteractiveChart.tsx  # TradingView Charts
+└── CommandPalette.tsx    # Cmd+K Quick Search
 ```
 
-### API Layer
+### 2-Spalten News-Layout
+```typescript
+// News-Page: Linke Spalte (220px) + Rechte Spalte (flex-1)
+<aside className="w-[220px] shrink-0 space-y-4">
+  {/* Filter + Scan Buttons */}
+</aside>
+<main className="flex-1 min-w-0 space-y-4">
+  {/* News + Google News + Signale */}
+</main>
+```
+
+### API Layer mit Error Handling
 ```typescript
 // src/lib/api.ts
 export const api = {
   getWatchlist: () => fetchJSON<WatchlistItem[]>('/api/watchlist'),
-  getPerformance: () => fetchJSON<PerformanceData>('/api/performance'),
+  addTicker: (data: WatchlistItemCreate) => 
+    fetchJSON('/api/watchlist', { method: 'POST', body: JSON.stringify(data) }),
   // ...
 }
 ```
@@ -89,89 +103,90 @@ export const api = {
 backend/app/
 ├── main.py               # FastAPI App & Routes
 ├── data/                 # Data Providers
+│   ├── yfinance_data.py  # Technical Data & Charts
 │   ├── finnhub.py        # Market Data
 │   ├── fmp.py            # Financial Metrics
-│   ├── yfinance_data.py  # Technical Data
-│   └── coinglass.py      # Crypto Data
+│   └── google_news.py    # News Aggregation
 ├── analysis/             # AI Analysis
-│   ├── chart_analyst.py  # DeepSeek Analysis
+│   ├── chart_analyst.py  # DeepSeek Chart Analysis
 │   ├── report_generator.py # Morning Briefing
-│   ├── post_earnings_review.py # Post-Earnings
-│   └── shadow_portfolio.py # Shadow Trading
+│   └── post_earnings_review.py # Post-Earnings
 ├── alerts/               # Signal Engine
 │   ├── signal_scanner.py # Technical Signals
-│   ├── opportunity_scanner.py # Earnings Setups
-│   └── narrative_shift_detector.py # Narrative Changes
-├── data/                 # External APIs
-│   ├── deepseek.py       # LLM Integration
-│   ├── finnhub.py        # Market Data
-│   └── google_news.py    # News Aggregation
+│   └── opportunity_scanner.py # Earnings Setups
 └── config.py             # Settings Management
+```
+
+### Robust Watchlist API
+```python
+class WatchlistItemCreate(BaseModel):
+    ticker: str
+    company_name: Optional[str] = None  # Robuster: Optional
+    sector: Optional[str] = "Unknown"   # Mit Default
+    notes: Optional[str] = ""
+    cross_signals: Optional[List[str]] = []
+
+@watchlist_router.post("")
+async def api_add_watchlist_item(item: WatchlistItemCreate):
+    # Fallback für fehlende Felder
+    company_name = item.company_name or item.ticker.upper()
+    sector = item.sector or "Unknown"
+    return await add_ticker(item.ticker, company_name, sector, ...)
+```
+
+### Chart Intelligence System
+```python
+# OHLCV mit Overlays
+GET /api/chart/ohlcv/{ticker}?period=1y&interval=1d
+GET /api/chart/overlays/{ticker}  # Earnings, Torpedo, Insider
+
+# Response Format
+{
+  "candles": [{"time": "2024-01-01", "open": 150, "high": 155, "low": 149, "close": 152}],
+  "sma_50": [{"time": "2024-01-01", "value": 148.5}],
+  "sma_200": [{"time": "2024-01-01", "value": 145.2}]
+}
 ```
 
 ### Database Schema
 ```sql
 -- Core Tables
-watchlist                 -- User Watchlist
-audit_reports            -- AI Analysis
+watchlist                 -- User Watchlist mit optionalen Feldern
+audit_reports            -- AI Analysis (DeepSeek)
 earnings_reviews         -- Post-Earnings Analysis
-shadow_trades           -- Shadow Portfolio
-narrative_shifts        -- Narrative Changes
+news_bullets            -- News Stichpunkte (FinBERT)
 signal_alerts           -- Technical Signals
-```
-
-### API Endpoints
-```python
-# Market Data
-GET /api/data/macro                    -- Macro Snapshot
-GET /api/data/market-overview          -- Indices & Sectors
-GET /api/data/sparkline/{ticker}       -- Mini Charts
-
-# Watchlist
-GET /api/watchlist                      -- Basic Watchlist
-GET /api/watchlist/enriched            -- With Scores/Deltas
-POST /api/watchlist                     -- Add Ticker
-DELETE /api/watchlist/{ticker}          -- Remove Ticker
-
-# Analysis
-GET /api/chart-analysis/{ticker}        -- DeepSeek Analysis
-GET /api/opportunities                  -- Earnings Setups
-POST /api/signals/scan                  -- Technical Signals
-
-# Performance
-GET /api/performance                    -- Track Record
-GET /api/shadow/portfolio               -- Shadow Portfolio
-
-# Reports
-GET /api/reports/latest                 -- Morning Briefing
-POST /api/reports/generate              -- Generate Report
+chart_data              -- OHLCV Cache für Charts
 ```
 
 ## Data Flow
 
-### Client-Side Caching Flow
+### Modern Frontend Flow
 ```
-User Action → cachedFetch() → Check Cache
-├── Cache Hit → Return Cached Data (Instant)
-└── Cache Miss → API Call → Cache Result → Return Data
+User Action → Loading/Error States → API Call → Response
+├── Validation: Ticker Format (A-Z, 1-5 chars)
+├── Loading: Spinner im Button
+├── Error: Klare Fehlermeldungen (409, 422, 404)
+└── Success: Cache invalidieren, UI aktualisieren
+```
+
+### Chart Data Flow
+```
+Ticker Page Mount → InteractiveChart → API Calls
+├── GET /api/chart/ohlcv/{ticker} → Candlestick + SMA
+├── GET /api/chart/overlays/{ticker} → Events (Earnings, Torpedo)
+├── Error Handling: "Keine Daten für XYZ"
+└── Render: Lightweight Charts mit Markern
 ```
 
 ### Backend Processing
 ```
 API Request → FastAPI Route → Business Logic
+├── Input Validation (Pydantic Models)
 ├── Data Layer → External APIs / Database
-├── Analysis Layer → AI Processing
+├── Analysis Layer → AI Processing (FinBERT, DeepSeek)
 ├── Cache Layer → Redis (optional)
-└── Response → JSON Response
-```
-
-### Automation Workflows (n8n)
-```
-Schedule → n8n Workflow → API Calls → Database Update
-├── News Pipeline (30min)
-├── Morning Briefing (08:00)
-├── Post-Earnings Review (22:00)
-└── Sunday Report (19:00)
+└── Response → JSON mit Error Details
 ```
 
 ## Configuration Management
@@ -196,7 +211,7 @@ REDIS_URL=...
 # config/settings.yaml
 app:
   name: "Kafin"
-  version: "5.0"
+  version: "6.0"  # Dark Mode Update
   
 # config/apis.yaml
 apis:
@@ -210,15 +225,36 @@ apis:
 
 ### Frontend
 - **Client-Side Caching**: Redundante API-Calls vermeiden
+- **Error Boundaries**: Graceful Error Handling
 - **Lazy Loading**: Charts und schwere Komponenten
-- **Code Splitting**: Next.js automatische Optimierung
-- **Image Optimization**: Next.js Image Component
+- **CSS Variables**: Optimiertes Dark Mode Rendering
 
 ### Backend
-- **Redis Caching**: Häufige API-Antworten
-- **Async Processing**: Non-blocking I/O
+- **Parallel Processing**: asyncio.gather für yfinance Calls
+- **Fast Info**: yfinance.fast_info statt .info (10x schneller)
+- **Thread Pool**: CPU-intensive Tasks auslagern
 - **Connection Pooling**: Supabase Verbindungen
-- **Batch Processing**: Bulk API Calls
+
+## UI/UX Architecture
+
+### Dark Mode Design System
+- **CSS Variables**: Zentrales Theme Management
+- **Typography**: Inter (Text) + JetBrains Mono (Zahlen)
+- **Cards**: Konsistente Border-Radius und Shadows
+- **Badges**: Farbige Status-Indikatoren
+- **Transitions**: Smooth 0.15s Übergänge
+
+### Responsive Layout
+- **Desktop Focus**: Feste Spaltenbreiten (220px + flex-1)
+- **Sidebar**: Schmal (224px) mit Online-Indikator
+- **News-Layout**: 2-Spalten ohne Tab-Wechsel
+- **Charts**: Automatische Integration auf Detailseiten
+
+### Error Handling UX
+- **Form Validation**: Real-time Feedback
+- **Loading States**: Spinner und Disabled States
+- **Error Messages**: Klare, kontextbezogene Hinweise
+- **Fallbacks**: Graceful Degradation bei fehlenden Daten
 
 ## Security
 
@@ -250,6 +286,7 @@ logger.info("API call",
 - Global Exception Handler
 - Detailed Error Responses
 - Client-Side Error Boundaries
+- User-Friendly Error Messages
 
 ## Deployment
 
@@ -278,7 +315,7 @@ services:
 ## Testing Strategy
 
 ### Frontend
-- TypeScript Compile Check
+- TypeScript Compile Check (`npx tsc --noEmit`)
 - Component Testing (React Testing Library)
 - E2E Testing (Playwright)
 
@@ -303,5 +340,5 @@ services:
 
 ---
 
-**Version**: 5.0  
+**Version**: 6.0 - Dark Mode & UX Overhaul Complete  
 **Last Updated**: 2026-03-18

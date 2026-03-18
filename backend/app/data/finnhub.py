@@ -228,7 +228,75 @@ async def get_insider_transactions(ticker: str) -> InsiderActivity:
         return InsiderActivity(ticker=ticker, is_cluster_buy=False, is_cluster_sell=False, buy_volume_90d=0, sell_volume_90d=0)
 
 @rate_limit("finnhub")
-async def get_social_sentiment(ticker: str) -> Optional[SocialSentiment]:
+async def get_insider_transactions_list(ticker: str) -> List[dict]:
+    """
+    Ruft rohe Insider-Transaktionen für Chart-Overlays ab.
+    """
+    if settings.use_mock_data:
+        return [
+            {
+                "time": "2025-10-05",
+                "type": "insider",
+                "direction": "buy",
+                "name": "John Smith",
+                "role": "Director",
+                "amount_usd": 340000,
+                "pct_of_holdings": 3.1
+            }
+        ]
+
+    try:
+        url = f"https://finnhub.io/api/v1/stock/insider-transactions?symbol={ticker}&token={settings.finnhub_api_key}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            txs = data.get("data", [])
+
+        results = []
+        for tx in txs:
+            # Finnhub fields: name, share, change, transactionDate, transactionPrice
+            # We need: time, type="insider", direction, name, role, amount_usd, pct_of_holdings
+            
+            shares = tx.get("share", 0) # This might be total shares held or change? 
+            # Actually 'change' is the amount changed. 'share' is usually the holding after?
+            # Finnhub API: 'change': Number of shares transacted. 'share': Number of shares held after the transaction.
+            change = tx.get("change", 0)
+            price = tx.get("transactionPrice", 0)
+            
+            if change == 0:
+                continue
+
+            direction = "buy" if change > 0 else "sell"
+            amount_usd = abs(change) * price
+            
+            # Simple pct calculation if 'share' is post-transaction holding
+            holding_after = tx.get("share", 0)
+            holding_before = holding_after - change
+            pct = 0.0
+            if holding_before > 0:
+                pct = (abs(change) / holding_before) * 100
+            
+            results.append({
+                "time": tx.get("transactionDate"),
+                "type": "insider",
+                "direction": direction,
+                "name": tx.get("name"),
+                "role": "Insider", # Finnhub doesn't always give role in this endpoint easily, sometimes in other fields? 
+                # Checking API docs: API v1/stock/insider-transactions returns 'name', 'share', 'change', 'filingDate', 'transactionDate', 'transactionPrice', 'symbol'.
+                # Doesn't explicitly have 'role' in the basic response? 
+                # Wait, prompt example has "role": "Director".
+                # If Finnhub doesn't provide it, I'll default to "Insider".
+                "amount_usd": round(amount_usd, 2),
+                "pct_of_holdings": round(pct, 2)
+            })
+            
+        return results
+
+    except Exception as e:
+        logger.warning(f"Finnhub insider-list Fehler für {ticker}: {e}")
+        return []
+
     """Ruft Finnhub Social Sentiment der letzten 7 Tage ab."""
     if settings.use_mock_data:
         return SocialSentiment(reddit_mentions=150, twitter_mentions=300, social_score=0.35)

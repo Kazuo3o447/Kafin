@@ -14,6 +14,7 @@ from backend.app.data.yfinance_data import get_technical_setup, get_fundamentals
 from backend.app.analysis.scoring import calculate_opportunity_score, calculate_torpedo_score, get_recommendation
 from backend.app.analysis.deepseek import call_deepseek
 from backend.app.memory.long_term import get_all_insights_for_report
+from backend.app.analysis.shadow_portfolio import open_shadow_trade
 
 logger = get_logger(__name__)
 
@@ -458,6 +459,16 @@ async def generate_audit_report(ticker: str) -> str:
                 "created_at": datetime.now().isoformat()
             }).execute()
             logger.info(f"Audit-Report für {ticker} in Supabase gespeichert")
+            try:
+                await open_shadow_trade(
+                    ticker=ticker,
+                    recommendation=rec.recommendation if rec else "unknown",
+                    opportunity_score=opp_score.total_score if opp_score else 0.0,
+                    torpedo_score=torp_score.total_score if torp_score else 0.0,
+                    audit_report_id=None,
+                )
+            except Exception as shadow_err:  # noqa: BLE001
+                logger.debug(f"Shadow Trade Open (non-critical): {shadow_err}")
     except Exception as e:
         logger.debug(f"Audit-Report DB-Speicher: {e}")
 

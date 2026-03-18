@@ -1,6 +1,7 @@
 import { ArrowLeft, TrendingUp, Activity, FileText, Calendar } from "lucide-react";
 import Link from "next/link";
 import { ChartAnalysisSection } from "./ChartAnalysisSection";
+import { TrackRecordSection } from "./TrackRecordSection";
 
 type TickerDetailProps = {
   params: Promise<{ ticker: string }>;
@@ -242,6 +243,8 @@ export default async function TickerDetailPage({ params }: TickerDetailProps) {
         <NewsMemoryCard newsMemory={newsMemory} />
         <LongTermMemoryCard longTermMemory={longTermMemory} />
       </div>
+
+      <TrackRecordSection ticker={ticker} />
     </div>
   );
 }

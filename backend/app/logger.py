@@ -16,7 +16,8 @@ import sys
 from typing import List, Dict, Any
 from collections import deque
 import json
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 
 # ---------------------------------------------------------------------------
 # Buffer: In-Memory Log-Speicher für Admin Panel
@@ -48,6 +49,140 @@ def _memory_buffer_processor(logger, log_method, event_dict):
     _log_buffer.appendleft(log_entry)
     
     return event_dict
+
+# ---------------------------------------------------------------------------
+# Module Status Helper
+# ---------------------------------------------------------------------------
+MODULES = {
+    "finbert_pipeline": {
+        "label": "FinBERT Pipeline",
+        "success_pattern": re.compile(r"FinBERT", re.IGNORECASE),
+        "logger_names": ["finbert", "news_processor"]
+    },
+    "sec_edgar": {
+        "label": "SEC EDGAR Scanner",
+        "success_pattern": re.compile(r"EDGAR", re.IGNORECASE),
+        "logger_names": ["sec_edgar"]
+    },
+    "morning_briefing": {
+        "label": "Morning Briefing",
+        "success_pattern": re.compile(r"morning", re.IGNORECASE),
+        "logger_names": ["report_generator"]
+    },
+    "sunday_report": {
+        "label": "Sonntags-Report",
+        "success_pattern": re.compile(r"sunday|sonntag|weekly", re.IGNORECASE),
+        "logger_names": ["report_generator"]
+    },
+    "torpedo_monitor": {
+        "label": "Torpedo Monitor",
+        "success_pattern": re.compile(r"torpedo", re.IGNORECASE),
+        "logger_names": ["torpedo_monitor"]
+    },
+    "n8n_scheduler": {
+        "label": "n8n Scheduler",
+        "success_pattern": re.compile(r"n8n", re.IGNORECASE),
+        "logger_names": ["n8n"]
+    }
+}
+
+def _relative_time(dt: datetime) -> str:
+    """Gibt eine relative Zeit zurück wie 'vor 2 Stunden'."""
+    now = datetime.utcnow()
+    diff = now - dt
+    seconds = diff.total_seconds()
+    if seconds < 60:
+        return "gerade eben"
+    minutes = int(seconds // 60)
+    if minutes < 60:
+        return f"vor {minutes} Minute{'n' if minutes != 1 else ''}"
+    hours = int(seconds // 3600)
+    if hours < 24:
+        return f"vor {hours} Stunde{'n' if hours != 1 else ''}"
+    days = int(seconds // 86400)
+    return f"vor {days} Tag{'en' if days != 1 else ''}"
+
+def get_module_status() -> Dict[str, Any]:
+    """Scans the last 500 log entries and extracts status per module."""
+    status_result = {
+        "modules": {},
+        "generated_at": datetime.utcnow().isoformat()
+    }
+    
+    logs = get_recent_logs()
+    # Filter to last 500 (already limited by buffer)
+    recent_logs = logs[:500]
+    
+    for module_id, config in MODULES.items():
+        # Find logs for this module
+        module_logs = [
+            log for log in recent_logs
+            if log.get("logger") in config["logger_names"]
+        ]
+        
+        last_run = None
+        last_error = None
+        stats = ""
+        status = "unknown"
+        
+        # Determine last run and last error
+        for log in module_logs:
+            ts_str = log.get("timestamp")
+            if not ts_str:
+                continue
+            try:
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            except Exception:
+                continue
+            
+            # Check for error or warning
+            level = log.get("level", "").lower()
+            if level in ("error", "warning", "critical"):
+                if last_error is None or ts > datetime.fromisoformat(last_error.get("timestamp", "1970")):
+                    last_error = {
+                        "timestamp": ts_str,
+                        "level": level,
+                        "event": log.get("event", "")
+                    }
+            
+            # Check for success pattern
+            event = log.get("event", "")
+            if config["success_pattern"].search(event):
+                if last_run is None or ts > datetime.fromisoformat(last_run):
+                    last_run = ts_str
+        
+        # Determine status
+        if last_error:
+            status = "error"
+        elif last_run:
+            # Check if last run is recent (within 24h)
+            try:
+                last_run_dt = datetime.fromisoformat(last_run.replace("Z", "+00:00"))
+                if datetime.utcnow() - last_run_dt < timedelta(hours=24):
+                    status = "ok"
+                else:
+                    status = "warning"
+            except Exception:
+                status = "warning"
+        else:
+            status = "unknown"
+        
+        # Extract stats (simple heuristic: count of logs with success pattern)
+        success_count = sum(1 for log in module_logs if config["success_pattern"].search(log.get("event", "")))
+        if success_count > 0:
+            stats = f"{success_count} Durchläufe heute"
+        
+        status_result["modules"][module_id] = {
+            "label": config["label"],
+            "status": status,
+            "last_run": last_run,
+            "last_run_relative": _relative_time(datetime.fromisoformat(last_run.replace("Z", "+00:00"))) if last_run else None,
+            "last_error": last_error,
+            "stats": stats,
+            "recent_logs": []  # To be filled on-demand
+        }
+    
+    return status_result
 
 # ---------------------------------------------------------------------------
 # Setup: Konfiguriert structlog und das stdlib-Logging-System

@@ -16,6 +16,7 @@ from backend.app.logger import get_logger
 from backend.app.analysis.deepseek import call_deepseek
 from backend.app.memory.long_term import save_insight, get_insights
 from backend.app.db import get_supabase_client
+from backend.app.analysis.shadow_portfolio import close_shadow_trade
 
 logger = get_logger(__name__)
 
@@ -143,6 +144,10 @@ async def run_post_earnings_review(ticker: str, quarter: Optional[str] = None) -
         if db:
             db.table("earnings_reviews").upsert(review_record, on_conflict="ticker,quarter").execute()
             logger.info(f"Earnings Review gespeichert: {ticker} {quarter}")
+            try:
+                await close_shadow_trade(ticker=ticker, quarter=quarter)
+            except Exception as shadow_err:  # noqa: BLE001
+                logger.debug(f"Shadow Trade Close (non-critical): {shadow_err}")
     except Exception as exc:
         logger.error(f"Earnings Review Speicher-Fehler: {exc}")
 

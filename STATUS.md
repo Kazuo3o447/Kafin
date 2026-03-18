@@ -115,6 +115,10 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **Zugriff**: http://localhost:3000 für das Web-Dashboard, http://localhost:8000 für die API-Dokumentation.
 
 ## 🔄 Letzte Updates (18. März 2026)
+- Frontend: API-Proxy für Next.js eingerichtet, um CORS und Netzwerkfehler zu beheben
+- Frontend: Darstellung der Suchleiste auf der Watchlist-Seite korrigiert
+- Frontend: ActionButtons in Client Components ausgelagert zur Behebung von Next.js Event Handler Fehlern
+- Backend: Fehlenden asyncio-Import behoben (500 Error beim Hinzufügen zur Watchlist)
 - Backend: Watchlist-Endpunkte mit optionalen Feldern robust gemacht
 - Frontend: Dark Mode Design-System implementiert
 - Frontend: News-Seite auf 2-Spalten-Layout umgestellt

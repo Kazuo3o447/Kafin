@@ -17,6 +17,9 @@ export async function fetchAPI(endpoint: string, options?: RequestInit) {
 }
 
 export const api = {
+  // Generic GET method for dynamic endpoints
+  get: (endpoint: string) => fetchAPI(endpoint),
+
   // Watchlist
   getWatchlist: () => fetchAPI("/api/watchlist"),
   addTicker: (data: any) => fetchAPI("/api/watchlist", { method: "POST", body: JSON.stringify(data) }),
@@ -35,6 +38,7 @@ export const api = {
   getCompanyProfile: (ticker: string) => fetchAPI(`/api/data/company/${ticker}/profile`),
   getNewsMemory: (ticker: string) => fetchAPI(`/api/news/memory/${ticker}`),
   getLongTermMemory: (ticker: string) => fetchAPI(`/api/data/long-term-memory/${ticker}`),
+  getTickerTrackRecord: (ticker: string) => fetchAPI(`/api/data/ticker-track-record/${ticker}`),
   getPerformance: () => fetchAPI("/api/data/performance"),
 
   // Actions
@@ -62,6 +66,9 @@ export const api = {
   getSparkline: (ticker: string, days = 7) => fetchAPI(`/api/data/sparkline/${ticker}?days=${days}`),
   getChartAnalysis: (ticker: string) => fetchAPI(`/api/chart-analysis/${ticker}`),
   getChartAnalysisTop: (limit = 5) => fetchAPI(`/api/chart-analysis-top?limit=${limit}`),
+  getOhlcv: (ticker: string, period = "6mo", interval = "1d") =>
+    fetchAPI(`/api/data/ohlcv/${ticker}?period=${period}&interval=${interval}`),
+  getChartOverlays: (ticker: string) => fetchAPI(`/api/data/chart-overlays/${ticker}`),
 
   // Google News Search Terms
   getSearchTerms: () => fetchAPI("/api/google-news/search-terms"),

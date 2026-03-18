@@ -37,26 +37,6 @@ export default function SettingsPage() {
   const [newCategory, setNewCategory] = useState("macro");
   const [termAction, setTermAction] = useState<string | null>(null);
 
-  async function runDiagnostics() {
-    setLoading(true);
-    setDiagnostics({});
-    
-    try {
-      const startTime = Date.now();
-      const result = await api.getDiagnostics();
-      const endTime = Date.now();
-      const latency = endTime - startTime;
-      
-      // Füge Latenz zu jedem Service hinzu
-      const resultsWithLatency = { ...result.details };
-      Object.keys(resultsWithLatency).forEach(key => {
-        if (resultsWithLatency[key]) {
-          resultsWithLatency[key] = {
-            ...resultsWithLatency[key],
-            latency: `${latency}ms`
-          };
-        }
-
   async function loadSearchTerms() {
     setTermsLoading(true);
     try {
@@ -98,6 +78,26 @@ export default function SettingsPage() {
   useEffect(() => {
     loadSearchTerms();
   }, []);
+
+  async function runDiagnostics() {
+    setLoading(true);
+    setDiagnostics({});
+    
+    try {
+      const startTime = Date.now();
+      const result = await api.getDiagnostics();
+      const endTime = Date.now();
+      const latency = endTime - startTime;
+      
+      // Füge Latenz zu jedem Service hinzu
+      const resultsWithLatency = { ...result.details };
+      Object.keys(resultsWithLatency).forEach(key => {
+        if (resultsWithLatency[key]) {
+          resultsWithLatency[key] = {
+            ...resultsWithLatency[key],
+            latency: `${latency}ms`
+          };
+        }
       });
       
       setDiagnostics(resultsWithLatency);

@@ -7,14 +7,15 @@ Deps:   FastAPI, config, logger, schemas, admin
 Config: app_name, environment
 API:    Keine externen (nur intern)
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import yfinance as yf
+import pandas as pd
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.config import settings
-from backend.app.logger import get_logger, get_recent_logs
+from backend.app.logger import get_logger, get_recent_logs, get_module_status
 from backend.app.admin import router as admin_router
 from backend.app.init_watchlist import ensure_watchlist_populated
 from backend.app.init_db import (
@@ -75,12 +76,63 @@ async def api_admin_init_tables():
     return {"status": "success", "sql": sql}
 
 @app.get("/api/logs")
-async def api_get_logs(level: str = None, limit: int = 100):
+async def api_get_logs(level: str = None, limit: int = 200):
     """Gibt die letzten Log-Einträge zurück."""
     logs = get_recent_logs()
     if level:
         logs = [l for l in logs if l.get("level") == level]
     return {"logs": logs[:limit]}
+
+@app.get("/api/logs/errors")
+async def api_get_logs_errors():
+    """Gibt nur Log-Einträge mit level 'error' oder 'warning' der letzten 24 Stunden zurück, maximal 50."""
+    logs = get_recent_logs()
+    now = datetime.utcnow()
+    cutoff = now - timedelta(hours=24)
+    
+    errors = []
+    for log in logs:
+        level = log.get("level", "").lower()
+        if level in ("error", "warning", "critical"):
+            try:
+                ts_str = log.get("timestamp")
+                if ts_str:
+                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                    if ts >= cutoff:
+                        errors.append({
+                            "timestamp": ts_str,
+                            "level": level,
+                            "logger": log.get("logger", ""),
+                            "event": log.get("event", ""),
+                            "ticker": log.get("ticker")
+                        })
+            except Exception:
+                continue
+        if len(errors) >= 50:
+            break
+    return {"errors": errors, "count": len(errors)}
+
+@app.get("/api/logs/module-status")
+async def api_get_module_status():
+    """Gibt den Execution-Status der sechs Kernmodule zurück."""
+    return get_module_status()
+
+@app.get("/api/logs/module/{module_id}")
+async def api_get_module_logs(module_id: str):
+    """Gibt die letzten 20 Log-Zeilen für ein spezifisches Modul zurück."""
+    from backend.app.logger import MODULES
+    
+    if module_id not in MODULES:
+        raise HTTPException(status_code=404, detail="Module not found")
+    
+    config = MODULES[module_id]
+    logs = get_recent_logs()
+    module_logs = [
+        log for log in logs
+        if log.get("logger") in config["logger_names"]
+    ]
+    
+    return {"logs": module_logs[:20]}
 
 from backend.app.analysis.finbert import analyze_sentiment
 
@@ -90,10 +142,12 @@ async def api_finbert_analyze(text: str):
     return {"text": text, "sentiment_score": score}
 
 from fastapi import APIRouter, Query
-from typing import List
+from typing import List, Optional
+import pandas as pd
 
 from backend.app.data.finnhub import (
-    get_earnings_calendar, get_company_news, get_short_interest, get_insider_transactions
+    get_earnings_calendar, get_company_news, get_short_interest, get_insider_transactions,
+    get_insider_transactions_list
 )
 from backend.app.data.fmp import (
     get_company_profile, get_analyst_estimates, get_earnings_history, get_key_metrics
@@ -203,6 +257,224 @@ async def api_long_term_memory(ticker: str):
     """Gibt das Langzeit-Gedächtnis für einen Ticker zurück."""
     insights = await get_insights(ticker)
     return {"ticker": ticker, "count": len(insights), "insights": insights}
+
+
+@data_router.get("/ticker-track-record/{ticker}")
+async def api_ticker_track_record(ticker: str):
+    """Aggregiert historische Trefferquote eines Tickers inkl. Audit/PER-Daten."""
+    normalized_ticker = ticker.upper()
+    cache_key = f"track_record_{normalized_ticker}"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
+
+    base_response = {"ticker": normalized_ticker, "summary": None, "history": []}
+
+    db = get_supabase_client()
+    if db is None:
+        return base_response
+
+    def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
+        if not value:
+            return None
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return dt.replace(tzinfo=None)
+        except Exception:
+            return None
+
+    def _to_float(value: Optional[float]) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _derive_quarter(report_dt: Optional[datetime]) -> str:
+        if not report_dt:
+            return "—"
+        quarter = ((report_dt.month - 1) // 3) + 1
+        return f"Q{quarter}_{report_dt.year}"
+
+    try:
+        reviews_res = (
+            db.table("earnings_reviews")
+            .select(
+                "id,ticker,quarter,pre_earnings_score_opportunity,pre_earnings_score_torpedo,"
+                "pre_earnings_recommendation,pre_earnings_report_date,actual_eps,actual_eps_consensus,"
+                "actual_surprise_percent,actual_revenue,actual_revenue_consensus,stock_price_pre,"
+                "stock_reaction_1d_percent,stock_reaction_5d_percent,prediction_correct,score_accuracy,"
+                "review_text,lessons_learned,created_at"
+            )
+            .eq("ticker", normalized_ticker)
+            .order("created_at", desc=True)
+            .limit(8)
+            .execute()
+        )
+        reviews = reviews_res.data or []
+    except Exception as exc:
+        logger.error(f"Track Record: earnings_reviews Fehler für {normalized_ticker}: {exc}")
+        return base_response
+
+    try:
+        audits_res = (
+            db.table("audit_reports")
+            .select("id,ticker,report_date,earnings_date,opportunity_score,torpedo_score,recommendation,created_at")
+            .eq("ticker", normalized_ticker)
+            .order("report_date", desc=True)
+            .limit(8)
+            .execute()
+        )
+        audit_rows = audits_res.data or []
+    except Exception as exc:
+        logger.error(f"Track Record: audit_reports Fehler für {normalized_ticker}: {exc}")
+        audit_rows = []
+
+    audits = [dict(row, _matched=False) for row in audit_rows]
+
+    history: List[dict] = []
+
+    for review in reviews:
+        review_report_dt = _parse_datetime(review.get("pre_earnings_report_date"))
+        matched_audit = None
+
+        for audit in audits:
+            if audit["_matched"]:
+                continue
+            audit_dt = _parse_datetime(audit.get("report_date"))
+            if audit_dt and review_report_dt and abs((audit_dt - review_report_dt).days) < 3:
+                matched_audit = audit
+                audit["_matched"] = True
+                break
+
+        opportunity_score = (
+            _to_float(matched_audit.get("opportunity_score"))
+            if matched_audit and matched_audit.get("opportunity_score") is not None
+            else _to_float(review.get("pre_earnings_score_opportunity"))
+        )
+        torpedo_score = (
+            _to_float(matched_audit.get("torpedo_score"))
+            if matched_audit and matched_audit.get("torpedo_score") is not None
+            else _to_float(review.get("pre_earnings_score_torpedo"))
+        )
+        recommendation = (
+            matched_audit.get("recommendation")
+            if matched_audit and matched_audit.get("recommendation")
+            else review.get("pre_earnings_recommendation")
+        )
+
+        history.append(
+            {
+                "quarter": review.get("quarter") or _derive_quarter(review_report_dt),
+                "status": "reviewed",
+                "report_date": review.get("pre_earnings_report_date") or (matched_audit.get("report_date") if matched_audit else None),
+                "earnings_date": matched_audit.get("earnings_date") if matched_audit else None,
+                "opportunity_score": opportunity_score,
+                "torpedo_score": torpedo_score,
+                "recommendation": recommendation,
+                "actual_eps": _to_float(review.get("actual_eps")),
+                "actual_eps_consensus": _to_float(review.get("actual_eps_consensus")),
+                "actual_surprise_percent": _to_float(review.get("actual_surprise_percent")),
+                "actual_revenue": _to_float(review.get("actual_revenue")),
+                "actual_revenue_consensus": _to_float(review.get("actual_revenue_consensus")),
+                "stock_price_pre": _to_float(review.get("stock_price_pre")),
+                "stock_reaction_1d_percent": _to_float(review.get("stock_reaction_1d_percent")),
+                "stock_reaction_5d_percent": _to_float(review.get("stock_reaction_5d_percent")),
+                "prediction_correct": review.get("prediction_correct"),
+                "score_accuracy": review.get("score_accuracy"),
+                "review_text": review.get("review_text"),
+                "lessons_learned": review.get("lessons_learned"),
+            }
+        )
+
+    for audit in audits:
+        if audit["_matched"]:
+            continue
+        audit_dt = _parse_datetime(audit.get("report_date"))
+        history.append(
+            {
+                "quarter": _derive_quarter(audit_dt),
+                "status": "pending",
+                "report_date": audit.get("report_date"),
+                "earnings_date": audit.get("earnings_date"),
+                "opportunity_score": _to_float(audit.get("opportunity_score")),
+                "torpedo_score": _to_float(audit.get("torpedo_score")),
+                "recommendation": audit.get("recommendation"),
+                "actual_eps": None,
+                "actual_eps_consensus": None,
+                "actual_surprise_percent": None,
+                "actual_revenue": None,
+                "actual_revenue_consensus": None,
+                "stock_price_pre": None,
+                "stock_reaction_1d_percent": None,
+                "stock_reaction_5d_percent": None,
+                "prediction_correct": None,
+                "score_accuracy": None,
+                "review_text": None,
+                "lessons_learned": None,
+            }
+        )
+
+    def _sort_key(entry: dict) -> datetime:
+        return _parse_datetime(entry.get("report_date")) or _parse_datetime(entry.get("earnings_date")) or datetime.min
+
+    history.sort(key=_sort_key, reverse=True)
+
+    reviewed_entries = [entry for entry in history if entry["status"] == "reviewed"]
+    prediction_entries = [entry for entry in reviewed_entries if entry["prediction_correct"] is not None]
+
+    total_predictions = len(prediction_entries)
+    correct_predictions = len([entry for entry in prediction_entries if entry["prediction_correct"] is True])
+    wrong_predictions = len([entry for entry in prediction_entries if entry["prediction_correct"] is False])
+    win_rate_pct = round((correct_predictions / total_predictions) * 100, 1) if total_predictions else 0.0
+
+    streak = 0
+    for entry in reviewed_entries:
+        result = entry["prediction_correct"]
+        if result is None:
+            continue
+        if streak == 0:
+            streak = 1 if result else -1
+        elif result and streak > 0:
+            streak += 1
+        elif (not result) and streak < 0:
+            streak -= 1
+        else:
+            break
+
+    torpedo_warnings_total = 0
+    torpedo_warnings_correct = 0
+    for review in reviews:
+        torpedo_score = _to_float(review.get("pre_earnings_score_torpedo"))
+        reaction = _to_float(review.get("stock_reaction_1d_percent"))
+        if torpedo_score is None or reaction is None:
+            continue
+        if torpedo_score >= 6.0:
+            torpedo_warnings_total += 1
+            if reaction < 0:
+                torpedo_warnings_correct += 1
+
+    if torpedo_warnings_total > 0:
+        ratio = round((torpedo_warnings_correct / torpedo_warnings_total) * 100)
+        torpedo_msg = f"{torpedo_warnings_correct} von {torpedo_warnings_total} Torpedo-Warnungen korrekt ({ratio}%)"
+    else:
+        torpedo_msg = "Noch keine Torpedo-Warnungen für diesen Ticker"
+
+    summary = {
+        "total_predictions": total_predictions,
+        "correct": correct_predictions,
+        "wrong": wrong_predictions,
+        "win_rate_pct": win_rate_pct,
+        "current_streak": streak,
+        "torpedo_warnings_total": torpedo_warnings_total,
+        "torpedo_warnings_correct": torpedo_warnings_correct,
+        "torpedo_calibration_msg": torpedo_msg,
+    }
+
+    response = {"ticker": normalized_ticker, "summary": summary, "history": history}
+    cache_set(cache_key, response, ttl_seconds=300)
+    return response
 
 
 @data_router.get("/performance")
@@ -398,7 +670,318 @@ async def api_chart_analysis_top(limit: int = 5):
 
     logger.info(f"API Call: chart-analysis-top (limit={limit})")
     results = await analyze_top_watchlist(limit)
-    return {"status": "success", "analyses": results}
+    return {"tickers": results}
+
+
+@app.get("/api/data/ohlcv/{ticker}")
+async def api_ohlcv(ticker: str, period: str = "6mo", interval: str = "1d"):
+    """Liefert validierte OHLCV-Daten inkl. SMA50/200 für Lightweight Charts."""
+    allowed_periods = {"1mo", "3mo", "6mo", "1y", "2y"}
+    allowed_intervals = {"1d", "1wk"}
+
+    period = period if period in allowed_periods else "6mo"
+    interval = interval if interval in allowed_intervals else "1d"
+    if period in {"1mo", "3mo"} and interval == "1wk":
+        interval = "1d"
+
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period=period, interval=interval)
+
+        if hist.empty:
+            return {
+                "ticker": ticker,
+                "period": period,
+                "interval": interval,
+                "candles": [],
+                "sma_50": [],
+                "sma_200": [],
+                "error": "Keine Daten",
+            }
+
+        candles = []
+        for ts, row in hist.iterrows():
+            candles.append(
+                {
+                    "time": ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts)[:10],
+                    "open": round(float(row["Open"]), 4),
+                    "high": round(float(row["High"]), 4),
+                    "low": round(float(row["Low"]), 4),
+                    "close": round(float(row["Close"]), 4),
+                    "volume": int(row["Volume"]),
+                }
+            )
+
+        close_series = hist["Close"]
+        sma_50 = []
+        if len(close_series) >= 50:
+            sma_raw = close_series.rolling(50).mean()
+            for ts, val in zip(hist.index, sma_raw):
+                if not pd.isna(val):
+                    sma_50.append({"time": ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts)[:10], "value": round(float(val), 4)})
+
+        sma_200 = []
+        if len(close_series) >= 200:
+            sma_raw = close_series.rolling(200).mean()
+            for ts, val in zip(hist.index, sma_raw):
+                if not pd.isna(val):
+                    sma_200.append({"time": ts.strftime("%Y-%m-%d"), "value": round(float(val), 4)})
+
+        return {
+            "ticker": ticker,
+            "period": period,
+            "interval": interval,
+            "candles": candles,
+            "sma_50": sma_50,
+            "sma_200": sma_200,
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"OHLCV Error for {ticker}: {exc}")
+        return {
+            "ticker": ticker,
+            "period": period,
+            "interval": interval,
+            "candles": [],
+            "sma_50": [],
+            "sma_200": [],
+            "error": str(exc),
+        }
+
+
+@app.get("/api/data/chart-overlays/{ticker}")
+async def api_chart_overlays(ticker: str):
+    """Aggregiert Earnings-, Torpedo-, Narrative- und Insider-Events für Charts."""
+    supabase = get_supabase_client()
+    base_response = {
+        "earnings_events": [],
+        "torpedo_alerts": [],
+        "narrative_shifts": [],
+        "insider_transactions": [],
+    }
+
+    if not supabase:
+        return base_response
+
+    try:
+        # Schritt 1: earnings_reviews (historisch)
+        reviews = (
+            supabase.table("earnings_reviews")
+            .select(
+                "quarter,pre_earnings_report_date,pre_earnings_recommendation,"
+                "actual_surprise_percent,stock_reaction_1d_percent"
+            )
+            .eq("ticker", ticker)
+            .order("created_at", desc=True)
+            .limit(12)
+            .execute()
+        ).data or []
+
+        earnings_events = []
+        for row in reviews:
+            report_dt = row.get("pre_earnings_report_date")
+            if not report_dt:
+                continue
+            date_str = report_dt.split("T")[0]
+            surprise = row.get("actual_surprise_percent")
+            label = ""
+            if surprise is not None:
+                label = f"{'Beat' if surprise > 0 else 'Miss'} {surprise:+.1f}%"
+            else:
+                label = row.get("pre_earnings_recommendation") or ""
+
+            earnings_events.append(
+                {
+                    "time": date_str,
+                    "type": "earnings",
+                    "timing": "after_hours",
+                    "eps_surprise_pct": surprise,
+                    "reaction_1d_pct": row.get("stock_reaction_1d_percent"),
+                    "recommendation": row.get("pre_earnings_recommendation"),
+                    "label": label,
+                }
+            )
+
+        # Schritt 2: audit_reports (geplante)
+        audits = (
+            supabase.table("audit_reports")
+            .select("report_date,earnings_date,opportunity_score,torpedo_score,recommendation")
+            .eq("ticker", ticker)
+            .order("report_date", desc=True)
+            .limit(8)
+            .execute()
+        ).data or []
+
+        def _parse_date(value: Optional[str]) -> Optional[datetime]:
+            if not value:
+                return None
+            try:
+                return datetime.fromisoformat(value.replace("Z", ""))
+            except ValueError:
+                try:
+                    return datetime.strptime(value.split("T")[0], "%Y-%m-%d")
+                except Exception:  # noqa: BLE001
+                    return None
+
+        def _date_str(dt: Optional[datetime]) -> Optional[str]:
+            return dt.strftime("%Y-%m-%d") if dt else None
+
+        # match audits to reviews
+        matched_review_dates = []
+        for review in reviews:
+            report_dt = _parse_date(review.get("pre_earnings_report_date"))
+            if report_dt:
+                matched_review_dates.append(report_dt)
+
+        for audit in audits:
+            report_dt = _parse_date(audit.get("report_date"))
+            has_match = False
+            if report_dt:
+                for rev_dt in matched_review_dates:
+                    if abs((rev_dt - report_dt).days) < 5:
+                        has_match = True
+                        break
+            if has_match:
+                continue
+
+            time_value = _parse_date(audit.get("earnings_date")) or report_dt
+            if not time_value:
+                continue
+            earnings_events.append(
+                {
+                    "time": _date_str(time_value),
+                    "type": "earnings",
+                    "timing": "after_hours",
+                    "eps_surprise_pct": None,
+                    "reaction_1d_pct": None,
+                    "recommendation": audit.get("recommendation"),
+                    "label": audit.get("recommendation") or "",
+                }
+            )
+
+        # Torpedo Alerts
+        torpedo_rows = (
+            supabase.table("short_term_memory")
+            .select("date,bullet_points,sentiment_score,is_material")
+            .eq("ticker", ticker)
+            .eq("is_material", True)
+            .order("date", desc=True)
+            .limit(20)
+            .execute()
+        ).data or []
+
+        torpedo_alerts = []
+        for row in torpedo_rows:
+            bullet_points = row.get("bullet_points")
+            text = "Material Event"
+            if isinstance(bullet_points, list) and bullet_points:
+                text = str(bullet_points[0])[:150]
+            elif isinstance(bullet_points, dict) and bullet_points:
+                first_value = next(iter(bullet_points.values()))
+                text = str(first_value)[:150]
+            elif isinstance(bullet_points, str):
+                text = bullet_points[:150]
+
+            score = row.get("sentiment_score")
+            if score is not None and score < -0.3:
+                torpedo_score = round(abs(score) * 10, 2)
+            else:
+                torpedo_score = 6.0
+
+            date_val = row.get("date")
+            if not date_val:
+                continue
+            torpedo_alerts.append(
+                {
+                    "time": date_val.split("T")[0],
+                    "type": "torpedo",
+                    "event_text": text,
+                    "torpedo_score": torpedo_score,
+                }
+            )
+
+        # Narrative Shifts
+        narrative_rows = (
+            supabase.table("short_term_memory")
+            .select("date,shift_type,shift_reasoning,bullet_points,sentiment_score,is_narrative_shift")
+            .eq("ticker", ticker)
+            .eq("is_narrative_shift", True)
+            .order("date", desc=True)
+            .limit(15)
+            .execute()
+        ).data or []
+
+        narrative_shifts = []
+        for row in narrative_rows:
+            bullet_points = row.get("bullet_points")
+            fallback = None
+            if isinstance(bullet_points, list) and bullet_points:
+                fallback = str(bullet_points[0])[:150]
+            elif isinstance(bullet_points, dict) and bullet_points:
+                fallback = str(next(iter(bullet_points.values())))[:150]
+            elif isinstance(bullet_points, str):
+                fallback = bullet_points[:150]
+
+            summary = (row.get("shift_reasoning") or fallback or "Narrative Shift")[:150]
+            date_val = row.get("date")
+            if not date_val:
+                continue
+
+            narrative_shifts.append(
+                {
+                    "time": date_val.split("T")[0],
+                    "type": "narrative_shift",
+                    "shift_type": row.get("shift_type"),
+                    "summary": summary[:150],
+                    "sentiment_delta": row.get("sentiment_score") or 0.0,
+                }
+            )
+
+        # Insider Transactions
+        insider_transactions = []
+        try:
+            insider_data = await get_insider_transactions(ticker)
+            transactions = []
+            if hasattr(insider_data, "transactions"):
+                transactions = getattr(insider_data, "transactions") or []
+            elif isinstance(insider_data, dict):
+                transactions = insider_data.get("transactions", [])
+
+            for tx in transactions:
+                date_val = tx.get("transactionDate") or tx.get("date")
+                if not date_val:
+                    continue
+                change = tx.get("change") or 0
+                direction = "buy"
+                if change:
+                    direction = "buy" if change > 0 else "sell"
+                elif tx.get("transactionType"):
+                    direction = "buy" if "p" in tx.get("transactionType", "").lower() else "sell"
+
+                price = tx.get("transactionPrice") or tx.get("price") or 0
+                amount = abs(change or 0) * price
+
+                insider_transactions.append(
+                    {
+                        "time": date_val.split("T")[0],
+                        "type": "insider",
+                        "direction": direction,
+                        "name": tx.get("name") or "Insider",
+                        "role": tx.get("position") or "",
+                        "amount_usd": round(amount, 2),
+                    }
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"Insider overlay fetch error für {ticker}: {exc}")
+
+        return {
+            "earnings_events": earnings_events,
+            "torpedo_alerts": torpedo_alerts,
+            "narrative_shifts": narrative_shifts,
+            "insider_transactions": insider_transactions,
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"chart-overlays Fehler für {ticker}: {exc}")
+        return base_response
 
 
 @data_router.get("/contrarian-opportunities")

@@ -12,6 +12,9 @@ from __future__ import annotations
 
 from typing import List, Dict
 
+import json
+import re
+
 import yfinance as yf
 
 from backend.app.logger import get_logger
@@ -74,41 +77,142 @@ async def analyze_chart(ticker: str) -> Dict:
                 change = ((day_close - prev_close_val) / prev_close_val) * 100 if prev_close_val else 0
                 last_5_days.append(f"${day_close:.2f} ({change:+.1f}%)")
 
+        rsi_str = f"{rsi:.1f}" if rsi is not None else "N/A"
+        sma_50_str = f"${sma_50:.2f}" if sma_50 else "N/A"
+        sma_200_str = f"${sma_200:.2f}" if sma_200 else "N/A"
+
         data_prompt = f"""Technische Analyse: {ticker}
-KURS: ${current:.2f} | TREND: {trend} | RSI(14): {rsi:.1f if rsi is not None else 'N/A'}
-SMA20: ${sma_20:.2f} | SMA50: ${sma_50:.2f if sma_50 else 'N/A'} | SMA200: ${sma_200:.2f if sma_200 else 'N/A'}
+KURS: ${current:.2f} | TREND: {trend} | RSI(14): {rsi_str}
+SMA20: ${sma_20:.2f} | SMA50: {sma_50_str} | SMA200: {sma_200_str}
 SUPPORT: ${support_20d:.2f} (20T) | RESISTANCE: ${resistance_20d:.2f} (20T)
 52W: ${low_52w:.2f} — ${high_52w:.2f} ({((current-low_52w)/(high_52w-low_52w)*100):.0f}% der Range)
 VOLUMEN: {vol_trend} ({vol_ratio:.1f}x)
 LETZTE 5 TAGE: {' → '.join(last_5_days)}
 
-Erstelle die Analyse EXAKT so:
-TREND: [1 Satz]
-MOMENTUM: [1 Satz]
-LEVELS:
-• Kaufzone: $X — $Y [Begründung]
-• Stop-Loss: $X [Begründung]
-• Kursziel 1: $X [Begründung]
-• Kursziel 2: $X [Begründung]
-HANDLUNG: [Kaufen/Halten/Reduzieren + Bedingung]
-RISIKO: [1 Satz]
+Erstelle ein JSON-Objekt mit folgender Struktur:
+{{
+  "trend_analysis": "kurzer Text",
+  "momentum_analysis": "kurzer Text",
+  "levels": {{
+    "buy_zone": {{"min": 100.0, "max": 105.0, "reason": "Text"}},
+    "stop_loss": {{"price": 98.0, "reason": "Text"}},
+    "targets": [
+      {{"price": 115.0, "reason": "Text"}},
+      {{"price": 125.0, "reason": "Text"}}
+    ]
+  }},
+  "action": {{
+    "recommendation": "BUY/HOLD/SELL",
+    "condition": "Text"
+  }},
+  "risk_assessment": "Text"
+}}
 """
 
-        analysis_text = await call_deepseek(
-            "Du bist ein technischer Analyst. Liefere KONKRETE Preis-Levels. Keine vagen Aussagen. Deutsch. Max 12 Zeilen.",
-            data_prompt,
-            model="deepseek-reasoner",
+        system_prompt = (
+            "Du bist ein technischer Analyst. Analysiere die gegebenen Marktdaten und antworte "
+            "AUSSCHLIESSLICH mit einem validen JSON-Objekt. Kein Text vor oder nach dem JSON. "
+            "Keine Markdown-Backticks. Kein Kommentar. Alle Preise als Zahlen (nicht als Strings). "
+            "Deutsch für Textfelder."
         )
+
+        user_prompt = data_prompt + """
+
+Antworte NUR mit diesem JSON (alle Felder pflicht):
+{
+  "support_levels": [
+    {"price": 0.00, "strength": "strong", "label": "20T-Tief"},
+    {"price": 0.00, "strength": "moderate", "label": "SMA 50"}
+  ],
+  "resistance_levels": [
+    {"price": 0.00, "strength": "strong", "label": "52W-Hoch"},
+    {"price": 0.00, "strength": "weak", "label": "Vorwoche-Hoch"}
+  ],
+  "entry_zone": {"low": 0.00, "high": 0.00},
+  "stop_loss": 0.00,
+  "target_1": 0.00,
+  "target_2": 0.00,
+  "analysis_text": "3-4 Sätze narrative Einordnung des Setups",
+  "bias": "bullish",
+  "key_risk": "1 Satz Hauptrisiko"
+}
+
+strength muss exakt "strong", "moderate" oder "weak" sein.
+bias muss exakt "bullish", "bearish" oder "neutral" sein.
+Liefere mindestens 1 support_level und 1 resistance_level.
+Alle Preise müssen realistische Werte nahe dem aktuellen Kurs sein."""
+
+        raw_response = await call_deepseek(system_prompt, user_prompt, model="deepseek-chat")
+
+        ai_data = None
+        parse_error = False
+        cleaned = (raw_response or "").strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+            cleaned = re.sub(r"\s*```$", "", cleaned)
+        try:
+            ai_data = json.loads(cleaned) if cleaned else {}
+        except (json.JSONDecodeError, Exception) as exc:  # noqa: BLE001
+            logger.warning(f"Chart-Analyst JSON-Parse-Fehler für {ticker}: {exc}")
+            parse_error = True
+
+        if not parse_error and ai_data is None:
+            parse_error = True
+
+        if not parse_error:
+            return {
+                "ticker": ticker,
+                "price": round(current, 2),
+                "rsi": round(rsi, 1) if rsi is not None else None,
+                "trend": trend,
+                "volume_trend": vol_trend,
+                "sma_50": round(sma_50, 2) if sma_50 else None,
+                "sma_200": round(sma_200, 2) if sma_200 else None,
+                "support_levels": ai_data.get("support_levels", []),
+                "resistance_levels": ai_data.get("resistance_levels", []),
+                "entry_zone": ai_data.get("entry_zone", {}),
+                "stop_loss": ai_data.get("stop_loss"),
+                "target_1": ai_data.get("target_1"),
+                "target_2": ai_data.get("target_2"),
+                "analysis_text": ai_data.get("analysis_text", ""),
+                "bias": ai_data.get("bias", "neutral"),
+                "key_risk": ai_data.get("key_risk", ""),
+                "support": round(support_20d, 2),
+                "resistance": round(resistance_20d, 2),
+                "analysis": ai_data.get("analysis_text", ""),
+                "error": False,
+            }
+
+        fallback_support_levels = [
+            {"price": round(support_20d, 2), "strength": "moderate", "label": "20T-Tief"},
+            {"price": round(support_50d, 2), "strength": "weak", "label": "50T-Tief"},
+        ]
+        fallback_resistance_levels = [
+            {"price": round(resistance_20d, 2), "strength": "moderate", "label": "20T-Hoch"},
+            {"price": round(resistance_50d, 2), "strength": "weak", "label": "50T-Hoch"},
+        ]
 
         return {
             "ticker": ticker,
             "price": round(current, 2),
             "rsi": round(rsi, 1) if rsi is not None else None,
             "trend": trend,
+            "volume_trend": vol_trend,
+            "sma_50": round(sma_50, 2) if sma_50 else None,
+            "sma_200": round(sma_200, 2) if sma_200 else None,
+            "support_levels": fallback_support_levels,
+            "resistance_levels": fallback_resistance_levels,
+            "entry_zone": {"low": round(support_20d, 2), "high": round(current * 1.01, 2)},
+            "stop_loss": round(support_50d * 0.97, 2),
+            "target_1": round(resistance_20d, 2),
+            "target_2": round(resistance_50d, 2),
+            "analysis_text": (raw_response or "")[:500],
+            "bias": "neutral",
+            "key_risk": "JSON-Parse-Fehler — Rohantwort in analysis_text",
             "support": round(support_20d, 2),
             "resistance": round(resistance_20d, 2),
-            "analysis": analysis_text,
-            "volume_trend": vol_trend,
+            "analysis": (raw_response or "")[:500],
+            "error": True,
         }
     except Exception as exc:  # noqa: BLE001
         logger.error(f"Chart-Analyse Fehler für {ticker}: {exc}")

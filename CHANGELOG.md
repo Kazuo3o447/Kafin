@@ -2,6 +2,41 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [4.1] - 2026-03-18 - Chart Intelligence System
+
+### 🚀 Neue Features
+- **Interaktive TradingView Lightweight Charts**
+  - Candlestick-Chart mit Volume-Histogramm für alle Watchlist-Ticker
+  - Timeframe-Toggle: 6 Monate (Tageskerzen) / 2 Jahre (Wochenkerzen)
+  - SMA 50 (blau gestrichelt) und SMA 200 (lila gestrichelt) als Overlays
+  - ResizeObserver für responsive Chart-Breite
+
+- **Vollständiges Overlay-System**
+  - Earnings-Events: blau (Pre-Market) / lila (After-Hours) mit EPS-Surprise und Reaktion
+  - Torpedo-Alerts: rote Marker an Tagen mit material-relevanten News
+  - Narrative-Shifts: amber-farbene Marker bei erkannten Paradigma-Wechseln
+  - Insider-Transaktionen: grüne Dreiecke (Kauf) / rote Dreiecke (Verkauf)
+  - Floating Tooltip mit Event-Details bei Cursor-Hover
+
+- **KI-generierte Chart-Levels (auf Abruf)**
+  - Strukturiertes JSON-Output von DeepSeek (kein Freitext mehr)
+  - Support-Levels: grün gestrichelt, Stärke (strong/moderate/weak)
+  - Resistance-Levels: rot gestrichelt, Stärke
+  - Entry-Zone: grüner Preisbereich
+  - Stop-Loss: rote Linie (durchgezogen)
+  - Target 1 + Target 2: grün gepunktet
+  - Bias (bullish/bearish/neutral), Analysis-Text, Key-Risk
+
+### 🔌 Neue API-Endpoints
+- `GET /api/data/ohlcv/{ticker}?period=6mo&interval=1d` — OHLCV + SMA50/200
+- `GET /api/data/chart-overlays/{ticker}` — Alle Chart-Events aus Supabase
+
+### 🛠️ Verbesserungen
+- `chart_analyst.py`: DeepSeek gibt jetzt strukturiertes JSON zurück
+  mit Fallback auf berechnete Levels bei Parse-Fehler
+- `ChartAnalysisSection.tsx`: Vollständig neu gebaut mit lightweight-charts
+- Legacy-Felder (support, resistance, analysis) bleiben für Abwärtskompatibilität
+
 ## [4.0] - 2026-03-18 - Signal Intelligence Complete
 
 ### 🚀 Neue Features

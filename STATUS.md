@@ -37,6 +37,14 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Ad
 - [x] **Phase 3B:** Options- & Social-Sentiment Analyse (Zero-Cost via yfinance/Finnhub).
 - [x] **Stabilität:** 5 kritische Fixes für Makro-Daten und Prompt-Resilience abgeschlossen.
 
+### 8. Phase 4C: Chart Intelligence System (lightweight-charts)
+- [x] TradingView Lightweight Charts Integration (npm: lightweight-charts)
+- [x] OHLCV-Endpoint mit SMA50/200 (pandas rolling mean, None-Werte gefiltert)
+- [x] Chart-Overlays-Endpoint (Earnings, Torpedo, Narrative, Insider aus Supabase)
+- [x] chart_analyst.py: Strukturiertes JSON-Format mit Fallback
+- [x] Frontend: Candlestick + Volume + SMA + Marker + KI-Levels + Tooltip
+- [x] Timeframe-Toggle 6M/2J mit interval-Wechsel (1d/1wk)
+
 ### 5. Tägliches Morning Briefing
 *   **Marktübersicht**: `market_overview.py` — Index-Chartanalyse (SPY, QQQ, DIA, IWM), 11 Sektor-ETFs mit Rotationsranking, 5 Makro-Proxys (VIX, TLT, UUP, GLD, USO) via yfinance.
 *   **Allgemeine Nachrichten**: Finnhub General News Endpoint mit Qualitätsfilter (Reuters, Bloomberg, CNBC etc.).

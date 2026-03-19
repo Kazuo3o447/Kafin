@@ -134,6 +134,9 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] Hotfix 5.2.1: isinstance(result, dict) Guard in Auto-Trigger
 - [x] Hotfix 5.2.1: timezone.utc Bug in api_scan_earnings_results gefixt
 - [x] Hotfix 5.2.1: Parallelisierung via asyncio.gather für Sentiment Check
+- [x] v5.2.2: get_social_sentiment() in finnhub.py implementiert
+- [x] v5.2.2: Social Sentiment API Integration (Reddit/Twitter Mentions)
+- [x] v5.2.2: SocialSentimentData in Audit-Reports integriert
 
 ## 🚀 Aktuelle Features (Stand März 2026)
 

@@ -2,6 +2,16 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.2.2] - 2026-03-19 - Social Sentiment Integration
+
+### 🚀 Neue Features
+- **get_social_sentiment()**: Finnhub Social Sentiment API Integration
+  - Aggregiert Reddit/Twitter Mentions der letzten 7 Tage
+  - Berechnet social_score basierend auf Mention-Volumen
+  - Returns SocialSentimentData mit ticker, reddit_mentions, twitter_mentions
+  - Automatisch genutzt in Audit-Reports für Social Media Analyse
+  - Inklusive Rate Limiting und robustem Error Handling
+
 ## [5.2.1] - 2026-03-19 - Hotfix Sentiment + Peer Monitor
 
 ### 🐛 Bugfixes

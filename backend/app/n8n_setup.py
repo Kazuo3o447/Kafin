@@ -257,7 +257,49 @@ async def setup_workflows():
             },
         }
 
-        for wf in [weekday_news_workflow, weekend_news_workflow, sec_workflow, sunday_workflow, morning_workflow, earnings_review_workflow, sentiment_workflow]:
+        # Workflow 7: Peer Earnings Check (08:00 + 15:00 Mo-Fr)
+        peer_morning_workflow = {
+            "name": "Kafin: Peer Earnings Check (08:00 + 15:00)",
+            "active": True,
+            "nodes": [
+                {
+                    "parameters": {
+                        "rule": {
+                            "interval": [{
+                                "field": "cronExpression",
+                                "expression": "0 8,15 * * 1-5"
+                            }]
+                        }
+                    },
+                    "name": "Trigger: Mo-Fr 08:00 + 15:00",
+                    "type": "n8n-nodes-base.scheduleTrigger",
+                    "position": [250, 300],
+                    "typeVersion": 1,
+                },
+                {
+                    "parameters": {
+                        "url": "http://kafin-backend:8000/api/web-intelligence/peer-check",
+                        "method": "POST",
+                        "options": {"timeout": 30000},
+                    },
+                    "name": "Peer Earnings prüfen",
+                    "type": "n8n-nodes-base.httpRequest",
+                    "position": [450, 300],
+                    "typeVersion": 1,
+                },
+            ],
+            "connections": {
+                "Trigger: Mo-Fr 08:00 + 15:00": {
+                    "main": [[{
+                        "node": "Peer Earnings prüfen",
+                        "type": "main",
+                        "index": 0,
+                    }]]
+                }
+            },
+        }
+
+        for wf in [weekday_news_workflow, weekend_news_workflow, sec_workflow, sunday_workflow, morning_workflow, earnings_review_workflow, sentiment_workflow, peer_morning_workflow]:
             try:
                 response = await client.post("/api/v1/workflows", json=wf)
                 if response.status_code in (200, 201):

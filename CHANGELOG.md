@@ -2,6 +2,19 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.2] - 2026-03-19 - Sector Peer Review
+
+### 🚀 Neue Features
+- **peer_monitor.py**: Zwei Alert-Typen
+  — Pre-Earnings: "AMD meldet morgen — relevant für NVDA"
+  — Post-Earnings: "NVDA +8% AH → AMD erwartet +4.1% (Beta 0.51)"
+- **Beta-Korrelation**: 30-Tage historische Beta-Berechnung
+  zwischen Peer und Reporter via yfinance
+- **Auto-Trigger**: scan-earnings-results triggert Peer-Alert
+  automatisch wenn Reaktion ≥ 2%
+- **n8n Workflow**: Peer-Check täglich um 08:00 und 15:00
+- **Cooldown**: 12h zwischen Peer-Alerts pro Ticker-Paar
+
 ## [5.1] - 2026-03-19 - Sentiment Divergence Alert
 
 ### 🚀 Neue Features

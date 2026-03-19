@@ -1879,6 +1879,21 @@ async def api_scan_earnings_results():
                         result = await run_post_earnings_review(ticker)
                         reviews_triggered.append({"ticker": ticker, "result": result})
                         logger.info(f"Post-Earnings Review getriggert für {ticker}")
+                        
+                        # Peer-Reaktions-Alert wenn Kursreaktion bekannt
+                        try:
+                            reaction = result.get("reaction_1d")
+                            if reaction is not None and abs(reaction) >= 2.0:
+                                from backend.app.analysis.peer_monitor import (
+                                    send_peer_reaction_alert,
+                                )
+                                await send_peer_reaction_alert(
+                                    reporter=ticker,
+                                    move_pct=float(reaction),
+                                    report_timing="after_hours",
+                                )
+                        except Exception as e:
+                            logger.debug(f"Peer Reaction Auto-Alert {ticker}: {e}")
         except Exception as e:
             logger.debug(f"Earnings-Scan für {ticker}: {e}")
 
@@ -2083,6 +2098,40 @@ async def api_sentiment_divergence_check():
     )
     result = await check_sentiment_divergence()
     return result
+
+
+@web_intel_router.post("/peer-check")
+async def api_peer_earnings_check():
+    """
+    Prüft ob Cross-Signal-Ticker heute/morgen reporten.
+    Von n8n täglich um 08:00 und 15:00 aufgerufen.
+    """
+    logger.info("API Call: peer-check")
+    from backend.app.analysis.peer_monitor import (
+        check_peer_earnings_today,
+    )
+    return await check_peer_earnings_today()
+
+
+@web_intel_router.post("/peer-reaction")
+async def api_peer_reaction_alert(
+    reporter: str,
+    move_pct: float,
+    report_timing: str = "after_hours",
+):
+    """
+    Sendet Peer-Reaktions-Alert nach Earnings eines Tickers.
+    Manuell oder von Post-Earnings-Review getriggert.
+    """
+    logger.info(f"API Call: peer-reaction {reporter} {move_pct:+.1f}%")
+    from backend.app.analysis.peer_monitor import (
+        send_peer_reaction_alert,
+    )
+    return await send_peer_reaction_alert(
+        reporter=reporter,
+        move_pct=move_pct,
+        report_timing=report_timing,
+    )
 
 
 @web_intel_router.get("/cache/{ticker}")

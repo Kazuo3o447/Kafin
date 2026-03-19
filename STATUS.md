@@ -125,6 +125,11 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] POST /api/web-intelligence/sentiment-check Endpoint
 - [x] n8n Workflow: stündlicher Sentiment-Monitor
 - [x] Cooldown-Logik via system_logs Tabelle
+- [x] peer_monitor.py mit check_peer_earnings_today + send_peer_reaction_alert
+- [x] POST /api/web-intelligence/peer-check
+- [x] POST /api/web-intelligence/peer-reaction
+- [x] Auto-Alert in scan-earnings-results
+- [x] n8n Workflow: Peer-Check 08:00 + 15:00
 
 ## 🚀 Aktuelle Features (Stand März 2026)
 

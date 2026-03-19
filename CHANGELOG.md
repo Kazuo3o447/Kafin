@@ -2,6 +2,21 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.2.7] - 2026-03-19 - Hotfix: Status Page ImportError
+
+### 🐛 Bugfixes
+- **fix(diagnostics)**: Replace non-existent finnhub.get_company_profile with get_company_news in /api/diagnostics/full
+- **fix(api)**: Refactor API test logic to use individual try/catch blocks for finnhub, fmp, and fred services
+- **fix(status)**: Resolve HTTP 500 error that prevented Status Dashboard from loading
+
+### 📝 Problem
+The Status page was completely broken due to an ImportError in the diagnostics endpoint. The endpoint tried to import `get_company_profile` from `finnhub.py`, but this function doesn't exist in that module.
+
+### ✅ Solution
+- Changed finnhub test to use `get_company_news()` with date range parameters
+- Separated API tests into individual try/catch blocks for better error isolation
+- Added datetime import for date range calculation
+
 ## [5.2.6] - 2026-03-19 - Docker Persistent Logging & Enhanced Terminal
 
 ### 🚀 Neue Features

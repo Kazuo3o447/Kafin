@@ -2239,8 +2239,9 @@ async def api_diagnostics_db():
 @app.get("/api/diagnostics/full", tags=["System"])
 async def full_system_diagnostics():
     import asyncio, time
+    from datetime import datetime, timedelta
     from backend.app.db import get_supabase_client
-    from backend.app.data.finnhub import get_company_profile as fh_profile
+    from backend.app.data.finnhub import get_company_news
     from backend.app.data.fmp import get_company_profile as fmp_profile
     from backend.app.data.fred import get_macro_snapshot
     from backend.app.analysis.deepseek import call_deepseek
@@ -2263,14 +2264,29 @@ async def full_system_diagnostics():
     except Exception as e:
         results["services"]["supabase"] = {"status": "error", "error_code": "DB_CONN_ERR", "details": str(e)}
 
-    # 2. Standard APIs
-    services_to_test = [("finnhub", fh_profile, "AAPL"), ("fmp", fmp_profile, "AAPL"), ("fred", get_macro_snapshot, None)]
-    for name, func, arg in services_to_test:
-        try:
-            res, ms = await measure(func, arg) if arg else await measure(func)
-            results["services"][name] = {"status": "ok" if res else "warning", "latency_ms": ms, "details": "API responsive"}
-        except Exception as e:
-            results["services"][name] = {"status": "error", "error_code": f"{name.upper()}_API_ERR", "details": repr(e)}
+    # 2. Finnhub API
+    try:
+        now = datetime.now()
+        from_date = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+        to_date = now.strftime("%Y-%m-%d")
+        res, ms = await measure(get_company_news, "AAPL", from_date, to_date)
+        results["services"]["finnhub"] = {"status": "ok" if res else "warning", "latency_ms": ms, "details": "API responsive"}
+    except Exception as e:
+        results["services"]["finnhub"] = {"status": "error", "error_code": "FINNHUB_API_ERR", "details": repr(e)}
+
+    # 3. FMP API
+    try:
+        res, ms = await measure(fmp_profile, "AAPL")
+        results["services"]["fmp"] = {"status": "ok" if res else "warning", "latency_ms": ms, "details": "API responsive"}
+    except Exception as e:
+        results["services"]["fmp"] = {"status": "error", "error_code": "FMP_API_ERR", "details": repr(e)}
+
+    # 4. FRED API
+    try:
+        res, ms = await measure(get_macro_snapshot)
+        results["services"]["fred"] = {"status": "ok" if res else "warning", "latency_ms": ms, "details": "API responsive"}
+    except Exception as e:
+        results["services"]["fred"] = {"status": "error", "error_code": "FRED_API_ERR", "details": repr(e)}
 
     # 3. AI Services
     try:

@@ -88,7 +88,7 @@ async def get_earnings_calendar(from_date: str, to_date: str) -> List[EarningsEx
         ]
     
     url = f"https://finnhub.io/api/v1/calendar/earnings?from={from_date}&to={to_date}&token={settings.finnhub_api_key}"
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(url)
         response.raise_for_status()
         data = response.json().get("earningsCalendar", [])

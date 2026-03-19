@@ -2173,12 +2173,56 @@ app.include_router(web_intel_router)
 
 # --- LOG MANAGEMENT ---
 @app.get("/api/logs/file")
-async def get_file_logs(lines: int = 1000):
+async def get_file_logs(lines: int = 1000, level: str | None = None):
     from backend.app.logger import LOG_FILE
-    if not os.path.exists(LOG_FILE): return {"logs": []}
+    import re
+    if not os.path.exists(LOG_FILE): return {"logs": [], "stats": {"total": 0, "error": 0, "warning": 0, "info": 0}}
     with open(LOG_FILE, "r", encoding="utf-8") as f:
         all_lines = f.readlines()
-    return {"logs": all_lines[-lines:]}
+    
+    # Zähle Errors/Warnings/Info in ALLEN Zeilen
+    stats = {"total": len(all_lines), "error": 0, "warning": 0, "info": 0}
+    for line in all_lines:
+        if "[ERROR]" in line: stats["error"] += 1
+        elif "[WARNING]" in line: stats["warning"] += 1
+        elif "[INFO]" in line: stats["info"] += 1
+    
+    result_lines = all_lines[-lines:]
+    
+    # Level-Filter anwenden
+    if level:
+        level_tag = f"[{level.upper()}]"
+        result_lines = [l for l in result_lines if level_tag in l]
+    
+    return {"logs": result_lines, "stats": stats}
+
+@app.get("/api/logs/stats")
+async def get_log_stats():
+    """Gibt Statistiken über Log-Level-Verteilung zurück (Error/Warning/Info Counts)."""
+    from backend.app.logger import LOG_FILE
+    if not os.path.exists(LOG_FILE): return {"stats": {"total": 0, "error": 0, "warning": 0, "info": 0}, "recent_errors": []}
+    with open(LOG_FILE, "r", encoding="utf-8") as f:
+        all_lines = f.readlines()
+    
+    stats = {"total": len(all_lines), "error": 0, "warning": 0, "info": 0}
+    recent_errors = []
+    recent_warnings = []
+    
+    for line in all_lines:
+        if "[ERROR]" in line:
+            stats["error"] += 1
+            recent_errors.append(line.strip())
+        elif "[WARNING]" in line:
+            stats["warning"] += 1
+            recent_warnings.append(line.strip())
+        elif "[INFO]" in line:
+            stats["info"] += 1
+    
+    return {
+        "stats": stats,
+        "recent_errors": recent_errors[-20:],
+        "recent_warnings": recent_warnings[-20:],
+    }
 
 @app.get("/api/logs/export")
 async def export_logs():

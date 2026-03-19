@@ -269,12 +269,7 @@ async def generate_audit_report(ticker: str) -> str:
     except Exception as e:
         logger.debug(f"30d Price Change {ticker}: {e}")
 
-    social = None
-    try:
-        from backend.app.data.finnhub import get_social_sentiment
-        social = await get_social_sentiment(ticker)
-    except Exception as e:
-        logger.warning(f"Social sentiment für {ticker}: {e}")
+    social = None  # Finnhub Social Sentiment nicht verfügbar (kein Free-Tier Endpoint)
     
     # ── Web Intelligence (Cache-aware) ───────────────────────
     # Sichere Initialisierung vor try-Blöcken
@@ -376,25 +371,13 @@ async def generate_audit_report(ticker: str) -> str:
         logger.warning(f"Web Sentiment Score {ticker}: {e}")
 
     # Gewichteter Composite Score
-    # FinBERT: 40% (zuverlässig, viele Datenpunkte)
-    # Web:     40% (proaktiv, hohe Relevanz für Earnings)
-    # Social:  20% (noisig aber Early Signal)
-    social_score_raw = 0.0
-    try:
-        if social:
-            s = getattr(social, "social_score", None)
-            if s is not None:
-                # Finnhub Social Score: 0-10, normalisieren auf -1..+1
-                social_score_raw = round(
-                    (float(s) - 5.0) / 5.0, 3
-                )
-    except Exception:
-        pass
+    # FinBERT: 50% (zuverlässig, viele Datenpunkte)
+    # Web:     50% (proaktiv, hohe Relevanz für Earnings)
+    social_score_raw = 0.0  # Social Sentiment derzeit nicht verfügbar
 
     composite_sentiment = round(
-        finbert_sentiment * 0.4
-        + web_sentiment_score * 0.4
-        + social_score_raw * 0.2,
+        finbert_sentiment * 0.5
+        + web_sentiment_score * 0.5,
         3,
     )
 

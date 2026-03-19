@@ -2,6 +2,28 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.2.9] - 2026-03-19 - Fix Report Generation & Enhanced Log System
+
+### 🐛 Bugfixes
+- **fix(reports)**: Remove dead `get_social_sentiment` import from `finnhub.py` (function never existed)
+- **fix(reports)**: Create Next.js Route Handlers for `/api/reports/generate/[ticker]`, `/generate-morning`, `/generate-sunday` to bypass proxy timeout
+- **fix(sentiment)**: Adjust composite sentiment weighting to 50/50 FinBERT/Web (was 40/40/20 with broken social)
+
+### 🚀 Neue Features
+- **feat(api)**: New `/api/logs/stats` endpoint — returns error/warning/info counts + last 20 errors/warnings
+- **feat(api)**: Add `level` filter parameter to `/api/logs/file` (e.g. `?level=error`)
+- **feat(terminal)**: Level filter buttons (Errors/Warnings/Info) with live badge counts
+- **feat(terminal)**: Stats bar showing total line count and error/warning totals
+- **feat(terminal)**: Warning lines now highlighted with yellow background and icon
+
+### 📝 Probleme
+1. **Report-Generierung schlug fehl**: `get_social_sentiment` existierte nicht in `finnhub.py`, was bei jedem Report eine Warning erzeugte. Zusätzlich brach die Next.js Rewrite-Proxy-Verbindung bei langen DeepSeek-API-Aufrufen ab (ECONNRESET/Socket hang up).
+2. **Logs nicht filterbar**: Keine Möglichkeit, Errors und Warnings separat anzuzeigen oder zu zählen.
+
+### ✅ Lösungen
+1. Dead Import entfernt, Next.js Route Handlers mit 115s Timeout + `maxDuration=120` erstellt
+2. Backend: `/api/logs/stats` + Level-Filter. Frontend: Filter-Leiste mit Badges und Zählern
+
 ## [5.2.8] - 2026-03-19 - Hotfix: Sidebar Navigation Not Clickable
 
 ### 🐛 Bugfixes

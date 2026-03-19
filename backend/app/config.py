@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     coinglass_api_key: str = ""
     deepseek_api_key: str = ""
     kimi_api_key: str = ""
+    tavily_api_key: str = ""
     
     # Supabase (via .env)
     supabase_url: str = ""

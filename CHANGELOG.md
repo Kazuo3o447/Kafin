@@ -2,6 +2,16 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [4.8] - 2026-03-19 - Web Intelligence Fundament
+
+### 🚀 Neue Features
+- **web_intelligence_cache**: Neue Supabase-Tabelle mit TTL je Prio
+- **watchlist.web_prio**: Manuelles Prio-Feld (NULL=Auto, 1-4=manuell)
+- **web_search.py**: Cache-aware Tavily-Modul mit Prio-System
+  (Prio 1: 3 Suchen/8h | Prio 2: 1 Suche/24h | Prio 3: wöchentlich)
+- **Audit-Report**: {{web_intelligence}} aus Cache oder Live-Suche
+- **DeepSeek-Prompt**: Web-Sentiment vs. News-Sentiment Divergenz-Analyse
+
 ## [4.7] - 2026-03-19 - Hotfix Expected Move & Score Sort
 
 ### 🐛 Bugfixes

@@ -276,6 +276,61 @@ async def generate_audit_report(ticker: str) -> str:
     except Exception as e:
         logger.warning(f"Social sentiment für {ticker}: {e}")
     
+    # ── Web Intelligence (Cache-aware) ───────────────────────
+    web_intelligence = ""
+    try:
+        from backend.app.data.web_search import get_web_intelligence
+        from backend.app.data.web_search import _auto_prio_from_days
+
+        # Tage bis Earnings berechnen
+        _earnings_dt = getattr(estimates, "report_date", None) \
+            if estimates else None
+        _days_to_earnings = None
+        if _earnings_dt:
+            try:
+                from datetime import date as _date_cls
+                _earnings_date = (
+                    _earnings_dt if hasattr(_earnings_dt, "toordinal")
+                    else _date_cls.fromisoformat(str(_earnings_dt))
+                )
+                _days_to_earnings = (_earnings_date - _date_cls.today()).days
+            except Exception:
+                pass
+
+        # web_prio aus Watchlist holen
+        _manual_prio = None
+        try:
+            from backend.app.db import get_supabase_client as _get_db
+            _db = _get_db()
+            if _db:
+                _wl_res = (
+                    _db.table("watchlist")
+                    .select("web_prio")
+                    .eq("ticker", ticker.upper())
+                    .execute()
+                )
+                _wl_rows = _wl_res.data if _wl_res and _wl_res.data else []
+                if _wl_rows and _wl_rows[0].get("web_prio") is not None:
+                    _manual_prio = int(_wl_rows[0]["web_prio"])
+        except Exception:
+            pass
+
+        _company_name = getattr(estimates, "company_name", ticker) \
+            if estimates else ticker
+
+        web_intelligence = await get_web_intelligence(
+            ticker=ticker,
+            company_name=_company_name,
+            days_to_earnings=_days_to_earnings,
+            manual_prio=_manual_prio,
+            force_refresh=False,
+        )
+        if web_intelligence:
+            logger.info(f"Web Intelligence geladen für {ticker}")
+    except Exception as e:
+        logger.warning(f"Web Intelligence {ticker}: {e}")
+        web_intelligence = ""
+    
     now = datetime.now()
     month_ago = now.replace(day=max(1, now.day - 30)) if now.day > 1 else now # rough 30 days
     
@@ -490,6 +545,10 @@ async def generate_audit_report(ticker: str) -> str:
         .replace("{{social_sentiment}}", f"Score: {getattr(social, 'social_score', 'N/A')} (Reddit: {getattr(social, 'reddit_mentions', 'N/A')}, Twitter: {getattr(social, 'twitter_mentions', 'N/A')})" if social else "N/A") \
         .replace("{{news_bullet_points}}", news_str) \
         .replace("{{long_term_memory}}", lt_memory) \
+        .replace(
+            "{{web_intelligence}}",
+            web_intelligence or "Keine Web-Intelligence verfügbar."
+        ) \
         .replace("{{opportunity_score}}", str(opp_score.total_score if opp_score else 0.0)) \
         .replace("{{torpedo_score}}", str(torp_score.total_score if torp_score else 0.0)) \
         .replace(

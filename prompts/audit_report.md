@@ -43,6 +43,9 @@ Einordnung: {{insider_assessment}}
 NACHRICHTEN DER LETZTEN WOCHEN:
 {{news_bullet_points}}
 
+AKTUELLER MARKTDISKURS (Web-Intelligence, letzte 24-48h):
+{{web_intelligence}}
+
 LANGZEIT-GEDÄCHTNIS (Erkenntnisse aus früheren Reviews):
 {{long_term_memory}}
 
@@ -76,7 +79,11 @@ Ist Contrarian-Setup gegeben: {{is_contrarian_setup}}
 
 Erstelle den Report auf Deutsch mit diesen Abschnitten:
 1. ZUSAMMENFASSUNG (3-4 Sätze: These, Empfehlung, größtes Risiko)
-2. BEWERTUNG IM REGIME-KONTEXT (Wie ordnet der Markt das Unternehmen ein? Narrative-Shift möglich? Asymmetrie?)
+2. BEWERTUNG IM REGIME-KONTEXT & WEB-SENTIMENT
+   Nutze Web-Intelligence: Gibt es Konsens unter Analysten?
+   Auffällige Options-Positionierung? Weicht der aktuelle
+   Web-Diskurs vom strukturellen Bild ab? Nenne konkret wenn
+   Web-Sentiment und News-Sentiment divergieren.
 3. **PFLICHT: PRE-EARNINGS POSITIONING**
    - Wenn Kursperformance letzte 30 Tage > +10%: Explizit auf
      "Buy the Rumor"-Risiko hinweisen. Beschreibe warum ein Beat

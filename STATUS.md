@@ -105,6 +105,9 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] IV-Felder einzeln im Template statt als Block
 - [x] Score Sort TypeError mit None-Datum behoben
 - [x] yfinance 30d-History in Threadpool ausgelagert
+- [x] DB: web_intelligence_cache + watchlist.web_prio Migration
+- [x] web_search.py mit Cache-Layer und Prio-System
+- [x] Web Intelligence in generate_audit_report() integriert
 
 ## 🚀 Aktuelle Features (Stand März 2026)
 

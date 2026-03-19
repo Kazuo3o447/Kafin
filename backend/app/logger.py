@@ -13,11 +13,20 @@ und wird über /api/logs vom Admin Panel abgerufen.
 import structlog
 import logging
 import sys
+import os
+from logging.handlers import RotatingFileHandler
 from typing import List, Dict, Any
 from collections import deque
 import json
 import re
 from datetime import datetime, timedelta
+
+# ---------------------------------------------------------------------------
+# File Logging Configuration
+# ---------------------------------------------------------------------------
+LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "kafin.log")
 
 # ---------------------------------------------------------------------------
 # Buffer: In-Memory Log-Speicher für Admin Panel
@@ -196,10 +205,13 @@ def setup_logging():
     Wichtig: cache_logger_on_first_use=False damit der Buffer-Prozessor
     bei JEDEM Log-Aufruf aktiv ausgeführt wird.
     """
-    # Stdlib-Root-Logger auf INFO setzen
+    # File und Stream Handler
+    file_handler = RotatingFileHandler(LOG_FILE, maxBytes=10*1024*1024, backupCount=5, encoding="utf-8")
+    stream_handler = logging.StreamHandler(sys.stdout)
+    
     logging.basicConfig(
-        format="%(message)s",
-        stream=sys.stdout,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=[stream_handler, file_handler],
         level=logging.INFO
     )
     

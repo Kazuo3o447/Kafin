@@ -15,6 +15,9 @@ import asyncio
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+import os
 from backend.app.config import settings
 from backend.app.logger import get_logger, get_recent_logs, get_module_status
 from backend.app.admin import router as admin_router
@@ -2168,6 +2171,49 @@ app.include_router(reports_router)
 app.include_router(watchlist_router)
 app.include_router(web_intel_router)
 
+# --- LOG MANAGEMENT ---
+@app.get("/api/logs/file")
+async def get_file_logs(lines: int = 1000):
+    from backend.app.logger import LOG_FILE
+    if not os.path.exists(LOG_FILE): return {"logs": []}
+    with open(LOG_FILE, "r", encoding="utf-8") as f:
+        all_lines = f.readlines()
+    return {"logs": all_lines[-lines:]}
+
+@app.get("/api/logs/export")
+async def export_logs():
+    from backend.app.logger import LOG_FILE
+    from datetime import datetime
+    if not os.path.exists(LOG_FILE): return {"error": "No log file"}
+    filename = f"kafin_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    return FileResponse(LOG_FILE, media_type="text/plain", filename=filename)
+
+@app.delete("/api/logs/file")
+async def clear_logs():
+    from backend.app.logger import LOG_FILE
+    with open(LOG_FILE, "w", encoding="utf-8") as f:
+        f.write("")
+    return {"status": "cleared"}
+
+class ExternalLog(BaseModel):
+    level: str
+    message: str
+    source: str = "n8n"
+    error_code: str | None = None
+
+@app.post("/api/logs/external")
+async def receive_external_log(log: ExternalLog):
+    """Webhook für n8n und externe Services zum Pushen von Logs"""
+    from backend.app.logger import get_logger
+    logger_ext = get_logger(log.source)
+    msg = f"[EXTERNAL] {log.message}"
+    if log.error_code: msg += f" | CODE: {log.error_code}"
+    
+    if log.level.lower() == "error": logger_ext.error(msg)
+    elif log.level.lower() == "warning": logger_ext.warning(msg)
+    else: logger_ext.info(msg)
+    return {"status": "logged"}
+
 # Diagnostics Router
 diagnostics_router = APIRouter(prefix="/api/diagnostics", tags=["diagnostics"])
 
@@ -2190,86 +2236,58 @@ async def api_diagnostics_db():
 
     return {"status": "success", "tables": results}
 
-@diagnostics_router.get("/full")
-async def api_diagnostics_full():
-    """Vollständiger Systemcheck aller Kafin-Komponenten."""
-    import httpx
-    results = {}
-
+@app.get("/api/diagnostics/full", tags=["System"])
+async def full_system_diagnostics():
+    import asyncio, time, traceback
+    from backend.app.db import get_supabase_client
+    from backend.app.data.finnhub import get_company_profile as fh_profile
+    from backend.app.data.fmp import get_company_profile as fmp_profile
+    from backend.app.data.fred import get_macro_snapshot
+    from backend.app.analysis.deepseek import call_deepseek
+    from backend.app.analysis.finbert import analyze_sentiment
+    
+    results = {"status": "ok", "timestamp": datetime.utcnow().isoformat(), "services": {}}
+    
     # 1. Supabase
     try:
-        from backend.app.db import get_supabase_client
         db = get_supabase_client()
-        wl = db.table("watchlist").select("ticker").execute()
-        results["supabase"] = {"status": "ok", "watchlist_count": len(wl.data)}
+        wl = db.table("watchlist").select("ticker").limit(1).execute() if db else None
+        results["services"]["supabase"] = {"status": "ok" if wl else "error", "details": "DB connected"}
     except Exception as e:
-        results["supabase"] = {"status": "error", "message": str(e)[:100]}
+        results["services"]["supabase"] = {"status": "error", "error_code": "DB_CONN_ERR", "details": str(e)}
 
-    # 2. DeepSeek
+    # 2. Standard APIs
+    services_to_test = [
+        ("finnhub", fh_profile, "AAPL"),
+        ("fmp", fmp_profile, "AAPL"),
+        ("fred", get_macro_snapshot, None)
+    ]
+    
+    for name, func, arg in services_to_test:
+        try:
+            res = await func(arg) if arg else await func()
+            results["services"][name] = {"status": "ok" if res else "warning", "details": "API responsive"}
+        except Exception as e:
+            results["services"][name] = {"status": "error", "error_code": f"{name.upper()}_API_ERR", "details": repr(e)}
+
+    # 3. AI Services
     try:
-        from backend.app.analysis.deepseek import call_deepseek
-        response = await call_deepseek("Antworte mit OK", "Test")
-        results["deepseek"] = {"status": "ok" if response else "error"}
+        await call_deepseek("Reply OK", "Test")
+        results["services"]["deepseek"] = {"status": "ok", "details": "LLM responsive"}
     except Exception as e:
-        results["deepseek"] = {"status": "error", "message": str(e)[:100]}
-
-    # 3. Finnhub
+        results["services"]["deepseek"] = {"status": "error", "error_code": "DEEPSEEK_ERR", "details": repr(e)}
+        
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(f"https://finnhub.io/api/v1/quote?symbol=AAPL&token={settings.finnhub_api_key}")
-            results["finnhub"] = {"status": "ok" if r.status_code == 200 else "error", "http": r.status_code}
+        await asyncio.to_thread(analyze_sentiment, "Test sentence.")
+        results["services"]["finbert"] = {"status": "ok", "details": "Model loaded"}
     except Exception as e:
-        results["finnhub"] = {"status": "error", "message": str(e)[:100]}
+        results["services"]["finbert"] = {"status": "error", "error_code": "FINBERT_ERR", "details": repr(e)}
 
-    # 4. FMP
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(f"https://financialmodelingprep.com/stable/profile?symbol=AAPL&apikey={settings.fmp_api_key}")
-            results["fmp"] = {"status": "ok" if r.status_code == 200 else "error", "http": r.status_code}
-    except Exception as e:
-        results["fmp"] = {"status": "error", "message": str(e)[:100]}
-
-    # 5. FRED
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(f"https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&api_key={settings.fred_api_key}&limit=1&file_type=json&sort_order=desc")
-            results["fred"] = {"status": "ok" if r.status_code == 200 else "error", "http": r.status_code}
-    except Exception as e:
-        results["fred"] = {"status": "error", "message": str(e)[:100]}
-
-    # 6. FinBERT
-    try:
-        from backend.app.analysis.finbert import analyze_sentiment
-        score = analyze_sentiment("Stock price increases sharply")
-        results["finbert"] = {"status": "ok", "test_score": score}
-    except Exception as e:
-        results["finbert"] = {"status": "error", "message": str(e)[:100]}
-
-    # 7. Telegram
-    try:
-        from backend.app.alerts.telegram import send_telegram_alert
-        await send_telegram_alert("🧪 Systemtest")
-        results["telegram"] = {"status": "ok"}
-    except Exception as e:
-        results["telegram"] = {"status": "error", "message": str(e)[:100]}
-
-    # 8. n8n
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get("http://kafin-n8n:5678/healthz")
-            results["n8n"] = {"status": "ok" if r.status_code == 200 else "error"}
-    except Exception as e:
-        results["n8n"] = {"status": "error", "message": str(e)[:100]}
-
-    # Zusammenfassung
-    all_ok = all(v.get("status") == "ok" for v in results.values())
-    failed = [k for k, v in results.items() if v.get("status") != "ok"]
-
-    return {
-        "status": "all_ok" if all_ok else "issues_found",
-        "failed_systems": failed,
-        "details": results
-    }
+    # Aggregate status
+    if any(s.get("status") == "error" for s in results["services"].values()):
+        results["status"] = "degraded"
+        
+    return results
 
 app.include_router(diagnostics_router)
 

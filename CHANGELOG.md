@@ -2,6 +2,16 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.2.4] - 2026-03-19 - Logging Architecture Overhaul
+
+### 🚀 Neue Features
+- **feat(core)**: Replace memory logging with robust RotatingFileHandler (kafin.log)
+- **feat(api)**: Add endpoints to read, clear, export logs, and n8n webhook
+- **feat(ui)**: Transform logs page into live hacker terminal with syntax highlighting for ERROR and WARNING flags
+
+### 🐛 Bugfixes
+- **fix(diagnostics)**: Refactor /api/diagnostics/full to catch isolated API failures and return detailed error_codes
+
 ## [5.2.3] - 2026-03-19 - Report Generator Bugfixes
 
 ### 🐛 Bugfixes

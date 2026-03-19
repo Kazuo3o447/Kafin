@@ -158,12 +158,36 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
         elif ps > sector_ps * 1.5: vd = 5.0
         elif ps < sector_ps: vd = 0.0
 
-    # expectation_gap
+    # expectation_gap — erweitert um Web-Sentiment
     eg_score = 5.0
     options = data.get("options", {})
-    iv_atm = options.get("implied_volatility_atm", 0.0) if isinstance(options, dict) else 0.0
+    iv_atm = (
+        options.get("implied_volatility_atm", 0.0)
+        if isinstance(options, dict) else 0.0
+    )
     if iv_atm > 0.80:
         eg_score = min(10.0, eg_score + 2.0)
+
+    # Web-Sentiment-Divergenz erhöht Torpedo
+    # (bullische News + bärischer Web-Diskurs = "Buy the Rumor")
+    web_sent = data.get("web_sentiment_score", 0.0)
+    finbert_sent = data.get("finbert_sentiment", 0.0)
+    divergence = data.get("sentiment_divergence", False)
+
+    if divergence and finbert_sent > 0.2 and web_sent < -0.2:
+        # Klassisches Abverkauf-nach-Beat Setup
+        eg_score = min(10.0, eg_score + 2.5)
+        logger.warning(
+            f"[{ticker}] 🚨 Sentiment-Divergenz: "
+            f"Torpedo expectation_gap +2.5 auf {eg_score:.1f}"
+        )
+    elif web_sent < -0.4:
+        # Web-Diskurs stark bärisch — unabhängig von FinBERT
+        eg_score = min(10.0, eg_score + 1.5)
+        logger.info(
+            f"[{ticker}] Web-Sentiment bärisch ({web_sent:.2f}): "
+            f"expectation_gap +1.5 auf {eg_score:.1f}"
+        )
 
     # insider_selling
     isa_score = 0.0

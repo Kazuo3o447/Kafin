@@ -226,3 +226,80 @@ async def get_web_intelligence(
         logger.warning(f"Cache-Write Fehler {ticker}: {e}")
 
     return summary
+
+
+async def get_web_sentiment_score(
+    ticker: str,
+    company_name: str = "",
+    days_to_earnings: Optional[int] = None,
+    manual_prio: Optional[int] = None,
+) -> tuple[float, str]:
+    """
+    Berechnet einen Sentiment-Score aus Web-Intelligence.
+
+    Ruft DeepSeek mit den Tavily-Snippets auf und bekommt einen
+    strukturierten Score zurück.
+
+    Returns:
+        (score, label) wobei:
+        score: -1.0 bis +1.0
+        label: "bullisch" | "neutral" | "bärisch"
+    """
+    # Web-Snippets laden (nutzt Cache wenn vorhanden)
+    summary = await get_web_intelligence(
+        ticker=ticker,
+        company_name=company_name,
+        days_to_earnings=days_to_earnings,
+        manual_prio=manual_prio,
+    )
+
+    if not summary or summary.startswith("Keine Web-Intelligence"):
+        return 0.0, "neutral"
+
+    # DeepSeek: strukturierter Score aus Snippets
+    try:
+        from backend.app.analysis.deepseek import call_deepseek
+
+        sys_prompt = (
+            "Du bist ein Finanzanalyst. Antworte NUR mit einem "
+            "JSON-Objekt, kein weiterer Text, keine Erklärung."
+        )
+
+        user_prompt = (
+            f"Analysiere das Markt-Sentiment für {ticker} aus diesen "
+            f"Web-Snippets:\n\n{summary}\n\n"
+            "Antworte NUR mit diesem JSON:\n"
+            '{"score": <float zwischen -1.0 und 1.0>, '
+            '"label": "<bullisch|neutral|bärisch>", '
+            '"reasoning": "<max 1 Satz>"}'
+        )
+
+        result = await call_deepseek(sys_prompt, user_prompt,
+                                     model="deepseek-chat")
+
+        import json
+        # JSON sauber extrahieren
+        result_clean = result.strip()
+        if "```" in result_clean:
+            result_clean = result_clean.split("```")[1]
+            if result_clean.startswith("json"):
+                result_clean = result_clean[4:]
+        result_clean = result_clean.strip()
+
+        parsed = json.loads(result_clean)
+        score = float(parsed.get("score", 0.0))
+        label = parsed.get("label", "neutral")
+
+        # Bounds prüfen
+        score = max(-1.0, min(1.0, score))
+        if label not in ("bullisch", "neutral", "bärisch"):
+            label = "neutral"
+
+        logger.info(
+            f"Web Sentiment {ticker}: {score:.2f} ({label})"
+        )
+        return score, label
+
+    except Exception as e:
+        logger.warning(f"Web Sentiment Score {ticker}: {e}")
+        return 0.0, "neutral"

@@ -2,6 +2,21 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.0] - 2026-03-19 - Sentiment-Aggregator
+
+### 🚀 Neue Features
+- **Composite Sentiment**: Gewichteter Score aus drei Quellen
+  (FinBERT 40% + Web 40% + Social 20%)
+- **Divergenz-Erkennung**: Automatisch wenn |FinBERT - Web| > 0.4
+  — "Buy the Rumor"-Warnung im Report
+- **Torpedo-Score Integration**: Sentiment-Divergenz erhöht
+  expectation_gap automatisch (+2.5 bei Divergenz, +1.5 bei
+  stark bärischem Web-Diskurs)
+- **get_web_sentiment_score()**: DeepSeek analysiert Tavily-Snippets
+  und gibt strukturierten -1.0 bis +1.0 Score zurück
+- **Audit-Report**: Neue SENTIMENT-ANALYSE Sektion mit allen drei
+  Quellen und Divergenz-Warnung
+
 ## [4.9] - 2026-03-19 - Web Intelligence Batch + Prio-UI
 
 ### 🚀 Neue Features

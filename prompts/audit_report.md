@@ -73,6 +73,13 @@ Put/Call Ratio: {{put_call_ratio}}
 Expected Move (bis Earnings): {{expected_move}}
 Kursperformance letzte 30 Tage: {{price_change_30d}}
 
+SENTIMENT-ANALYSE (Composite):
+FinBERT News-Score (40%):   {{finbert_sentiment}}
+Web-Diskurs-Score (40%):    {{web_sentiment}} ({{web_sentiment_label}})
+Social Score (20%):         {{social_score}}
+Composite Score:            {{composite_sentiment}}
+{{divergence_warning}}
+
 CONTRARIAN-ANALYSE (Falls Sentiment < -0.5 und Beta > 1.2):
 Sentiment 7-Tage-Durchschnitt: {{sentiment_score_7d}}
 Ist Contrarian-Setup gegeben: {{is_contrarian_setup}}
@@ -82,8 +89,11 @@ Erstelle den Report auf Deutsch mit diesen Abschnitten:
 2. BEWERTUNG IM REGIME-KONTEXT & WEB-SENTIMENT
    Nutze Web-Intelligence: Gibt es Konsens unter Analysten?
    Auffällige Options-Positionierung? Weicht der aktuelle
-   Web-Diskurs vom strukturellen Bild ab? Nenne konkret wenn
-   Web-Sentiment und News-Sentiment divergieren.
+   Web-Diskurs vom strukturellen Bild ab? 
+   **Bei Sentiment-Divergenz ({{divergence_warning}} vorhanden):**
+   Erkläre explizit warum dies ein "Good News Already Priced In"-
+   oder Contrarian-Setup sein könnte. Nenne Break-Even-Levels
+   (Kurs ± Expected Move).
 3. **PFLICHT: PRE-EARNINGS POSITIONING**
    - Wenn Kursperformance letzte 30 Tage > +10%: Explizit auf
      "Buy the Rumor"-Risiko hinweisen. Beschreibe warum ein Beat

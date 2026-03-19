@@ -112,6 +112,10 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] WatchlistItemUpdate: web_prio Feld
 - [x] Prio-Dropdown in Watchlist-Tabelle (inline save)
 - [x] api.ts: updateWebPrio, refreshWebIntelligence, runWebIntelligenceBatch
+- [x] get_web_sentiment_score() in web_search.py
+- [x] Composite Sentiment (FinBERT + Web + Social) in report_generator
+- [x] Divergenz-Erkennung und Torpedo-Score Integration
+- [x] SENTIMENT-ANALYSE Sektion in audit_report.md
 
 ## 🚀 Aktuelle Features (Stand März 2026)
 

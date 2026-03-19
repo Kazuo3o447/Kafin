@@ -331,6 +331,101 @@ async def generate_audit_report(ticker: str) -> str:
         logger.warning(f"Web Intelligence {ticker}: {e}")
         web_intelligence = ""
     
+    # ── Composite Sentiment Score ─────────────────────────────
+    # FinBERT-Score aus News-Memory (reaktiv, vergangene Events)
+    finbert_sentiment = 0.0
+    try:
+        if news_memory:
+            scores = [
+                float(b.get("sentiment_score", 0))
+                for b in news_memory
+                if b.get("sentiment_score") is not None
+            ]
+            if scores:
+                finbert_sentiment = round(
+                    sum(scores) / len(scores), 3
+                )
+    except Exception:
+        pass
+
+    # Web-Sentiment-Score (proaktiv, aktueller Marktdiskurs)
+    web_sentiment_score = 0.0
+    web_sentiment_label = "neutral"
+    try:
+        if web_intelligence and not web_intelligence.startswith(
+            "Keine"
+        ):
+            from backend.app.data.web_search import (
+                get_web_sentiment_score,
+            )
+            web_sentiment_score, web_sentiment_label = (
+                await get_web_sentiment_score(
+                    ticker=ticker,
+                    company_name=_company_name
+                    if "_company_name" in dir()
+                    else ticker,
+                    days_to_earnings=_days_to_earnings
+                    if "_days_to_earnings" in dir()
+                    else None,
+                    manual_prio=_manual_prio
+                    if "_manual_prio" in dir()
+                    else None,
+                )
+            )
+    except Exception as e:
+        logger.warning(f"Web Sentiment Score {ticker}: {e}")
+
+    # Gewichteter Composite Score
+    # FinBERT: 40% (zuverlässig, viele Datenpunkte)
+    # Web:     40% (proaktiv, hohe Relevanz für Earnings)
+    # Social:  20% (noisig aber Early Signal)
+    social_score_raw = 0.0
+    try:
+        if social:
+            s = getattr(social, "social_score", None)
+            if s is not None:
+                # Finnhub Social Score: 0-10, normalisieren auf -1..+1
+                social_score_raw = round(
+                    (float(s) - 5.0) / 5.0, 3
+                )
+    except Exception:
+        pass
+
+    composite_sentiment = round(
+        finbert_sentiment * 0.4
+        + web_sentiment_score * 0.4
+        + social_score_raw * 0.2,
+        3,
+    )
+
+    # Divergenz erkennen
+    sentiment_divergence = False
+    divergence_text = ""
+    if abs(finbert_sentiment - web_sentiment_score) > 0.4:
+        sentiment_divergence = True
+        if finbert_sentiment > 0.2 and web_sentiment_score < -0.2:
+            divergence_text = (
+                f"⚠ Sentiment-Divergenz: News bullisch "
+                f"({finbert_sentiment:+.2f}) aber Web-Diskurs "
+                f"bärisch ({web_sentiment_score:+.2f}) — "
+                f"klassisches 'Good News Already Priced In'-Setup"
+            )
+        elif finbert_sentiment < -0.2 and web_sentiment_score > 0.2:
+            divergence_text = (
+                f"⚠ Sentiment-Divergenz: News bärisch "
+                f"({finbert_sentiment:+.2f}) aber Analysten "
+                f"optimistisch ({web_sentiment_score:+.2f}) — "
+                f"mögliches Contrarian-Setup"
+            )
+
+    logger.info(
+        f"Sentiment {ticker}: FinBERT={finbert_sentiment:+.2f} | "
+        f"Web={web_sentiment_score:+.2f} ({web_sentiment_label}) | "
+        f"Social={social_score_raw:+.2f} | "
+        f"Composite={composite_sentiment:+.2f}"
+        + (" | DIVERGENZ" if sentiment_divergence else "")
+    )
+    
     now = datetime.now()
     month_ago = now.replace(day=max(1, now.day - 30)) if now.day > 1 else now # rough 30 days
     
@@ -379,7 +474,11 @@ async def generate_audit_report(ticker: str) -> str:
         "technicals": technicals.dict() if technicals else {},
         "news_memory": news_memory if news_memory else [],
         "options": options.dict() if options else {},
-        "social": social.dict() if social else {}
+        "social": social.dict() if social else {},
+        "composite_sentiment": composite_sentiment,
+        "web_sentiment_score": web_sentiment_score,
+        "finbert_sentiment": finbert_sentiment,
+        "sentiment_divergence": sentiment_divergence,
     }
     
     # 2. Scores
@@ -583,6 +682,30 @@ async def generate_audit_report(ticker: str) -> str:
             f"{price_change_30d}%"
             if price_change_30d is not None
             else "N/A"
+        ) \
+        .replace(
+            "{{finbert_sentiment}}",
+            f"{finbert_sentiment:+.2f}"
+        ) \
+        .replace(
+            "{{web_sentiment}}",
+            f"{web_sentiment_score:+.2f}"
+        ) \
+        .replace(
+            "{{web_sentiment_label}}",
+            web_sentiment_label
+        ) \
+        .replace(
+            "{{social_score}}",
+            f"{social_score_raw:+.2f}"
+        ) \
+        .replace(
+            "{{composite_sentiment}}",
+            f"{composite_sentiment:+.2f}"
+        ) \
+        .replace(
+            "{{divergence_warning}}",
+            divergence_text if divergence_text else "Keine Divergenz erkannt"
         )
         
     result = await call_deepseek(sys_prompt, user_prompt, model="deepseek-reasoner")

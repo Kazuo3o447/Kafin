@@ -1465,7 +1465,7 @@ def _fetch_all_scores_sync(tickers: list, db) -> dict:
         # Pro Ticker: nach Datum sortieren, nur 2 neueste behalten
         for t in by_ticker:
             by_ticker[t].sort(
-                key=lambda r: r.get("date", ""),
+                key=lambda r: r.get("date") or "",
                 reverse=True
             )
             by_ticker[t] = by_ticker[t][:2]

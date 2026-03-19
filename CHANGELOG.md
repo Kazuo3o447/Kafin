@@ -2,6 +2,17 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [4.7] - 2026-03-19 - Hotfix Expected Move & Score Sort
+
+### 🐛 Bugfixes
+- **Expected Move**: replace()-Aufrufe für {{expected_move}} und
+  {{price_change_30d}} fehlten — DeepSeek bekam ungeparste Platzhalter
+- **IV-Felder**: {{iv_atm}}, {{hist_vol_20d}}, {{iv_spread}},
+  {{put_call_ratio}} jetzt einzeln befüllt statt über {{options_metrics}}
+- **Score Sort**: TypeError bei None-Datum in _fetch_all_scores_sync
+  durch 'or ""' Fallback behoben
+- **Event-Loop**: yfinance 30d-History in asyncio.to_thread ausgelagert
+
 ## [4.6] - 2026-03-19 - Expected Move & Pre-Earnings Intelligence
 
 ### 🚀 Neue Features

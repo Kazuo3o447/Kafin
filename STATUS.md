@@ -101,6 +101,10 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] Expected Move Berechnung in Audit-Report integriert
 - [x] 30-Tage-Kursperformance als Torpedo-Signal im Report
 - [x] audit_report.md Prompt-Template v0.2
+- [x] Expected Move Template-Variablen korrekt befüllt
+- [x] IV-Felder einzeln im Template statt als Block
+- [x] Score Sort TypeError mit None-Datum behoben
+- [x] yfinance 30d-History in Threadpool ausgelagert
 
 ## 🚀 Aktuelle Features (Stand März 2026)
 

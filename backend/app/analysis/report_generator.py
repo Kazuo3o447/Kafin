@@ -251,14 +251,21 @@ async def generate_audit_report(ticker: str) -> str:
 
     # ── 30-Tage-Kursperformance (Pre-Earnings Rally) ──────────
     try:
-        import yfinance as yf
-        stock = yf.Ticker(ticker)
-        hist_30d = stock.history(period="35d")
-        if not hist_30d.empty and len(hist_30d) >= 2:
-            price_30d_ago = float(hist_30d["Close"].iloc[0])
-            price_now = float(hist_30d["Close"].iloc[-1])
-            if price_30d_ago > 0:
-                price_change_30d = round(((price_now - price_30d_ago) / price_30d_ago) * 100, 1)
+        def _fetch_30d_change(t: str) -> float | None:
+            import yfinance as yf
+            stock = yf.Ticker(t)
+            hist = stock.history(period="35d")
+            if hist.empty or len(hist) < 2:
+                return None
+            p0 = float(hist["Close"].iloc[0])
+            p1 = float(hist["Close"].iloc[-1])
+            if p0 <= 0:
+                return None
+            return round(((p1 - p0) / p0) * 100, 1)
+
+        price_change_30d = await asyncio.to_thread(
+            _fetch_30d_change, ticker
+        )
     except Exception as e:
         logger.debug(f"30d Price Change {ticker}: {e}")
 
@@ -484,7 +491,40 @@ async def generate_audit_report(ticker: str) -> str:
         .replace("{{news_bullet_points}}", news_str) \
         .replace("{{long_term_memory}}", lt_memory) \
         .replace("{{opportunity_score}}", str(opp_score.total_score if opp_score else 0.0)) \
-        .replace("{{torpedo_score}}", str(torp_score.total_score if torp_score else 0.0))
+        .replace("{{torpedo_score}}", str(torp_score.total_score if torp_score else 0.0)) \
+        .replace(
+            "{{iv_atm}}",
+            f"{getattr(options, 'implied_volatility_atm', 0) * 100:.1f}"
+            if options else "N/A"
+        ) \
+        .replace(
+            "{{hist_vol_20d}}",
+            f"{getattr(options, 'historical_volatility', 0) * 100:.1f}"
+            if options else "N/A"
+        ) \
+        .replace(
+            "{{iv_spread}}",
+            f"{((getattr(options, 'implied_volatility_atm', 0) or 0) - (getattr(options, 'historical_volatility', 0) or 0)) * 100:.1f}"
+            if options else "N/A"
+        ) \
+        .replace(
+            "{{put_call_ratio}}",
+            str(getattr(options, 'put_call_ratio_oi', 'N/A'))
+            if options else "N/A"
+        ) \
+        .replace(
+            "{{expected_move}}",
+            f"±{expected_move_pct}% (±${expected_move_usd})"
+            if expected_move_pct and expected_move_usd
+            else "N/A (keine IV-Daten)"
+        ) \
+        .replace(
+            "{{price_change_30d}}",
+            f"{'+' if (price_change_30d or 0) >= 0 else ''}"
+            f"{price_change_30d}%"
+            if price_change_30d is not None
+            else "N/A"
+        )
         
     result = await call_deepseek(sys_prompt, user_prompt, model="deepseek-reasoner")
     if "MOCK_REPORT:" in result:

@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from backend.app.logger import get_logger
 from backend.app.data.finnhub import get_company_news, get_short_interest, get_insider_transactions, get_economic_calendar
 from backend.app.data.fmp import (
@@ -427,7 +427,7 @@ async def generate_audit_report(ticker: str) -> str:
     )
     
     now = datetime.now()
-    month_ago = now.replace(day=max(1, now.day - 30)) if now.day > 1 else now # rough 30 days
+    month_ago = now - timedelta(days=30)
     
     # 1.5 Try getting news from memory first, else fallback to Finnhub
     from backend.app.memory.short_term import get_bullet_points
@@ -640,7 +640,7 @@ async def generate_audit_report(ticker: str) -> str:
         .replace("{{insider_sells}}", str(getattr(insiders, "total_sells", "0")) if insiders else "0") \
         .replace("{{insider_sell_value}}", str(getattr(insiders, "total_sell_value", "0.0")) if insiders else "0.0") \
         .replace("{{insider_assessment}}", str(getattr(insiders, "assessment", "normal")) if insiders else "normal") \
-        .replace("{{options_metrics}}", f"PCR: {getattr(options, 'put_call_ratio_oi', 'N/A')} | IV ATM: {getattr(options, 'implied_volatility_atm', 0) * 100:.1f}%" if options else "N/A") \
+        .replace("{{options_metrics}}", f"PCR: {getattr(options, 'put_call_ratio_oi', 'N/A')} | IV ATM: {(getattr(options, 'implied_volatility_atm', 0) or 0) * 100:.1f}%" if options else "N/A") \
         .replace("{{social_sentiment}}", f"Score: {getattr(social, 'social_score', 'N/A')} (Reddit: {getattr(social, 'reddit_mentions', 'N/A')}, Twitter: {getattr(social, 'twitter_mentions', 'N/A')})" if social else "N/A") \
         .replace("{{news_bullet_points}}", news_str) \
         .replace("{{long_term_memory}}", lt_memory) \
@@ -652,12 +652,12 @@ async def generate_audit_report(ticker: str) -> str:
         .replace("{{torpedo_score}}", str(torp_score.total_score if torp_score else 0.0)) \
         .replace(
             "{{iv_atm}}",
-            f"{getattr(options, 'implied_volatility_atm', 0) * 100:.1f}"
+            f"{(getattr(options, 'implied_volatility_atm', 0) or 0) * 100:.1f}"
             if options else "N/A"
         ) \
         .replace(
             "{{hist_vol_20d}}",
-            f"{getattr(options, 'historical_volatility', 0) * 100:.1f}"
+            f"{(getattr(options, 'historical_volatility', 0) or 0) * 100:.1f}"
             if options else "N/A"
         ) \
         .replace(

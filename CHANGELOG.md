@@ -2,6 +2,12 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.2.3] - 2026-03-19 - Report Generator Bugfixes
+
+### 🐛 Bugfixes
+- **fix(analysis)**: Prevent TypeError during report generation by providing fallback 'or 0' for NoneType options metrics (IV ATM, Hist Vol).
+- **fix(analysis)**: Correct inaccurate 30-day lookback calculation in generate_audit_report using standard timedelta.
+
 ## [5.2.2] - 2026-03-19 - Social Sentiment Integration
 
 ### 🚀 Neue Features

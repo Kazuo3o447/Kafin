@@ -362,7 +362,7 @@ function WatchlistHeatmap({ items, sparklines, concentrationWarning }: {
           return (
             <div
               key={item.ticker}
-              className={`rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg ${heatmapCardBackground(item)}`}
+              className={`min-h-0 overflow-hidden rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg ${heatmapCardBackground(item)}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -380,9 +380,9 @@ function WatchlistHeatmap({ items, sparklines, concentrationWarning }: {
                 )}
               </div>
 
-              <div className="mt-4 flex items-end justify-between gap-4">
+              <div className="mt-3 flex items-end justify-between gap-4">
                 <div>
-                  <p className="text-2xl font-bold text-[var(--text-primary)]">${item.price?.toFixed(2) ?? "--"}</p>
+                  <p className="text-xl font-bold text-[var(--text-primary)] truncate">${item.price?.toFixed(2) ?? "--"}</p>
                   <p className={`text-sm font-semibold ${item.change_pct && item.change_pct >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"}`}>
                     {item.change_pct ? `${item.change_pct.toFixed(2)}%` : "--"}
                   </p>
@@ -393,7 +393,7 @@ function WatchlistHeatmap({ items, sparklines, concentrationWarning }: {
                 </div>
               </div>
 
-              <div className="mt-4 h-20 w-full">
+              <div className="mt-3 h-16 w-full">
                 {sparklineData.length > 1 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={sparklineData} margin={{ top: 8, bottom: 0, left: 0, right: 0 }}>
@@ -411,7 +411,7 @@ function WatchlistHeatmap({ items, sparklines, concentrationWarning }: {
                 )}
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                 <div className="rounded-xl bg-black/20 p-3">
                   <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
                     <span>Opportunity</span>

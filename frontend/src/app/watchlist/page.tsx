@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Plus, Trash2, Search } from "lucide-react";
 import { api } from "@/lib/api";
-import { cachedFetch, cacheAge, cacheInvalidate } from "@/lib/clientCache";
+import { cachedFetch, cacheGet, cacheAge, cacheInvalidate } from "@/lib/clientCache";
 import { CacheStatus } from "@/components/CacheStatus";
 
 type WatchlistItem = {
@@ -49,7 +49,19 @@ export default function WatchlistPage() {
       cacheInvalidate('watchlist:enriched');
       setRefreshing(true);
     }
-    setLoading(!invalidate && watchlist.length === 0);
+
+    // Sofort gecachte Daten anzeigen (kein Ladescreen wenn Cache vorhanden)
+    const cached = cacheGet<WatchlistItem[]>("watchlist:list");
+    if (cached && !invalidate) {
+      setWatchlist(cached);
+      setLoading(false);
+      setFromCache(true);
+      setDataAge(cacheAge("watchlist:list"));
+      return; // Cache ist frisch genug — kein API-Call
+    }
+
+    if (!invalidate) setLoading(true);
+
     try {
       const { data, fromCache: isCached } = await cachedFetch("watchlist:list", () => api.getWatchlist(), 60);
       setWatchlist(data || []);
@@ -61,7 +73,7 @@ export default function WatchlistPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [watchlist.length]);
+  }, []);
 
   async function handleAddTicker() {
     const ticker = newTicker.ticker.trim().toUpperCase();

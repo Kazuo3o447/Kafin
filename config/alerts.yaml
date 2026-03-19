@@ -9,3 +9,11 @@ schedules:
   morning_briefing: "0 8 * * 1-5"      # Montag-Freitag 08:00 CET
   news_pipeline: "*/30 * * * *"        # Alle 30 Minuten
   sec_scanner: "*/10 * * * *"          # Alle 10 Minuten
+
+sentiment_monitor:
+  enabled: true
+  price_rise_threshold: 2.0      # Kurs +X% in 2h gilt als Anstieg
+  sentiment_drop_threshold: 0.30 # Sentiment -X Punkte gilt als Kippen
+  divergence_threshold: 0.40     # |FinBERT - Web| > X = Divergenz
+  cooldown_hours: 4              # Min. Stunden zwischen Alerts pro Ticker
+  active_hours: "08:00-22:00"    # Nur in diesen Stunden aktiv (CET)

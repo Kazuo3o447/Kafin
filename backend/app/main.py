@@ -2070,6 +2070,21 @@ async def api_web_intelligence_refresh(ticker: str):
     }
 
 
+@web_intel_router.post("/sentiment-check")
+async def api_sentiment_divergence_check():
+    """
+    Prüft alle Watchlist-Ticker auf Sentiment-Divergenz.
+    Sendet Telegram-Alert wenn Signal erkannt.
+    Von n8n stündlich aufgerufen.
+    """
+    logger.info("API Call: web-intelligence/sentiment-check")
+    from backend.app.analysis.sentiment_monitor import (
+        check_sentiment_divergence,
+    )
+    result = await check_sentiment_divergence()
+    return result
+
+
 @web_intel_router.get("/cache/{ticker}")
 async def api_web_intelligence_cache(ticker: str):
     """Gibt gecachte Web Intelligence für einen Ticker zurück."""

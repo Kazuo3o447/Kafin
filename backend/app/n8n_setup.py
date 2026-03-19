@@ -215,7 +215,49 @@ async def setup_workflows():
             }
         }
 
-        for wf in [weekday_news_workflow, weekend_news_workflow, sec_workflow, sunday_workflow, morning_workflow, earnings_review_workflow]:
+        # Workflow 6: Sentiment Divergence Monitor (stündlich Mo-Fr)
+        sentiment_workflow = {
+            "name": "Kafin: Sentiment Monitor (stündlich)",
+            "active": True,
+            "nodes": [
+                {
+                    "parameters": {
+                        "rule": {
+                            "interval": [{
+                                "field": "cronExpression",
+                                "expression": "0 * * * 1-5"
+                            }]
+                        }
+                    },
+                    "name": "Trigger: Stündlich Mo-Fr",
+                    "type": "n8n-nodes-base.scheduleTrigger",
+                    "position": [250, 300],
+                    "typeVersion": 1,
+                },
+                {
+                    "parameters": {
+                        "url": "http://kafin-backend:8000/api/web-intelligence/sentiment-check",
+                        "method": "POST",
+                        "options": {"timeout": 60000},
+                    },
+                    "name": "Sentiment Divergenz prüfen",
+                    "type": "n8n-nodes-base.httpRequest",
+                    "position": [450, 300],
+                    "typeVersion": 1,
+                },
+            ],
+            "connections": {
+                "Trigger: Stündlich Mo-Fr": {
+                    "main": [[{
+                        "node": "Sentiment Divergenz prüfen",
+                        "type": "main",
+                        "index": 0,
+                    }]]
+                }
+            },
+        }
+
+        for wf in [weekday_news_workflow, weekend_news_workflow, sec_workflow, sunday_workflow, morning_workflow, earnings_review_workflow, sentiment_workflow]:
             try:
                 response = await client.post("/api/v1/workflows", json=wf)
                 if response.status_code in (200, 201):

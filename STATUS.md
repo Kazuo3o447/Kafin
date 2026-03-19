@@ -121,6 +121,10 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] Variable-Scope initialization (no dir() checks)
 - [x] Robust JSON extraction (re.search)
 - [x] searched_at index in migration
+- [x] sentiment_monitor.py mit zwei Divergenz-Signalen
+- [x] POST /api/web-intelligence/sentiment-check Endpoint
+- [x] n8n Workflow: stündlicher Sentiment-Monitor
+- [x] Cooldown-Logik via system_logs Tabelle
 
 ## 🚀 Aktuelle Features (Stand März 2026)
 

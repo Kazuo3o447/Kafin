@@ -2,6 +2,17 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.1] - 2026-03-19 - Sentiment Divergence Alert
+
+### 🚀 Neue Features
+- **sentiment_monitor.py**: Stündlicher Check für alle Ticker
+  — Signal 1: Kurs steigt aber Sentiment kippt (lokales Top)
+  — Signal 2: FinBERT vs. Web-Divergenz > 0.4
+- **Telegram Alert**: Strukturierte Nachricht mit Kontext
+- **Cooldown**: Min. 4h zwischen Alerts pro Ticker (kein Spam)
+- **n8n Workflow**: Stündlicher Trigger Mo-Fr automatisch
+- **Konfigurierbar**: Alle Schwellwerte in config/alerts.yaml
+
 ## [5.0.1] - 2026-03-19 - Hotfix Web Intelligence Stack
 
 ### 🐛 Bugfixes

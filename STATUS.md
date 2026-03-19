@@ -130,6 +130,10 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] POST /api/web-intelligence/peer-reaction
 - [x] Auto-Alert in scan-earnings-results
 - [x] n8n Workflow: Peer-Check 08:00 + 15:00
+- [x] Hotfix 5.2.1: alerts.yaml dynamisch laden in sentiment_monitor
+- [x] Hotfix 5.2.1: isinstance(result, dict) Guard in Auto-Trigger
+- [x] Hotfix 5.2.1: timezone.utc Bug in api_scan_earnings_results gefixt
+- [x] Hotfix 5.2.1: Parallelisierung via asyncio.gather für Sentiment Check
 
 ## 🚀 Aktuelle Features (Stand März 2026)
 

@@ -1874,6 +1874,11 @@ async def api_scan_earnings_results():
             if history and history.last_quarter:
                 earnings_date = getattr(history.last_quarter, "earnings_date", None)
                 if isinstance(earnings_date, datetime):
+                    if earnings_date.tzinfo is None:
+                        from datetime import timezone as _tz
+                        earnings_date = earnings_date.replace(tzinfo=_tz.utc)
+                    from datetime import timezone as _tz
+                    now = datetime.now(_tz.utc)
                     days_ago = abs((now - earnings_date).days)
                     if days_ago <= 3:
                         result = await run_post_earnings_review(ticker)
@@ -1882,16 +1887,17 @@ async def api_scan_earnings_results():
                         
                         # Peer-Reaktions-Alert wenn Kursreaktion bekannt
                         try:
-                            reaction = result.get("reaction_1d")
-                            if reaction is not None and abs(reaction) >= 2.0:
-                                from backend.app.analysis.peer_monitor import (
-                                    send_peer_reaction_alert,
-                                )
-                                await send_peer_reaction_alert(
-                                    reporter=ticker,
-                                    move_pct=float(reaction),
-                                    report_timing="after_hours",
-                                )
+                            if isinstance(result, dict):
+                                reaction = result.get("reaction_1d")
+                                if reaction is not None and abs(float(reaction)) >= 2.0:
+                                    from backend.app.analysis.peer_monitor import (
+                                        send_peer_reaction_alert,
+                                    )
+                                    await send_peer_reaction_alert(
+                                        reporter=ticker,
+                                        move_pct=float(reaction),
+                                        report_timing="after_hours",
+                                    )
                         except Exception as e:
                             logger.debug(f"Peer Reaction Auto-Alert {ticker}: {e}")
         except Exception as e:

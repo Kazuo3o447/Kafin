@@ -2,6 +2,14 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.2.1] - 2026-03-19 - Hotfix Sentiment + Peer Monitor
+
+### 🐛 Bugfixes
+- **alerts.yaml**: Schwellwerte werden jetzt aus YAML gelesen statt hardcodiert — Konfiguration funktioniert
+- **isinstance-Check**: result.get() vor Typ-Prüfung abgesichert — kein AttributeError mehr in api_scan_earnings_results
+- **Timezone**: datetime.utcnow() → datetime.now(utc) in api_scan_earnings_results — kein TypeError beim Datumsvergleich
+- **Parallelisierung**: Sentiment-Check in 5er-Chunks via asyncio.gather — n8n-Timeout bei großen Watchlists vermieden
+
 ## [5.2] - 2026-03-19 - Sector Peer Review
 
 ### 🚀 Neue Features

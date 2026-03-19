@@ -16,6 +16,7 @@ Letzte Alert-Zeit wird in Supabase gespeichert um Spam zu vermeiden
 import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import yaml, os
 
 from backend.app.memory.watchlist import get_watchlist
 from backend.app.memory.short_term import get_bullet_points
@@ -24,13 +25,22 @@ from backend.app.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Mindestabstand zwischen Alerts pro Ticker (Stunden)
-ALERT_COOLDOWN_HOURS = 4
+def _load_alert_config() -> dict:
+    try:
+        config_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "..",
+            "config", "alerts.yaml"
+        )
+        with open(os.path.abspath(config_path)) as f:
+            return yaml.safe_load(f).get("sentiment_monitor", {})
+    except Exception:
+        return {}
 
-# Schwellwerte
-PRICE_RISE_THRESHOLD = 2.0       # Kurs +2% in 2h = Anstieg
-SENTIMENT_DROP_THRESHOLD = 0.30  # Sentiment -0.3 = Kipppen
-DIVERGENCE_THRESHOLD = 0.40      # |FinBERT - Web| > 0.4
+_cfg = _load_alert_config()
+ALERT_COOLDOWN_HOURS     = _cfg.get("cooldown_hours", 4)
+PRICE_RISE_THRESHOLD     = _cfg.get("price_rise_threshold", 2.0)
+SENTIMENT_DROP_THRESHOLD = _cfg.get("sentiment_drop_threshold", 0.30)
+DIVERGENCE_THRESHOLD     = _cfg.get("divergence_threshold", 0.40)
 
 
 async def _get_price_change_2h(ticker: str) -> Optional[float]:
@@ -245,31 +255,25 @@ async def check_sentiment_divergence() -> dict:
     if not wl:
         return {"status": "ok", "alerts_sent": 0, "checked": 0}
 
-    alerts_sent = 0
-    checked = 0
-
-    for item in wl:
+    async def _check_single(item: dict) -> dict:
         ticker = item.get("ticker", "").upper()
         if not ticker:
-            continue
-
-        checked += 1
-
+            return {"ticker": ticker, "sent": False}
         try:
-            # Cooldown prüfen
             if not await _check_alert_cooldown(ticker):
-                logger.debug(f"Sentiment Monitor: Cooldown aktiv für {ticker}")
-                continue
+                return {"ticker": ticker, "sent": False, "reason": "cooldown"}
 
             alert_parts = []
 
-            # Signal 1: Kurs steigt + Sentiment kippt
-            price_change = await _get_price_change_2h(ticker)
-            sentiment_delta = await _get_recent_sentiment_delta(ticker)
+            price_change, sentiment_delta = await asyncio.gather(
+                _get_price_change_2h(ticker),
+                _get_recent_sentiment_delta(ticker),
+                return_exceptions=True,
+            )
 
             if (
-                price_change is not None
-                and sentiment_delta is not None
+                isinstance(price_change, float)
+                and isinstance(sentiment_delta, float)
                 and price_change >= PRICE_RISE_THRESHOLD
                 and sentiment_delta <= -SENTIMENT_DROP_THRESHOLD
             ):
@@ -283,16 +287,14 @@ async def check_sentiment_divergence() -> dict:
                     f"Sentiment {sentiment_delta:+.2f}"
                 )
 
-            # Signal 2: FinBERT vs. Web-Divergenz
             divergence_result = await _get_web_divergence(ticker)
             if divergence_result:
                 _, _, div_text = divergence_result
                 alert_parts.append(f"⚖️ Sentiment-Divergenz: {div_text}")
 
             if not alert_parts:
-                continue
+                return {"ticker": ticker, "sent": False}
 
-            # Alert aufbauen
             company = item.get("company_name", ticker)
             message = (
                 f"🚨 <b>SENTIMENT ALERT: {ticker}</b>\n"
@@ -301,16 +303,30 @@ async def check_sentiment_divergence() -> dict:
                 + f"\n\n⏰ {datetime.now().strftime('%d.%m.%Y %H:%M')} CET"
                 + f"\n🔗 /watchlist/{ticker}"
             )
-
             success = await send_telegram_alert(message)
             if success:
                 await _log_alert_sent(ticker)
-                alerts_sent += 1
-                logger.info(f"Sentiment Alert gesendet: {ticker}")
-
+                return {"ticker": ticker, "sent": True}
         except Exception as e:
             logger.warning(f"Sentiment Monitor {ticker}: {e}")
-            continue
+        return {"ticker": ticker, "sent": False}
+
+    # Parallel in 5er-Chunks (yfinance Rate-Limit respektieren)
+    CHUNK_SIZE = 5
+    results_all = []
+    for i in range(0, len(wl), CHUNK_SIZE):
+        chunk = wl[i:i + CHUNK_SIZE]
+        chunk_results = await asyncio.gather(
+            *[_check_single(item) for item in chunk],
+            return_exceptions=True,
+        )
+        results_all.extend(chunk_results)
+
+    alerts_sent = sum(
+        1 for r in results_all
+        if isinstance(r, dict) and r.get("sent")
+    )
+    checked = len(wl)
 
     logger.info(
         f"Sentiment Monitor: {checked} geprüft, {alerts_sent} Alerts"

@@ -2,7 +2,7 @@ import { ArrowLeft, TrendingUp, Activity, FileText, Calendar } from "lucide-reac
 import Link from "next/link";
 import { ChartAnalysisSection } from "./ChartAnalysisSection";
 import { TrackRecordSection } from "./TrackRecordSection";
-import InteractiveChart from "@/components/InteractiveChart";
+import ChartWrapper from "@/components/ChartWrapper";
 import { ActionButtons } from "./ActionButtons";
 
 type TickerDetailProps = {
@@ -49,8 +49,10 @@ type LongTermMemory = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-async function fetchJSON<T>(endpoint: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, { cache: "no-store" });
+async function fetchJSON<T>(endpoint: string, revalidate = 300): Promise<T> {
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    next: { revalidate },
+  });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
@@ -59,7 +61,7 @@ async function getTickerData(ticker: string) {
   try {
     const [profile, newsMemory, longTermMemory] = await Promise.all([
       fetchJSON<ProfileData>(`/api/data/company/${ticker}/profile`).catch(() => ({ error: "Profil nicht verfügbar" })),
-      fetchJSON<NewsMemory>(`/api/news/memory/${ticker}`).catch(() => ({ bullet_points: [] })),
+      fetchJSON<NewsMemory>(`/api/news/memory/${ticker}`, 60).catch(() => ({ bullet_points: [] })),
       fetchJSON<LongTermMemory>(`/api/data/long-term-memory/${ticker}`).catch(() => ({ insights: [] })),
     ]);
 
@@ -210,6 +212,25 @@ export default async function TickerDetailPage({ params }: TickerDetailProps) {
 
       <ActionButtons ticker={ticker} />
 
+      {/* Kurs-Chart — lädt automatisch ohne Button */}
+      <div className="rounded-xl border border-[var(--border)]
+                      bg-[var(--bg-secondary)] overflow-hidden">
+        <div className="flex items-center justify-between
+                        border-b border-[var(--border)] px-5 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em]
+                text-[var(--text-muted)]">
+            Kurschart
+          </p>
+          <p className="text-xs text-[var(--text-muted)]">
+            SMA 50 · SMA 200 · Events
+          </p>
+        </div>
+        <div className="p-3">
+          <ChartWrapper ticker={ticker} />
+        </div>
+      </div>
+
+      {/* KI-Chartanalyse — auf Abruf */}
       <ChartAnalysisSection ticker={ticker} />
 
       <div className="grid gap-6 lg:grid-cols-2">

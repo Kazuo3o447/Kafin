@@ -17,6 +17,7 @@ services:
       - ./config:/app/config:ro
       - ./prompts:/app/prompts:ro
       - ./fixtures:/app/fixtures:ro
+      - ./logs:/app/logs
     environment:
       - PYTHONPATH=/app
     depends_on:

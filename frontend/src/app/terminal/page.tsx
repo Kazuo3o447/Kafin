@@ -1,135 +1,101 @@
 "use client";
-
-import { useState, useEffect, useRef } from "react";
-import { Play, Pause, Trash2, Download } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Terminal, Download, Pause, Play, Trash2, Search, AlertTriangle } from "lucide-react";
 
 export default function TerminalPage() {
-  const [logs, setLogs] = useState<string[]>([]);
-  const [isPolling, setIsPolling] = useState(false);
-  const [autoScroll, setAutoScroll] = useState(true);
-  const bottomRef = useRef<HTMLDivElement>(null);
+    const [logs, setLogs] = useState<string[]>([]);
+    const [isPolling, setIsPolling] = useState(true);
+    const [autoScroll, setAutoScroll] = useState(true);
+    const [searchTerm, setSearchTerm] = useState("");
+    const bottomRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when logs update
-  useEffect(() => {
-    if (autoScroll && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [logs, autoScroll]);
+    const fetchLogs = useCallback(async () => {
+        if (!isPolling) return;
+        try {
+            const res = await fetch("/api/logs/file?lines=1000").then(r => r.json());
+            if (res.logs) setLogs(res.logs);
+        } catch (e) { console.error(e); }
+    }, [isPolling]);
 
-  // Poll logs every 2 seconds when enabled
-  useEffect(() => {
-    if (!isPolling) return;
+    useEffect(() => {
+        fetchLogs();
+        const interval = setInterval(fetchLogs, 2000);
+        return () => clearInterval(interval);
+    }, [fetchLogs]);
 
-    const interval = setInterval(async () => {
-      try {
-        const response = await fetch("/api/logs/file?lines=1000");
-        const data = await response.json();
-        setLogs(data.logs || []);
-      } catch (error) {
-        console.error("Failed to fetch logs:", error);
-      }
-    }, 2000);
+    useEffect(() => {
+        if (autoScroll && bottomRef.current) bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }, [logs, autoScroll]);
 
-    return () => clearInterval(interval);
-  }, [isPolling]);
+    const handleScroll = () => {
+        if (!containerRef.current) return;
+        const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+        const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+        if (isAtBottom && !autoScroll) setAutoScroll(true);
+        else if (!isAtBottom && autoScroll) setAutoScroll(false);
+    };
 
-  // Initial load
-  useEffect(() => {
-    loadLogs();
-  }, []);
+    const handleExport = () => {
+        if (!logs.length) return;
+        const blob = new Blob([logs.join('')], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `kafin_terminal_${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
 
-  const loadLogs = async () => {
-    try {
-      const response = await fetch("/api/logs/file?lines=1000");
-      const data = await response.json();
-      setLogs(data.logs || []);
-    } catch (error) {
-      console.error("Failed to fetch logs:", error);
-    }
-  };
+    const handleClear = async () => {
+        if (!confirm("Alle Logs löschen?")) return;
+        await fetch("/api/logs/file", { method: "DELETE" });
+        setLogs([]);
+    };
 
-  const clearLogs = async () => {
-    try {
-      await fetch("/api/logs/file", { method: "DELETE" });
-      setLogs([]);
-    } catch (error) {
-      console.error("Failed to clear logs:", error);
-    }
-  };
+    const filteredLogs = logs.filter(l => l.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  const exportLogs = () => {
-    window.open("/api/logs/export", "_blank");
-  };
-
-  const getLogColor = (line: string) => {
-    if (line.includes("[ERROR]") || line.includes("error_code")) {
-      return "text-red-500 font-bold";
-    }
-    if (line.includes("[WARNING]")) {
-      return "text-yellow-400";
-    }
-    return "text-green-400";
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black text-green-400 font-mono flex flex-col h-screen overflow-hidden">
-      {/* Header */}
-      <div className="bg-gray-900 border-b border-gray-700 p-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-green-400">KAFIN CORE TERMINAL</h1>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setIsPolling(!isPolling)}
-              className="flex items-center gap-2 px-3 py-1 bg-gray-800 text-green-400 rounded hover:bg-gray-700 transition-colors"
-            >
-              {isPolling ? <Pause size={16} /> : <Play size={16} />}
-              {isPolling ? "Pause" : "Resume"}
-            </button>
-            <button
-              onClick={clearLogs}
-              className="flex items-center gap-2 px-3 py-1 bg-gray-800 text-red-400 rounded hover:bg-gray-700 transition-colors"
-            >
-              <Trash2 size={16} />
-              Clear Logs
-            </button>
-            <button
-              onClick={exportLogs}
-              className="flex items-center gap-2 px-3 py-1 bg-gray-800 text-blue-400 rounded hover:bg-gray-700 transition-colors"
-            >
-              <Download size={16} />
-              Export
-            </button>
-            <button
-              onClick={() => setAutoScroll(!autoScroll)}
-              className={`px-3 py-1 rounded transition-colors ${
-                autoScroll 
-                  ? "bg-gray-800 text-green-400" 
-                  : "bg-gray-800 text-gray-400"
-              }`}
-            >
-              AUTO-SCROLL: {autoScroll ? "ON" : "OFF"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Log Content */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="min-h-full">
-          {logs.length === 0 ? (
-            <div className="text-gray-500 text-center py-8">
-              No logs available. Click Resume to start polling.
+    return (
+        <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col h-screen overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 bg-[#111] border-b border-gray-800">
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                        <span className="flex h-3 w-3 relative">
+                            {isPolling && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>}
+                            <span className={`relative inline-flex rounded-full h-3 w-3 ${isPolling ? 'bg-green-500' : 'bg-gray-600'}`}></span>
+                        </span>
+                        <Terminal size={18} className="text-green-500" />
+                        <span className="text-green-500 font-bold font-mono">KAFIN CORE TERMINAL</span>
+                    </div>
+                    <div className="relative ml-4">
+                        <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500" />
+                        <input type="text" placeholder="Grep logs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-[#1a1a1a] border border-gray-700 rounded px-8 py-1 text-sm text-green-400 font-mono focus:outline-none focus:border-green-500 w-64" />
+                    </div>
+                </div>
+                <div className="flex items-center gap-2 font-mono text-xs text-gray-300">
+                    <button onClick={() => setIsPolling(!isPolling)} className="flex items-center gap-1 px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700"><Pause size={14}/> {isPolling ? 'Pause' : 'Play'}</button>
+                    <div className="px-3 py-1.5 rounded border border-gray-700">Auto-Scroll: {autoScroll ? 'ON' : 'OFF'}</div>
+                    <button onClick={handleClear} className="flex items-center gap-1 px-3 py-1.5 rounded bg-gray-800 hover:text-red-400"><Trash2 size={14}/> Clear</button>
+                    <button onClick={handleExport} className="flex items-center gap-1 px-3 py-1.5 rounded bg-gray-800 hover:text-white"><Download size={14}/> Export</button>
+                </div>
             </div>
-          ) : (
-            logs.map((line, index) => (
-              <div key={index} className={`whitespace-pre-wrap break-all ${getLogColor(line)}`}>
-                {line}
-              </div>
-            ))
-          )}
-          <div ref={bottomRef} />
+            <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-px text-[13px]">
+                {filteredLogs.map((log, i) => {
+                    const l = log.toLowerCase();
+                    const isErr = l.includes("[error]") || l.includes("error_code");
+                    const isWarn = l.includes("[warning]");
+                    const col = isErr ? "text-red-500 font-bold bg-red-950/20" : isWarn ? "text-yellow-400" : "text-green-400";
+                    return (
+                        <div key={i} className={`flex gap-3 px-2 py-0.5 font-mono break-all whitespace-pre-wrap hover:bg-white/5 ${col}`}>
+                            {isErr && <AlertTriangle size={14} className="mt-0.5 shrink-0" />}
+                            {log}
+                        </div>
+                    );
+                })}
+                <div ref={bottomRef} className="h-4" />
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 }

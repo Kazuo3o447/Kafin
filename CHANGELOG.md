@@ -2,6 +2,15 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.2.6] - 2026-03-19 - Docker Persistent Logging & Enhanced Terminal
+
+### 🚀 Neue Features
+- **feat(docker)**: Add volume mount for persistent file logging and update .gitignore
+- **feat(core)**: Replace memory logging with robust RotatingFileHandler (kafin.log)
+- **feat(api)**: Add endpoints to read, clear, export logs, and external n8n webhook
+- **fix(diagnostics)**: Implement latency tracking and isolated try/catch with detailed error codes
+- **feat(ui)**: Create isolated Hacker Terminal (/terminal) with smart-scroll, blob export, and grep search
+
 ## [5.2.5] - 2026-03-19 - Status Dashboard & Isolated Terminal
 
 ### 🚀 Neue Features

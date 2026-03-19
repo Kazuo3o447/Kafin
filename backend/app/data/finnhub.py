@@ -76,7 +76,16 @@ def load_mock_data(filename: str):
 async def get_earnings_calendar(from_date: str, to_date: str) -> List[EarningsExpectation]:
     if settings.use_mock_data:
         data = load_mock_data("earnings_calendar.json")
-        return [EarningsExpectation(**item) for item in data]
+        return [
+            EarningsExpectation(
+                ticker=item.get("symbol", item.get("ticker", "")),
+                report_date=item.get("date") or item.get("report_date"),
+                eps_consensus=item.get("epsEstimate") or item.get("eps_consensus"),
+                revenue_consensus=item.get("revenueEstimate") or item.get("revenue_consensus"),
+            )
+            for item in data
+            if item.get("symbol") or item.get("ticker")
+        ]
     
     url = f"https://finnhub.io/api/v1/calendar/earnings?from={from_date}&to={to_date}&token={settings.finnhub_api_key}"
     async with httpx.AsyncClient() as client:
@@ -86,11 +95,9 @@ async def get_earnings_calendar(from_date: str, to_date: str) -> List[EarningsEx
         return [
             EarningsExpectation(
                 ticker=item.get("symbol"),
-                date=item.get("date"),
-                eps_estimate=item.get("epsEstimate"),
-                eps_consensus=item.get("epsActual"),
-                revenue_estimate=item.get("revenueEstimate"),
-                revenue_consensus=item.get("revenueActual")
+                report_date=item.get("date"),
+                eps_consensus=item.get("epsEstimate"),
+                revenue_consensus=item.get("revenueEstimate"),
             ) for item in data if item.get("symbol")
         ]
 

@@ -792,7 +792,7 @@ async def api_earnings_radar(days: int = 14):
             continue
         ticker = ticker.upper()
 
-        report_date = getattr(item, "date", None)
+        report_date = getattr(item, "report_date", None)
         date_str = str(report_date) if report_date else None
         if not date_str:
             continue
@@ -1373,25 +1373,39 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
     # --- Kursdaten via fast_info (10x schneller als stock.info) ---
     try:
         fi = stock.fast_info
-        if hasattr(fi, "last_price") and fi.last_price:
-            entry["price"] = round(float(fi.last_price), 2)
-        if hasattr(fi, "regular_market_day_change_percent") and fi.regular_market_day_change_percent:
-            entry["change_pct"] = round(float(fi.regular_market_day_change_percent) * 100, 2)
-        if hasattr(fi, "market_cap") and fi.market_cap:
-            entry["market_cap_b"] = round(float(fi.market_cap) / 1e9, 1)
+        # Preis — separater Try-Block
+        try:
+            if fi.last_price:
+                entry["price"] = round(float(fi.last_price), 2)
+        except Exception:
+            pass
+        # Change % — separater Try-Block
+        try:
+            val = fi.regular_market_day_change_percent
+            if val is not None:
+                entry["change_pct"] = round(float(val) * 100, 2)
+        except Exception:
+            pass
+        # Market Cap — separater Try-Block
+        try:
+            if fi.market_cap:
+                entry["market_cap_b"] = round(float(fi.market_cap) / 1e9, 1)
+        except Exception:
+            pass
     except Exception:
-        # Fallback: 2-Tage-History (schneller als stock.info)
+        pass
+
+    # Fallback für Preis wenn fast_info komplett fehlschlägt
+    if not entry.get("price"):
         try:
             hist = stock.history(period="2d")
             if not hist.empty:
                 entry["price"] = round(float(hist["Close"].iloc[-1]), 2)
                 if len(hist) >= 2:
-                    prev_close = float(hist["Close"].iloc[-2])
-                    curr_close = float(hist["Close"].iloc[-1])
-                    if prev_close:
-                        entry["change_pct"] = round(
-                            ((curr_close - prev_close) / prev_close) * 100, 2
-                        )
+                    prev = float(hist["Close"].iloc[-2])
+                    curr = float(hist["Close"].iloc[-1])
+                    if prev:
+                        entry["change_pct"] = round(((curr - prev) / prev) * 100, 2)
         except Exception:
             pass
 
@@ -1424,7 +1438,39 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
     return entry
 
 
-async def _enrich_single(item: dict, db) -> dict:
+def _fetch_all_scores_sync(tickers: list, db) -> dict:
+    """
+    Lädt score_history für alle Ticker in EINER einzigen Supabase-Query.
+    Gibt ein Dict zurück: {ticker: [latest_row, prev_row]}
+    """
+    if not db or not tickers:
+        return {}
+    try:
+        res = (
+            db.table("score_history")
+            .select("*")
+            .in_("ticker", tickers)
+            .order("date", desc=True)
+            .execute()
+        )
+        rows = res.data if res and res.data else []
+
+        # Gruppiere nach Ticker, behalte die 2 neuesten pro Ticker
+        by_ticker: dict = {}
+        for row in rows:
+            t = row.get("ticker", "").upper()
+            if t not in by_ticker:
+                by_ticker[t] = []
+            if len(by_ticker[t]) < 2:
+                by_ticker[t].append(row)
+
+        return by_ticker
+    except Exception as e:
+        logger.debug(f"Batch score fetch error: {e}")
+        return {}
+
+
+async def _enrich_single(item: dict, scores_by_ticker: dict) -> dict:
     """
     Enriched einen einzelnen Watchlist-Ticker mit Kursdaten + Scores.
     Wird parallel via asyncio.gather aufgerufen.
@@ -1441,34 +1487,25 @@ async def _enrich_single(item: dict, db) -> dict:
     except Exception as exc:
         logger.debug(f"Enrich yfinance {ticker}: {exc}")
 
-    # Score-Deltas aus Supabase score_history
+    # Score-Deltas aus vorgeladenem scores_by_ticker Dict
     try:
-        if db:
-            res = (
-                db.table("score_history")
-                .select("*")
-                .eq("ticker", ticker)
-                .order("date", desc=True)
-                .limit(2)
-                .execute()
-            )
-            rows = res.data if res and res.data else []
-            if rows:
-                latest = rows[0]
-                entry["opportunity_score"] = latest.get("opportunity_score")
-                entry["torpedo_score"] = latest.get("torpedo_score")
-                entry["rsi"] = latest.get("rsi")
-                entry["trend"] = latest.get("trend")
-                if len(rows) > 1:
-                    prev = rows[1]
-                    entry["opp_delta"] = round(
-                        (latest.get("opportunity_score") or 0)
-                        - (prev.get("opportunity_score") or 0), 1
-                    )
-                    entry["torp_delta"] = round(
-                        (latest.get("torpedo_score") or 0)
-                        - (prev.get("torpedo_score") or 0), 1
-                    )
+        rows = scores_by_ticker.get(ticker.upper(), [])
+        if rows:
+            latest = rows[0]
+            entry["opportunity_score"] = latest.get("opportunity_score")
+            entry["torpedo_score"] = latest.get("torpedo_score")
+            entry["rsi"] = latest.get("rsi")
+            entry["trend"] = latest.get("trend")
+            if len(rows) > 1:
+                prev = rows[1]
+                entry["opp_delta"] = round(
+                    (latest.get("opportunity_score") or 0)
+                    - (prev.get("opportunity_score") or 0), 1
+                )
+                entry["torp_delta"] = round(
+                    (latest.get("torpedo_score") or 0)
+                    - (prev.get("torpedo_score") or 0), 1
+                )
     except Exception as exc:
         logger.debug(f"Enrich scores {ticker}: {exc}")
 
@@ -1483,9 +1520,13 @@ async def api_watchlist_enriched():
     watchlist = await get_watchlist()
     db = get_supabase_client()
 
-    # ALLE Ticker parallel enrichen (statt sequenziell)
+    # Einmalige Batch-Query für alle Scores
+    tickers = [item.get("ticker", "") for item in watchlist if item.get("ticker")]
+    scores_by_ticker = await asyncio.to_thread(_fetch_all_scores_sync, tickers, db)
+
+    # ALLE Ticker parallel enrichen mit vorgeladenen Scores
     results = await asyncio.gather(
-        *[_enrich_single(item, db) for item in watchlist],
+        *[_enrich_single(item, scores_by_ticker) for item in watchlist],
         return_exceptions=True,
     )
 

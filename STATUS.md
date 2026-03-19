@@ -85,6 +85,16 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **Chart Integration**: Automatische Chart-Anzeige auf Ticker-Detailseiten, verbesserte Error-Handling bei fehlenden Daten.
 *   **Responsive Design**: Optimiert für Desktop mit festen Spaltenbreiten und flexiblen Inhaltsbereichen.
 
+### Phase 4D: Bug Fixes & Frontend Stabilisierung (März 2026)
+- [x] watchlist_router korrekt registriert
+- [x] Enriched Endpoint: fast_info + asyncio.gather + Batch Score-Query
+- [x] Earnings-Radar: Feldname-Bug behoben, Kalender funktioniert
+- [x] Dark Mode + Sidebar Redesign
+- [x] Shadow Portfolio Modul
+- [x] Client-Side Navigation Cache (clientCache.ts)
+- [x] CommandPalette Schnellsuche
+- [x] Track Record Sektion auf Ticker-Detailseite
+
 ## 🚀 Aktuelle Features (Stand März 2026)
 
 ### Core Funktionalität
@@ -114,7 +124,12 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **Build**: Frontend wird per `docker-compose build kafin-frontend && docker-compose up -d kafin-frontend` deployed.
 *   **Zugriff**: http://localhost:3000 für das Web-Dashboard, http://localhost:8000 für die API-Dokumentation.
 
-## 🔄 Letzte Updates (18. März 2026)
+## 🔄 Letzte Updates (19. März 2026)
+- Backend: Batch-Supabase-Query für Score-History implementiert (Performance-Boost von 2-4s auf ~500ms)
+- Backend: Earnings-Radar gefixt - report_date Feld-Mapping korrigiert, 1243 Einträge jetzt sichtbar
+- Frontend: Watchlist Race Condition behoben - sofortige Cache-Anzeige ohne Ladescreen
+- Frontend: Watchlist-Kacheln Layout fixiert (Überlappungen entfernt, Sparklines sichtbar)
+- Backend: FastAPI Feld-Zugriffe mit separaten Try-Catch-Blöcken robust gemacht
 - Frontend: API-Proxy für Next.js eingerichtet, um CORS und Netzwerkfehler zu beheben
 - Frontend: Darstellung der Suchleiste auf der Watchlist-Seite korrigiert
 - Frontend: ActionButtons in Client Components ausgelagert zur Behebung von Next.js Event Handler Fehlern

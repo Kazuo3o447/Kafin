@@ -2,6 +2,29 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [4.2] - 2026-03-19 - Bug Fixes & Stabilisierung
+
+### 🐛 Bugfixes
+- **watchlist_router registriert**: Router war nie mit app.include_router()
+  verbunden — POST/PUT/DELETE Watchlist-Routen gaben 404 zurück
+- **Enriched Endpoint Performance**: stock.info ersetzt durch stock.fast_info,
+  alle Ticker parallel via asyncio.gather, Score-History als Batch-Query
+- **Leere Watchlist beim Seitenwechsel**: Race Condition im Frontend durch
+  cacheGet-Sofortprüfung behoben, useCallback Dependencies bereinigt
+- **Earnings-Radar leer**: Feldname-Bug in finnhub.py (date → report_date)
+  und in api_earnings_radar (getattr "date" → "report_date") behoben
+- **Watchlist-Kacheln keine Daten**: fast_info Feldabrufe einzeln abgesichert,
+  change_pct Fallback via 2-Tage-History implementiert
+- **Dark Mode**: CSS-Variablen auf dunkles Theme umgestellt (#0B0F1A)
+- **Sidebar**: Neu gestaltet, schlanker (w-56), aktive Linie statt Block
+
+### 🔌 Neue Features
+- **Shadow Portfolio**: Automatisches Paper-Trading auf Basis von KI-Signalen
+- **Earnings-Radar**: Neuer Kalender mit Watchlist-Markierung
+- **Schnellsuche (Cmd+K)**: CommandPalette für Ticker-Lookup
+- **Track Record**: Ticker-spezifische KI-Trefferquote auf Detailseite
+- **Client-Side Cache**: Navigationscache verhindert Neu-Laden bei Seitenwechsel
+
 ## [4.1] - 2026-03-18 - Chart Intelligence System
 
 ### 🚀 Neue Features

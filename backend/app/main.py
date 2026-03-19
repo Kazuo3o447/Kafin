@@ -2238,7 +2238,7 @@ async def api_diagnostics_db():
 
 @app.get("/api/diagnostics/full", tags=["System"])
 async def full_system_diagnostics():
-    import asyncio, time, traceback
+    import asyncio, time
     from backend.app.db import get_supabase_client
     from backend.app.data.finnhub import get_company_profile as fh_profile
     from backend.app.data.fmp import get_company_profile as fmp_profile
@@ -2248,42 +2248,45 @@ async def full_system_diagnostics():
     
     results = {"status": "ok", "timestamp": datetime.utcnow().isoformat(), "services": {}}
     
+    async def measure(func, *args):
+        t0 = time.time()
+        res = await func(*args) if args else await func()
+        return res, round((time.time() - t0) * 1000)
+
     # 1. Supabase
     try:
+        t0 = time.time()
         db = get_supabase_client()
         wl = db.table("watchlist").select("ticker").limit(1).execute() if db else None
-        results["services"]["supabase"] = {"status": "ok" if wl else "error", "details": "DB connected"}
+        ms = round((time.time() - t0) * 1000)
+        results["services"]["supabase"] = {"status": "ok" if wl else "error", "latency_ms": ms, "details": "DB connected"}
     except Exception as e:
         results["services"]["supabase"] = {"status": "error", "error_code": "DB_CONN_ERR", "details": str(e)}
 
     # 2. Standard APIs
-    services_to_test = [
-        ("finnhub", fh_profile, "AAPL"),
-        ("fmp", fmp_profile, "AAPL"),
-        ("fred", get_macro_snapshot, None)
-    ]
-    
+    services_to_test = [("finnhub", fh_profile, "AAPL"), ("fmp", fmp_profile, "AAPL"), ("fred", get_macro_snapshot, None)]
     for name, func, arg in services_to_test:
         try:
-            res = await func(arg) if arg else await func()
-            results["services"][name] = {"status": "ok" if res else "warning", "details": "API responsive"}
+            res, ms = await measure(func, arg) if arg else await measure(func)
+            results["services"][name] = {"status": "ok" if res else "warning", "latency_ms": ms, "details": "API responsive"}
         except Exception as e:
             results["services"][name] = {"status": "error", "error_code": f"{name.upper()}_API_ERR", "details": repr(e)}
 
     # 3. AI Services
     try:
-        await call_deepseek("Reply OK", "Test")
-        results["services"]["deepseek"] = {"status": "ok", "details": "LLM responsive"}
+        res, ms = await measure(call_deepseek, "Reply OK", "Test")
+        results["services"]["deepseek"] = {"status": "ok", "latency_ms": ms, "details": "LLM responsive"}
     except Exception as e:
         results["services"]["deepseek"] = {"status": "error", "error_code": "DEEPSEEK_ERR", "details": repr(e)}
         
     try:
+        t0 = time.time()
         await asyncio.to_thread(analyze_sentiment, "Test sentence.")
-        results["services"]["finbert"] = {"status": "ok", "details": "Model loaded"}
+        ms = round((time.time() - t0) * 1000)
+        results["services"]["finbert"] = {"status": "ok", "latency_ms": ms, "details": "Model loaded"}
     except Exception as e:
         results["services"]["finbert"] = {"status": "error", "error_code": "FINBERT_ERR", "details": repr(e)}
 
-    # Aggregate status
     if any(s.get("status") == "error" for s in results["services"].values()):
         results["status"] = "degraded"
         

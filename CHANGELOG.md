@@ -2,6 +2,15 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.2.5] - 2026-03-19 - Status Dashboard & Isolated Terminal
+
+### 🚀 Neue Features
+- **feat(core)**: Replace memory logging with robust RotatingFileHandler (kafin.log)
+- **feat(api)**: Add endpoints to read, clear, export logs, and external n8n webhook
+- **fix(diagnostics)**: Implement latency tracking and isolated try/catch with detailed error codes in /api/diagnostics/full
+- **feat(ui)**: Rename Logs to Status and build a comprehensive System Health Dashboard with real-time API monitoring
+- **feat(ui)**: Create isolated Hacker Terminal (/terminal) opening in a new tab with error color highlighting
+
 ## [5.2.4] - 2026-03-19 - Logging Architecture Overhaul
 
 ### 🚀 Neue Features

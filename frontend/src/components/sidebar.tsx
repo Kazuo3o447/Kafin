@@ -12,6 +12,7 @@ import {
   Settings,
   CalendarDays,
   Search,
+  Activity,
 } from "lucide-react";
 import { useMemo } from "react";
 
@@ -22,7 +23,7 @@ const navItems = [
   { label: "Reports", href: "/reports", icon: FileText },
   { label: "News", href: "/news", icon: Newspaper },
   { label: "Performance", href: "/performance", icon: LineChart },
-  { label: "Logs", href: "/logs", icon: Terminal },
+  { label: "Status", href: "/status", icon: Activity },
   { label: "Einstellungen", href: "/settings", icon: Settings },
 ];
 
@@ -88,6 +89,23 @@ export function Sidebar() {
             </Link>
           );
         })}
+        
+        {/* Terminal - Opens in new window */}
+        <a
+          href="/terminal"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="relative flex items-center gap-3 rounded-xl
+                     px-3 py-2.5 text-xs font-medium
+                     transition-all duration-150
+                     text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
+        >
+          <Terminal
+            size={15}
+            className="text-[var(--text-muted)]"
+          />
+          <span className="flex-1 truncate">Terminal</span>
+        </a>
       </nav>
 
       {/* Schnellsuche */}

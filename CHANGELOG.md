@@ -2,6 +2,18 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.2.8] - 2026-03-19 - Hotfix: Sidebar Navigation Not Clickable
+
+### 🐛 Bugfixes
+- **fix(ui)**: Add z-index to sidebar to ensure navigation links are clickable
+- **fix(navigation)**: Resolve issue where Watchlist and Earnings-Radar menu items were unresponsive
+
+### 📝 Problem
+Sidebar navigation links (Watchlist, Earnings-Radar, etc.) were not clickable. Clicking on menu items had no effect, as if they were not linked or blocked by an overlay.
+
+### ✅ Solution
+Added `relative z-10` to sidebar component to ensure it renders above other page elements and remains interactive.
+
 ## [5.2.7] - 2026-03-19 - Hotfix: Status Page ImportError
 
 ### 🐛 Bugfixes

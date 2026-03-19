@@ -40,7 +40,7 @@ export function Sidebar() {
     <aside className="flex h-screen w-56 shrink-0 flex-col
                       border-r border-[var(--border)]
                       bg-[var(--bg-secondary)]
-                      px-3 py-5">
+                      px-3 py-5 relative z-10">
 
       {/* Logo */}
       <div className="mb-6 px-2 flex items-center gap-2.5">

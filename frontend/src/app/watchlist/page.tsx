@@ -17,6 +17,7 @@ type WatchlistItem = {
   price?: number;
   change_1d_pct?: number;
   recommendation?: string;
+  web_prio?: number | null;
 };
 
 export default function WatchlistPage() {
@@ -138,6 +139,20 @@ export default function WatchlistPage() {
     }
   }
 
+  async function handleUpdateWebPrio(
+    ticker: string,
+    prio: number | null
+  ) {
+    try {
+      await api.updateWebPrio(ticker, prio);
+      cacheInvalidate("watchlist:list");
+      cacheInvalidate("watchlist:enriched");
+      loadWatchlist();
+    } catch (error) {
+      console.error("Web Prio update error", error);
+    }
+  }
+
   const filtered = watchlist.filter((item) =>
     item.ticker.toLowerCase().includes(search.toLowerCase()) ||
     (item.company_name || "").toLowerCase().includes(search.toLowerCase())
@@ -161,6 +176,23 @@ export default function WatchlistPage() {
         </div>
         <CacheStatus fromCache={fromCache} ageSeconds={dataAge} onRefresh={() => loadWatchlist(true)} refreshing={refreshing || loading} />
         <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              try {
+                const result = await api.runWebIntelligenceBatch();
+                alert(`Web Intelligence Batch: ${result.processed} verarbeitet`);
+              } catch {
+                alert("Batch fehlgeschlagen — TAVILY_API_KEY gesetzt?");
+              }
+            }}
+            className="flex items-center gap-2 rounded-lg border
+                       border-[var(--border)] px-4 py-2 text-sm
+                       font-medium text-[var(--text-secondary)]
+                       hover:bg-[var(--bg-tertiary)] transition-all"
+            title="Web Intelligence für alle Ticker aktualisieren"
+          >
+            🌐 Web-Scan
+          </button>
           <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
@@ -195,6 +227,9 @@ export default function WatchlistPage() {
               <th className="px-4 py-3 text-right font-semibold text-[var(--text-secondary)]">Torp</th>
               <th className="px-4 py-3 text-left font-semibold text-[var(--text-secondary)]">Empfehlung</th>
               <th className="px-4 py-3 text-left font-semibold text-[var(--text-secondary)]">Notizen</th>
+              <th className="px-4 py-3 text-center font-semibold text-[var(--text-secondary)] w-28">
+                Web-Prio
+              </th>
               <th className="px-4 py-3 text-center font-semibold text-[var(--text-secondary)]">Aktionen</th>
             </tr>
           </thead>
@@ -246,6 +281,29 @@ export default function WatchlistPage() {
                 </td>
                 <td className="px-4 py-3 text-[var(--text-secondary)]">
                   <span className="line-clamp-1">{item.notes || "-"}</span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <select
+                    value={item.web_prio ?? "auto"}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      handleUpdateWebPrio(
+                        item.ticker,
+                        val === "auto" ? null : parseInt(val)
+                      );
+                    }}
+                    className="rounded-lg border border-[var(--border)]
+                               bg-[var(--bg-tertiary)] px-2 py-1 text-xs
+                               text-[var(--text-primary)] outline-none
+                               focus:border-[var(--accent-blue)]"
+                    title="Web Intelligence Priorität"
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="1">🔴 P1 · 3×/Tag</option>
+                    <option value="2">🟡 P2 · 1×/Tag</option>
+                    <option value="3">🟢 P3 · Wöchentlich</option>
+                    <option value="4">⚫ P4 · Pausiert</option>
+                  </select>
                 </td>
                 <td className="px-4 py-3 text-center">
                   <button

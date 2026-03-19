@@ -2,6 +2,17 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [4.9] - 2026-03-19 - Web Intelligence Batch + Prio-UI
+
+### 🚀 Neue Features
+- **Batch-Endpoint**: POST /api/web-intelligence/batch — von n8n
+  täglich aufrufbar, überspringt Prio-4-Ticker automatisch
+- **Einzel-Refresh**: POST /api/web-intelligence/refresh/{ticker}
+- **Prio-Dropdown**: Direkt in Watchlist-Tabelle, inline speichernd
+  (Auto / P1 3×/Tag / P2 täglich / P3 wöchentlich / P4 pausiert)
+- **Web-Scan Button**: Manueller Batch-Trigger in der Watchlist-UI
+- **API-Key-Check**: Batch gibt klare Fehlermeldung wenn Key fehlt
+
 ## [4.8] - 2026-03-19 - Web Intelligence Fundament
 
 ### 🚀 Neue Features

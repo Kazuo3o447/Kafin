@@ -1353,6 +1353,7 @@ class WatchlistItemUpdate(BaseModel):
     sector: Optional[str] = None
     notes: Optional[str] = None
     cross_signals: Optional[List[str]] = None
+    web_prio: Optional[int] = None  # NULL=Auto, 1-4=manuell
 
 @watchlist_router.get("")
 async def api_get_watchlist():
@@ -1486,6 +1487,10 @@ async def _enrich_single(item: dict, scores_by_ticker: dict) -> dict:
         return item
 
     entry = dict(item)
+
+    # web_prio aus DB beibehalten (None = Auto)
+    if "web_prio" not in entry:
+        entry["web_prio"] = None
 
     # yfinance läuft synchron → in Thread-Pool auslagern
     try:
@@ -1890,11 +1895,182 @@ async def api_market_overview():
     overview = await fetch_market_overview()
     return overview
 
+# Web Intelligence Router
+web_intel_router = APIRouter(
+    prefix="/api/web-intelligence", tags=["web-intelligence"]
+)
+
+@web_intel_router.post("/batch")
+async def api_web_intelligence_batch():
+    """
+    Nacht-Batch: Aktualisiert Web Intelligence Cache für alle
+    relevanten Watchlist-Ticker (Prio 1-3).
+    Wird von n8n täglich um 22:30 Uhr aufgerufen.
+    Prio 4 und Ticker ohne Earnings-Termin werden übersprungen.
+    """
+    logger.info("API Call: web-intelligence/batch")
+
+    # API Key prüfen
+    if not settings.tavily_api_key:
+        logger.warning("Web Intelligence Batch: TAVILY_API_KEY nicht gesetzt")
+        return {
+            "status": "skipped",
+            "reason": "TAVILY_API_KEY nicht konfiguriert",
+            "processed": 0,
+        }
+
+    from backend.app.data.web_search import (
+        get_web_intelligence,
+        _auto_prio_from_days,
+    )
+    from backend.app.data.finnhub import get_earnings_calendar
+    from datetime import date, timedelta
+
+    wl = await get_watchlist()
+    if not wl:
+        return {"status": "success", "processed": 0, "skipped": 0}
+
+    # Earnings-Kalender der nächsten 14 Tage laden
+    today = date.today()
+    to_date = today + timedelta(days=14)
+    try:
+        calendar = await get_earnings_calendar(
+            today.isoformat(), to_date.isoformat()
+        )
+        earnings_map = {
+            getattr(e, "ticker", "").upper(): getattr(e, "report_date", None)
+            for e in (calendar or [])
+        }
+    except Exception as e:
+        logger.warning(f"Earnings Calendar im Batch: {e}")
+        earnings_map = {}
+
+    processed = 0
+    skipped = 0
+    results = []
+
+    for item in wl:
+        ticker = item.get("ticker", "").upper()
+        if not ticker:
+            continue
+
+        # Tage bis Earnings
+        earnings_dt = earnings_map.get(ticker)
+        days_to_earnings = None
+        if earnings_dt:
+            try:
+                if hasattr(earnings_dt, "toordinal"):
+                    days_to_earnings = (earnings_dt - today).days
+                else:
+                    from datetime import date as _d
+                    days_to_earnings = (
+                        _d.fromisoformat(str(earnings_dt)) - today
+                    ).days
+            except Exception:
+                pass
+
+        # Effektive Prio
+        manual_prio = item.get("web_prio")
+        auto_prio = _auto_prio_from_days(days_to_earnings)
+        effective_prio = manual_prio if manual_prio is not None else auto_prio
+
+        # Prio 4 überspringen
+        if effective_prio == 4:
+            skipped += 1
+            continue
+
+        try:
+            company_name = item.get("company_name", ticker)
+            summary = await get_web_intelligence(
+                ticker=ticker,
+                company_name=company_name,
+                days_to_earnings=days_to_earnings,
+                manual_prio=manual_prio,
+                force_refresh=True,  # Batch immer fresh
+            )
+            results.append({
+                "ticker": ticker,
+                "prio": effective_prio,
+                "status": "ok",
+                "snippets": len(summary.split("•")) - 1 if summary else 0,
+            })
+            processed += 1
+        except Exception as e:
+            logger.warning(f"Batch Web Intel {ticker}: {e}")
+            results.append({"ticker": ticker, "status": "error", "error": str(e)})
+            skipped += 1
+
+    logger.info(f"Web Intelligence Batch: {processed} verarbeitet, {skipped} übersprungen")
+    return {
+        "status": "success",
+        "processed": processed,
+        "skipped": skipped,
+        "results": results,
+    }
+
+
+@web_intel_router.post("/refresh/{ticker}")
+async def api_web_intelligence_refresh(ticker: str):
+    """
+    Manueller Refresh für einen einzelnen Ticker.
+    Ignoriert Cache (force_refresh=True).
+    """
+    logger.info(f"API Call: web-intelligence/refresh/{ticker}")
+
+    if not settings.tavily_api_key:
+        return {
+            "status": "error",
+            "reason": "TAVILY_API_KEY nicht konfiguriert",
+        }
+
+    from backend.app.data.web_search import get_web_intelligence
+
+    # web_prio aus Watchlist lesen
+    wl = await get_watchlist()
+    item = next((w for w in wl if w.get("ticker", "").upper() == ticker.upper()), None)
+    manual_prio = item.get("web_prio") if item else None
+    company_name = item.get("company_name", ticker) if item else ticker
+
+    summary = await get_web_intelligence(
+        ticker=ticker.upper(),
+        company_name=company_name,
+        manual_prio=manual_prio,
+        force_refresh=True,
+    )
+    return {
+        "status": "success",
+        "ticker": ticker.upper(),
+        "summary": summary,
+    }
+
+
+@web_intel_router.get("/cache/{ticker}")
+async def api_web_intelligence_cache(ticker: str):
+    """Gibt gecachte Web Intelligence für einen Ticker zurück."""
+    try:
+        from backend.app.db import get_supabase_client
+        db = get_supabase_client()
+        if not db:
+            return {"ticker": ticker, "cached": False}
+        res = (
+            db.table("web_intelligence_cache")
+            .select("*")
+            .eq("ticker", ticker.upper())
+            .execute()
+        )
+        rows = res.data if res and res.data else []
+        if rows:
+            return {"ticker": ticker, "cached": True, **rows[0]}
+        return {"ticker": ticker, "cached": False}
+    except Exception as e:
+        return {"ticker": ticker, "cached": False, "error": str(e)}
+
 app.include_router(admin_router)
 app.include_router(data_router)
 app.include_router(google_news_router)
 app.include_router(reports_router)
-app.include_router(watchlist_router)   # <-- DIESER EINE ZEILE
+app.include_router(watchlist_router)
+app.include_router(web_intel_router)
 
 # Diagnostics Router
 diagnostics_router = APIRouter(prefix="/api/diagnostics", tags=["diagnostics"])

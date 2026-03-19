@@ -26,6 +26,12 @@ export const api = {
   getWatchlist: () => fetchAPI("/api/watchlist"),
   addTicker: (data: any) => fetchAPI("/api/watchlist", { method: "POST", body: JSON.stringify(data) }),
   removeTicker: (ticker: string) => fetchAPI(`/api/watchlist/${ticker}`, { method: "DELETE" }),
+  updateWebPrio: (ticker: string, prio: number | null) =>
+    fetchAPI(`/api/watchlist/${ticker}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ web_prio: prio }),
+    }),
 
   // Reports
   generateMorningBriefing: () => fetchAPI("/api/reports/generate-morning", { method: "POST" }),
@@ -85,4 +91,12 @@ export const api = {
     }),
   removeSearchTerm: (term: string) =>
     fetchAPI(`/api/google-news/search-terms?term=${encodeURIComponent(term)}`, { method: "DELETE" }),
+
+  // Web Intelligence
+  refreshWebIntelligence: (ticker: string) =>
+    fetchAPI(`/api/web-intelligence/refresh/${ticker}`, {
+      method: "POST",
+    }),
+  runWebIntelligenceBatch: () =>
+    fetchAPI("/api/web-intelligence/batch", { method: "POST" }),
 };

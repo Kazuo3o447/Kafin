@@ -108,6 +108,10 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] DB: web_intelligence_cache + watchlist.web_prio Migration
 - [x] web_search.py mit Cache-Layer und Prio-System
 - [x] Web Intelligence in generate_audit_report() integriert
+- [x] web_intel_router mit batch/refresh/cache Endpoints
+- [x] WatchlistItemUpdate: web_prio Feld
+- [x] Prio-Dropdown in Watchlist-Tabelle (inline save)
+- [x] api.ts: updateWebPrio, refreshWebIntelligence, runWebIntelligenceBatch
 
 ## 🚀 Aktuelle Features (Stand März 2026)
 

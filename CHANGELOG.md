@@ -2,6 +2,16 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [4.6] - 2026-03-19 - Expected Move & Pre-Earnings Intelligence
+
+### 🚀 Neue Features
+- **Expected Move**: Automatische Berechnung aus IV × sqrt(Tage/365)
+  — zeigt ±X% und ±$Y direkt im Audit-Report
+- **30-Tage-Performance**: Pre-Earnings-Rally-Erkennung im Report
+  — warnt bei "Buy the Rumor"-Setups (>+10% in 30 Tagen)
+- **DeepSeek-Prompt**: Explizite Anweisung für Break-Even-Levels
+  und Pre-Earnings-Positioning-Analyse
+
 ## [4.5] - 2026-03-19 - Hotfix Score Query & Caching
 
 ### 🐛 Bugfixes

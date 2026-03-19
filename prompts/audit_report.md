@@ -1,9 +1,10 @@
 ---
-version: "0.1"
-date: "2026-03-07"
+version: "0.2"
+date: "2026-03-19"
 model: "deepseek"
 changelog:
   - "0.1: Initiales Template"
+  - "0.2: Expected Move & Pre-Earnings Positioning hinzugefügt"
 ---
 
 SYSTEM:
@@ -61,11 +62,13 @@ Mismatch-Score: {{mismatch_score}}/100
 - Current Ratio: {{current_ratio}}
 - Free Cash Flow Yield: {{free_cash_flow_yield}}%
 
-OPTIONS-TIMING:
+OPTIONS-TIMING & MARKET POSITIONING:
 Implizite Volatilität (ATM): {{iv_atm}}%
 Historische Volatilität (20d): {{hist_vol_20d}}%
 IV Spread: {{iv_spread}}% (IV minus Hist Vol)
 Put/Call Ratio: {{put_call_ratio}}
+Expected Move (bis Earnings): {{expected_move}}
+Kursperformance letzte 30 Tage: {{price_change_30d}}
 
 CONTRARIAN-ANALYSE (Falls Sentiment < -0.5 und Beta > 1.2):
 Sentiment 7-Tage-Durchschnitt: {{sentiment_score_7d}}
@@ -74,6 +77,15 @@ Ist Contrarian-Setup gegeben: {{is_contrarian_setup}}
 Erstelle den Report auf Deutsch mit diesen Abschnitten:
 1. ZUSAMMENFASSUNG (3-4 Sätze: These, Empfehlung, größtes Risiko)
 2. BEWERTUNG IM REGIME-KONTEXT (Wie ordnet der Markt das Unternehmen ein? Narrative-Shift möglich? Asymmetrie?)
+3. **PFLICHT: PRE-EARNINGS POSITIONING**
+   - Wenn Kursperformance letzte 30 Tage > +10%: Explizit auf
+     "Buy the Rumor"-Risiko hinweisen. Beschreibe warum ein Beat
+     trotzdem zu Abverkauf führen kann (hohe Bar, eingepreiste
+     Erwartungen, Gamma-Positioning).
+   - Wenn Expected Move vorhanden: Nenne konkret die Break-Even-
+     Levels (Preis + Expected Move oben, Preis - Expected Move
+     unten). Empfehle ob Aktie oder Optionen besser geeignet sind.
+
 3. **PFLICHT: CONTRARIAN-ANALYSE** (NUR wenn Mismatch-Score > 50):
    - **VALUE TRAP vs. ÜBERTREIBUNG?** Analysiere: Ist die Verschuldung tragbar? Ist der FCF stabil oder sinkend? Gibt es strukturelle Probleme (Downsizing, Leadership-Wechsel)? → Dein Urteil: Berechtigte Krise oder temporäre Marktübertreibung?
    - **OPTIONS-TIMING: IV ZU TEUER?** Prüfe das IV Spread. Ist die IV deutlich höher als die historische Vola? Besteht Gefahr eines IV Crush vor Earnings? → Dein Urteil: Sind Aktien oder Optionen das bessere Instrument?

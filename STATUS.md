@@ -98,6 +98,9 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] Snapshot: Fehlerstate für OTC/delisted Ticker
 - [x] InteractiveChart auf Ticker-Detailseite sichtbar (dynamic import)
 - [x] Fetch-Caching auf Ticker-Seite optimiert
+- [x] Expected Move Berechnung in Audit-Report integriert
+- [x] 30-Tage-Kursperformance als Torpedo-Signal im Report
+- [x] audit_report.md Prompt-Template v0.2
 
 ## 🚀 Aktuelle Features (Stand März 2026)
 

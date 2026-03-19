@@ -212,6 +212,56 @@ async def generate_audit_report(ticker: str) -> str:
     except Exception as e:
         logger.warning(f"Options für {ticker}: {e}")
 
+    # ── Expected Move Berechnung ──────────────────────────────
+    expected_move_pct: float | None = None
+    expected_move_usd: float | None = None
+    price_change_30d: float | None = None
+
+    try:
+        import math
+        from datetime import date as date_cls
+
+        # Tage bis Earnings berechnen
+        earnings_dt = getattr(estimates, "report_date", None) if estimates else None
+        if earnings_dt and hasattr(earnings_dt, "toordinal"):
+            days_to_earnings = max(1, (earnings_dt - date_cls.today()).days)
+        elif earnings_dt:
+            try:
+                from datetime import datetime as dt_cls
+                earnings_dt_parsed = dt_cls.strptime(str(earnings_dt), "%Y-%m-%d").date()
+                days_to_earnings = max(1, (earnings_dt_parsed - date_cls.today()).days)
+            except Exception:
+                days_to_earnings = 1
+        else:
+            days_to_earnings = 1
+
+        # IV aus options holen
+        iv = getattr(options, "implied_volatility_atm", None) if options else None
+
+        # Aktueller Preis aus technicals
+        current_price = getattr(technicals, "current_price", None) if technicals else None
+
+        if iv and iv > 0 and current_price and current_price > 0:
+            # Formel: Preis × IV × sqrt(Tage / 365)
+            expected_move_pct = round(iv * math.sqrt(days_to_earnings / 365) * 100, 1)
+            expected_move_usd = round(current_price * iv * math.sqrt(days_to_earnings / 365), 2)
+
+    except Exception as e:
+        logger.debug(f"Expected Move Berechnung {ticker}: {e}")
+
+    # ── 30-Tage-Kursperformance (Pre-Earnings Rally) ──────────
+    try:
+        import yfinance as yf
+        stock = yf.Ticker(ticker)
+        hist_30d = stock.history(period="35d")
+        if not hist_30d.empty and len(hist_30d) >= 2:
+            price_30d_ago = float(hist_30d["Close"].iloc[0])
+            price_now = float(hist_30d["Close"].iloc[-1])
+            if price_30d_ago > 0:
+                price_change_30d = round(((price_now - price_30d_ago) / price_30d_ago) * 100, 1)
+    except Exception as e:
+        logger.debug(f"30d Price Change {ticker}: {e}")
+
     social = None
     try:
         from backend.app.data.finnhub import get_social_sentiment

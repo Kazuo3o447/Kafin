@@ -10,6 +10,8 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **Chart Intelligence**: Interaktive Kurs-Charts mit SMA-Overlays und Event-Markern
 - **KI-Analysen**: DeepSeek-Integration für Reports und Stichpunkt-Extraktion
 - **Automatisierung**: n8n-Workflows für tägliche Briefings und wöchentliche Reports
+- **System Monitoring**: Live Status Dashboard mit Service-Health und Latenz-Tracking
+- **Persistent Logging**: RotatingFileHandler mit Docker-Volume-Persistenz
 
 ### UI/UX Highlights
 - **Modern Dark Mode**: Konsistentes Design mit CSS-Variablen für alle 45+ Karten
@@ -17,6 +19,8 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **Automatische Charts**: Direkte Anzeige auf Ticker-Detailseiten ohne Button-Klick
 - **Verbessertes Modal**: Ticker-Hinzufügen mit Validierung, Loading-States und Error-Feedback
 - **Responsive Design**: Optimiert für Desktop mit festen Spaltenbreiten und flexiblen Inhaltsbereichen
+- **Hacker Terminal**: Isoliertes Live-Log-Terminal mit Grep-Suche, Auto-Scroll und Syntax-Highlighting
+- **Status Dashboard**: Echtzeit-Überwachung aller Backend-Services mit Fehler-Codes und Latenz-Metriken
 
 ### Data Sources
 - **Marktdaten**: yfinance (Kurse, Volumen, Indikatoren)
@@ -56,6 +60,8 @@ docker-compose up -d kafin-frontend
 
 ### Zugriffe
 - **Web Dashboard**: http://localhost:3000
+- **Status Dashboard**: http://localhost:3000/status
+- **Hacker Terminal**: http://localhost:3000/terminal
 - **API Dokumentation**: http://localhost:8000/docs
 - **n8n Workflows**: http://localhost:5678
 
@@ -66,6 +72,8 @@ docker-compose up -d kafin-frontend
 - **Datenanreicherung**: yfinance, Finnhub, FRED, SEC EDGAR Integration
 - **KI-Verarbeitung**: FinBERT Sentiment, DeepSeek Analysen
 - **Automatisierung**: n8n Workflow Integration
+- **Logging**: RotatingFileHandler mit 10MB Limit, 5 Backups, persistente Docker-Volumes
+- **Monitoring**: Diagnostics-Endpoint mit Latenz-Tracking und isolierter Fehlerbehandlung
 
 ### Frontend (Next.js 15)
 - **Framework**: TypeScript, Tailwind CSS v4, App Router

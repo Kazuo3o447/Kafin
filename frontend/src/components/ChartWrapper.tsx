@@ -18,6 +18,10 @@ const InteractiveChart = dynamic(
   }
 );
 
-export default function ChartWrapper({ ticker }: { ticker: string }) {
+interface ChartWrapperProps {
+  ticker: string;
+}
+
+export default function ChartWrapper({ ticker }: ChartWrapperProps) {
   return <InteractiveChart ticker={ticker} />;
 }

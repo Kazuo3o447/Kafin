@@ -94,6 +94,10 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] Client-Side Navigation Cache (clientCache.ts)
 - [x] CommandPalette Schnellsuche
 - [x] Track Record Sektion auf Ticker-Detailseite
+- [x] CommandPalette: Windows-kompatibel via CustomEvent
+- [x] Snapshot: Fehlerstate für OTC/delisted Ticker
+- [x] InteractiveChart auf Ticker-Detailseite sichtbar (dynamic import)
+- [x] Fetch-Caching auf Ticker-Seite optimiert
 
 ## 🚀 Aktuelle Features (Stand März 2026)
 

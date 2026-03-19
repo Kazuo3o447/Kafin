@@ -2,6 +2,32 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [4.5] - 2026-03-19 - Hotfix Score Query & Caching
+
+### 🐛 Bugfixes
+- **Batch Score Query**: Sortierung jetzt pro Ticker in Python
+  statt global in Supabase — Delta-Berechnung korrekt
+- **fetchJSON Cache**: revalidate von 300s auf 60s reduziert
+- **ChartWrapper**: TypeScript Props-Interface ergänzt
+
+## [4.4] - 2026-03-19 - Charts sichtbar
+
+### 🐛 Bugfixes
+- **InteractiveChart**: War importiert aber nie gerendert — jetzt
+  sichtbar auf jeder Ticker-Detailseite direkt beim Öffnen
+- **dynamic() Import**: lightweight-charts via ssr:false geladen —
+  verhindert Server-Side-Rendering-Konflikt
+- **Fetch-Caching**: cache:"no-store" durch revalidate:300 ersetzt —
+  Ticker-Seiten laden deutlich schneller beim zweiten Besuch
+
+## [4.3] - 2026-03-19 - Schnellsuche Windows-Fix
+
+### 🐛 Bugfixes
+- **Schnellsuche**: Sidebar-Button öffnet Palette jetzt auf Windows
+  (Custom Event statt KeyboardEvent mit metaKey)
+- **Leere Snapshot-Anzeige**: Klare Fehlermeldung wenn kein US-Kurs
+  verfügbar statt leerem "$—"
+
 ## [4.2] - 2026-03-19 - Bug Fixes & Stabilisierung
 
 ### 🐛 Bugfixes

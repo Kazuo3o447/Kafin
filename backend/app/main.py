@@ -1450,23 +1450,29 @@ def _fetch_all_scores_sync(tickers: list, db) -> dict:
             db.table("score_history")
             .select("*")
             .in_("ticker", tickers)
-            .order("date", desc=True)
             .execute()
         )
         rows = res.data if res and res.data else []
 
-        # Gruppiere nach Ticker, behalte die 2 neuesten pro Ticker
+        # Gruppiere nach Ticker
         by_ticker: dict = {}
         for row in rows:
             t = row.get("ticker", "").upper()
             if t not in by_ticker:
                 by_ticker[t] = []
-            if len(by_ticker[t]) < 2:
-                by_ticker[t].append(row)
+            by_ticker[t].append(row)
+
+        # Pro Ticker: nach Datum sortieren, nur 2 neueste behalten
+        for t in by_ticker:
+            by_ticker[t].sort(
+                key=lambda r: r.get("date", ""),
+                reverse=True
+            )
+            by_ticker[t] = by_ticker[t][:2]
 
         return by_ticker
     except Exception as e:
-        logger.debug(f"Batch score fetch error: {e}")
+        logger.debug(f"_fetch_all_scores_sync error: {e}")
         return {}
 
 

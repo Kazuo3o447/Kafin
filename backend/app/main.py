@@ -1949,6 +1949,8 @@ async def api_web_intelligence_batch():
     skipped = 0
     results = []
 
+    # Ticker filtern (Prio 4 raus)
+    active_items = []
     for item in wl:
         ticker = item.get("ticker", "").upper()
         if not ticker:
@@ -1979,26 +1981,50 @@ async def api_web_intelligence_batch():
             skipped += 1
             continue
 
-        try:
-            company_name = item.get("company_name", ticker)
-            summary = await get_web_intelligence(
-                ticker=ticker,
-                company_name=company_name,
-                days_to_earnings=days_to_earnings,
-                manual_prio=manual_prio,
-                force_refresh=True,  # Batch immer fresh
-            )
-            results.append({
-                "ticker": ticker,
-                "prio": effective_prio,
-                "status": "ok",
-                "snippets": len(summary.split("•")) - 1 if summary else 0,
-            })
-            processed += 1
-        except Exception as e:
-            logger.warning(f"Batch Web Intel {ticker}: {e}")
-            results.append({"ticker": ticker, "status": "error", "error": str(e)})
-            skipped += 1
+        active_items.append((item, days_to_earnings, manual_prio, effective_prio))
+
+    # Parallel in 5er-Chunks (Tavily Rate-Limit respektieren)
+    CHUNK_SIZE = 5
+    for i in range(0, len(active_items), CHUNK_SIZE):
+        chunk = active_items[i:i + CHUNK_SIZE]
+
+        async def _process(args):
+            item, days_to_earnings, manual_prio, effective_prio = args
+            ticker = item.get("ticker", "").upper()
+            try:
+                company_name = item.get("company_name", ticker)
+                summary = await get_web_intelligence(
+                    ticker=ticker,
+                    company_name=company_name,
+                    days_to_earnings=days_to_earnings,
+                    manual_prio=manual_prio,
+                    force_refresh=True,  # Batch immer fresh
+                )
+                return {
+                    "ticker": ticker,
+                    "prio": effective_prio,
+                    "status": "ok",
+                    "snippets": len(summary.split("•")) - 1
+                    if summary else 0,
+                }
+            except Exception as e:
+                logger.warning(f"Batch Web Intel {ticker}: {e}")
+                return {"ticker": ticker, "status": "error",
+                        "error": str(e)}
+
+        chunk_results = await asyncio.gather(
+            *[_process(args) for args in chunk],
+            return_exceptions=True,
+        )
+        for r in chunk_results:
+            if isinstance(r, Exception):
+                skipped += 1
+            elif r.get("status") == "ok":
+                processed += 1
+                results.append(r)
+            else:
+                skipped += 1
+                results.append(r)
 
     logger.info(f"Web Intelligence Batch: {processed} verarbeitet, {skipped} übersprungen")
     return {

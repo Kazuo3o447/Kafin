@@ -31,3 +31,6 @@ ALTER TABLE watchlist
 
 COMMENT ON COLUMN watchlist.web_prio IS
     'NULL=Auto (aus Earnings-Datum), 1=Täglich 3x, 2=Täglich 1x, 3=Wöchentlich, 4=Kein Web-Scan';
+
+CREATE INDEX IF NOT EXISTS idx_web_intel_searched
+    ON web_intelligence_cache(searched_at);

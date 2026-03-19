@@ -277,6 +277,12 @@ async def generate_audit_report(ticker: str) -> str:
         logger.warning(f"Social sentiment für {ticker}: {e}")
     
     # ── Web Intelligence (Cache-aware) ───────────────────────
+    # Sichere Initialisierung vor try-Blöcken
+    _company_name = getattr(estimates, "company_name", ticker) \
+        if estimates else ticker
+    _days_to_earnings = None
+    _manual_prio = None
+    
     web_intelligence = ""
     try:
         from backend.app.data.web_search import get_web_intelligence
@@ -361,15 +367,9 @@ async def generate_audit_report(ticker: str) -> str:
             web_sentiment_score, web_sentiment_label = (
                 await get_web_sentiment_score(
                     ticker=ticker,
-                    company_name=_company_name
-                    if "_company_name" in dir()
-                    else ticker,
-                    days_to_earnings=_days_to_earnings
-                    if "_days_to_earnings" in dir()
-                    else None,
-                    manual_prio=_manual_prio
-                    if "_manual_prio" in dir()
-                    else None,
+                    company_name=_company_name,
+                    days_to_earnings=_days_to_earnings,
+                    manual_prio=_manual_prio,
                 )
             )
     except Exception as e:

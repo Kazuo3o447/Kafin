@@ -116,6 +116,11 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] Composite Sentiment (FinBERT + Web + Social) in report_generator
 - [x] Divergenz-Erkennung und Torpedo-Score Integration
 - [x] SENTIMENT-ANALYSE Sektion in audit_report.md
+- [x] Timezone-Bug Fix (datetime.utcnow() → datetime.now(utc))
+- [x] Batch parallel processing (asyncio.gather in chunks)
+- [x] Variable-Scope initialization (no dir() checks)
+- [x] Robust JSON extraction (re.search)
+- [x] searched_at index in migration
 
 ## 🚀 Aktuelle Features (Stand März 2026)
 

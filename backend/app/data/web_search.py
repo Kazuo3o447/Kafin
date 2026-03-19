@@ -177,11 +177,13 @@ async def get_web_intelligence(
                     expires_str = row.get("expires_at")
                     if expires_str:
                         try:
+                            from datetime import timezone as _tz
                             expires = datetime.fromisoformat(
                                 expires_str.replace("Z", "+00:00")
                             )
-                            from datetime import timezone
-                            now = datetime.now(timezone.utc)
+                            if expires.tzinfo is None:
+                                expires = expires.replace(tzinfo=_tz.utc)
+                            now = datetime.now(_tz.utc)
                             if now < expires:
                                 cached_summary = row.get("summary", "")
                                 if cached_summary:
@@ -208,15 +210,17 @@ async def get_web_intelligence(
         from backend.app.db import get_supabase_client
         db = get_supabase_client()
         if db:
+            from datetime import timezone as _tz
+            _now = datetime.now(_tz.utc)
             ttl_hours = PRIO_TTL_HOURS.get(effective_prio, 24)
-            expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
+            expires_at = _now + timedelta(hours=ttl_hours)
             db.table("web_intelligence_cache").upsert(
                 {
                     "ticker": ticker.upper(),
                     "prio": effective_prio,
                     "summary": summary,
                     "raw_snippets": raw_snippets,
-                    "searched_at": datetime.utcnow().isoformat(),
+                    "searched_at": _now.isoformat(),
                     "expires_at": expires_at.isoformat(),
                 },
                 on_conflict="ticker",
@@ -278,15 +282,13 @@ async def get_web_sentiment_score(
                                      model="deepseek-chat")
 
         import json
-        # JSON sauber extrahieren
-        result_clean = result.strip()
-        if "```" in result_clean:
-            result_clean = result_clean.split("```")[1]
-            if result_clean.startswith("json"):
-                result_clean = result_clean[4:]
-        result_clean = result_clean.strip()
-
-        parsed = json.loads(result_clean)
+        import re
+        # Sucht erstes { bis letztes } — robust gegen Prefix-Text
+        match = re.search(r'\{.*\}', result, re.DOTALL)
+        if not match:
+            logger.warning(f"Kein JSON in DeepSeek-Antwort: {result[:100]}")
+            return 0.0, "neutral"
+        parsed = json.loads(match.group())
         score = float(parsed.get("score", 0.0))
         label = parsed.get("label", "neutral")
 

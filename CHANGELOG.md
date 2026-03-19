@@ -2,6 +2,19 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.0.1] - 2026-03-19 - Hotfix Web Intelligence Stack
+
+### 🐛 Bugfixes
+- **Timezone-Bug**: datetime.utcnow() durch datetime.now(utc)
+  ersetzt — verhindert TypeError beim Cache-Vergleich
+- **Batch parallel**: asyncio.gather in 5er-Chunks statt
+  sequenziell — verhindert Gateway-Timeout bei großen Watchlists
+- **Variable-Scope**: _company_name etc. vor try-Blöcken
+  initialisiert — kein NameError mehr möglich
+- **JSON-Extraktion**: re.search für robustes JSON-Parsing
+  aus DeepSeek-Antworten mit Prefix-Text
+- **DB-Index**: idx_web_intel_searched auf searched_at
+
 ## [5.0] - 2026-03-19 - Sentiment-Aggregator
 
 ### 🚀 Neue Features

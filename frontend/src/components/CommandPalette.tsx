@@ -46,8 +46,19 @@ export function CommandPalette() {
         setOpen(false);
       }
     }
+
+    // Custom Event für den Sidebar-Button (funktioniert auf Windows + Mac)
+    function handleOpenPalette() {
+      setOpen(true);
+    }
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("open-command-palette", handleOpenPalette);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("open-command-palette", handleOpenPalette);
+    };
   }, []);
 
   useEffect(() => {
@@ -156,7 +167,15 @@ export function CommandPalette() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-3xl font-bold font-mono text-[var(--text-primary)]">{snapshot.ticker}</h2>
-                    <p className="text-xl text-[var(--text-secondary)]">${snapshot.price?.toFixed(2) ?? "—"}</p>
+                    {snapshot.price !== null && snapshot.price !== undefined ? (
+                      <p className="text-xl font-mono text-[var(--text-primary)]">
+                        ${snapshot.price.toFixed(2)}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-[var(--text-muted)] mt-1">
+                        Kein US-Kurs verfügbar
+                      </p>
+                    )}
                   </div>
                   {snapshot.is_on_watchlist ? (
                     <span className="bg-[var(--accent-green)] bg-opacity-20 text-[var(--accent-green)] text-xs font-bold px-3 py-1 rounded-full">✓ Watchlist</span>
@@ -164,6 +183,15 @@ export function CommandPalette() {
                     <span className="bg-[var(--bg-tertiary)] text-[var(--text-muted)] text-xs px-3 py-1 rounded-full">Nicht auf Watchlist</span>
                   )}
                 </div>
+
+                {snapshot.price === null && snapshot.beats_of_8 === null && (
+                  <div className="rounded-lg border border-[var(--accent-amber)]/30
+                                  bg-[var(--accent-amber)]/10 px-4 py-3 text-sm
+                                  text-[var(--accent-amber)] mt-2">
+                    ⚠ Keine Marktdaten verfügbar — möglicherweise kein US-Listing,
+                    OTC-Ticker oder delisted.
+                  </div>
+                )}
 
                 {snapshot.next_earnings_date && (
                   <div className={`p-4 rounded-xl border ${snapshot.earnings_today ? 'bg-amber-500/10 border-amber-500/30' : snapshot.earnings_this_week ? 'bg-blue-500/10 border-blue-500/30' : 'bg-[var(--bg-primary)] border-[var(--border)]'}`}>

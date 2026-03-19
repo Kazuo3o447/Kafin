@@ -94,13 +94,7 @@ export function Sidebar() {
       <div className="mt-3 mb-3">
         <button
           onClick={() => {
-            window.dispatchEvent(
-              new KeyboardEvent("keydown", {
-                key: "k",
-                metaKey: true,
-                bubbles: true,
-              })
-            );
+            window.dispatchEvent(new CustomEvent("open-command-palette"));
           }}
           className="flex w-full items-center gap-2.5 rounded-xl
                      border border-[var(--border)] px-3 py-2

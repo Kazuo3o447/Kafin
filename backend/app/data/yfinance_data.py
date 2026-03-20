@@ -12,6 +12,7 @@ import json
 import os
 from datetime import datetime
 from typing import Optional
+import pandas as pd
 from schemas.technicals import TechnicalSetup, OptionsMetrics
 from schemas.options import OptionsData, OptionChainSummary
 from backend.app.config import settings
@@ -73,6 +74,66 @@ async def get_technical_setup(ticker: str) -> TechnicalSetup:
 
         distance_to_52w_high = ((current_price - high_52w) / high_52w) * 100 if high_52w else None
 
+        # ── SMA 20 ──────────────────────────────────────────────
+        sma_20 = float(hist["Close"].tail(20).mean()) if len(hist) >= 20 else None
+
+        # ── ATR (14 Tage) ────────────────────────────────────────
+        # Average True Range = Maß für tägliche Kursschwankung
+        high_low   = hist["High"] - hist["Low"]
+        high_close = (hist["High"] - hist["Close"].shift()).abs()
+        low_close  = (hist["Low"] - hist["Close"].shift()).abs()
+        tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        atr_14 = float(tr.rolling(14).mean().iloc[-1]) if len(hist) >= 15 else None
+
+        # ── MACD ─────────────────────────────────────────────────
+        # Signal: MACD-Linie über/unter Signal-Linie
+        # Mindestens 26 Tage für EMA-26 nötig
+        if len(hist) >= 26:
+            ema_12 = hist["Close"].ewm(span=12, adjust=False).mean()
+            ema_26 = hist["Close"].ewm(span=26, adjust=False).mean()
+            macd_line    = ema_12 - ema_26
+            signal_line  = macd_line.ewm(span=9, adjust=False).mean()
+            macd_val     = float(macd_line.iloc[-1])  if not macd_line.empty  else None
+            macd_signal  = float(signal_line.iloc[-1]) if not signal_line.empty else None
+            macd_hist_val = round(macd_val - macd_signal, 4) if macd_val and macd_signal else None
+            macd_bullish  = (macd_val > macd_signal) if macd_val and macd_signal else None
+        else:
+            macd_val = macd_signal = macd_hist_val = macd_bullish = None
+
+        # ── OBV (On-Balance Volume) ───────────────────────────────
+        # Steigendes OBV = Käuferdruck
+        close_diff = hist["Close"].diff()
+        obv_direction = pd.Series(0, index=hist.index)
+        obv_direction[close_diff > 0] = 1   # Steigend: +Volume
+        obv_direction[close_diff < 0] = -1  # Fallend: -Volume
+        # close_diff == 0: bleibt 0 (kein Volumen addiert)
+        obv = (hist["Volume"] * obv_direction).cumsum()
+        obv_val      = float(obv.iloc[-1])           if not obv.empty else None
+        obv_5d_ago   = float(obv.iloc[-5])           if len(obv) >= 5 else None
+        obv_trend    = (
+            "steigend" if obv_val and obv_5d_ago and obv_val > obv_5d_ago
+            else "fallend" if obv_val and obv_5d_ago
+            else None
+        )
+
+        # ── RVOL (Relative Volume) ───────────────────────────────
+        # Aktuelles Volumen vs. 20-Tage-Durchschnitt
+        avg_vol_20 = float(hist["Volume"].tail(20).mean()) if len(hist) >= 20 else None
+        last_vol   = float(hist["Volume"].iloc[-1])
+        rvol       = round(last_vol / avg_vol_20, 2) if avg_vol_20 and avg_vol_20 > 0 else None
+
+        # ── Free Float & Avg Volume (aus yfinance info) ──────────
+        try:
+            info         = stock.info
+            float_shares = info.get("floatShares")
+            avg_volume   = info.get("averageVolume") or info.get("averageDailyVolume10Day")
+            shares_out   = info.get("sharesOutstanding")
+            bid          = info.get("bid")
+            ask          = info.get("ask")
+            bid_ask_spread = round(ask - bid, 4) if bid and ask and ask > 0 else None
+        except Exception:
+            float_shares = avg_volume = shares_out = bid = ask = bid_ask_spread = None
+
         result = TechnicalSetup(
             ticker=ticker,
             current_price=current_price,
@@ -85,6 +146,19 @@ async def get_technical_setup(ticker: str) -> TechnicalSetup:
             trend=trend,
             above_sma50=current_price > sma_50 if sma_50 else False,
             above_sma200=current_price > sma_200 if sma_200 else False,
+            sma_20=round(sma_20, 2) if sma_20 else None,
+            atr_14=round(atr_14, 2) if atr_14 else None,
+            macd=round(macd_val, 4) if macd_val else None,
+            macd_signal=round(macd_signal, 4) if macd_signal else None,
+            macd_histogram=macd_hist_val,
+            macd_bullish=macd_bullish,
+            obv=round(obv_val, 0) if obv_val else None,
+            obv_trend=obv_trend,
+            rvol=rvol,
+            float_shares=float_shares,
+            avg_volume=avg_volume,
+            shares_outstanding=shares_out,
+            bid_ask_spread=bid_ask_spread,
         )
         cache_set(cache_key, result.dict(), ttl_seconds=300)
         return result
@@ -239,7 +313,7 @@ async def get_atm_implied_volatility(ticker: str) -> Optional[OptionsData]:
 async def get_options_metrics(ticker: str) -> Optional[OptionsMetrics]:
     """Berechnet Options-Kennzahlen für einen Ticker (PCR, IV ATM)."""
     if settings.use_mock_data:
-        return OptionsMetrics(put_call_ratio_oi=1.1, implied_volatility_atm=0.25, expiration="2024-01-01")
+        return OptionsMetrics(put_call_ratio_oi=1.1, put_call_ratio_vol=0.85, implied_volatility_atm=0.25, expiration="2024-01-01")
         
     try:
         stock = yf.Ticker(ticker)
@@ -272,6 +346,11 @@ async def get_options_metrics(ticker: str) -> Optional[OptionsMetrics]:
         total_call_oi = float(calls['openInterest'].sum())
         pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0.0
         
+        # Put/Call Ratio (Volume) - Smart Money Flow Indicator
+        total_put_vol = float(puts['volume'].sum()) if 'volume' in puts.columns else 0
+        total_call_vol = float(calls['volume'].sum()) if 'volume' in calls.columns else 0
+        put_call_ratio_vol = round(total_put_vol / total_call_vol, 2) if total_call_vol > 0 else None
+        
         # IV ATM
         # Approximiere aktuellen Kurs mittels yfinance history
         hist = stock.history(period="1d")
@@ -284,8 +363,19 @@ async def get_options_metrics(ticker: str) -> Optional[OptionsMetrics]:
         atm_call = calls.loc[calls['distance'].idxmin()]
         iv_atm = float(atm_call['impliedVolatility'])
         
+        # yfinance gibt IV als Dezimal zurück (0.35 = 35%)
+        # Plausibilitätsprüfung: IV sollte zwischen 0.001 und 10.0 liegen
+        if iv_atm > 100:  # > 10000% ist unrealistisch, war in % statt Dezimal
+            iv_atm = iv_atm / 100
+        elif iv_atm < 0.001:  # < 0.1% ist unrealistisch
+            iv_atm = None
+        
+        if iv_atm is None:
+            return None
+        
         return OptionsMetrics(
             put_call_ratio_oi=round(pcr, 2),
+            put_call_ratio_vol=put_call_ratio_vol,
             implied_volatility_atm=round(iv_atm, 4),
             expiration=target_exp
         )
@@ -371,7 +461,7 @@ async def get_fundamentals_yf(ticker: str) -> Optional[dict]:
             "analyst_recommendation": info.get("recommendationKey"),
             "number_of_analysts": info.get("numberOfAnalystOpinions"),
         }
-        cache_set(cache_key, result, ttl_seconds=3600)
+        cache_set(cache_key, result, ttl_seconds=86400)  # 24h für Fundamentals
         return result
     except Exception as e:
         logger.error(f"yfinance Fundamentals Fehler für {ticker}: {e}")

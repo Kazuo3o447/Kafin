@@ -122,5 +122,7 @@ async def get_macro_snapshot() -> MacroSnapshot:
         dxy=dxy,
         dxy_date=dxy_date,
         yield_curve=curve_status,
-        regime=regime
+        regime=regime,
+        yield_curve_10y2y=yield_spread,
+        high_yield_spread=high_yield
     )

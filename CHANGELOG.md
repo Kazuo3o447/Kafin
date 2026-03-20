@@ -2,6 +2,29 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.3.9] - 2026-03-20 - Smart Money Edge & Bug Fixes
+
+### 🧠 Smart Money Edge Features
+- **Put/Call Ratio (Volumen)**: Neuer Smart Money Flow Indikator
+  - **Backend**: `put_call_ratio_vol` in `get_options_metrics()` berechnet
+  - **Frontend**: Im Research Dashboard unter "Analyst & Options" angezeigt
+  - **KI-Prompt**: In Audit Reports für Contrarian-Analyse integriert
+- **Macro Risk Indicators**: FRED-Daten erweitert
+  - **T10Y2Y**: Yield Curve Inversion (Rezessionsindikator)
+  - **BAMLH0A0HYM2**: US High Yield Option-Adjusted Spread (Kreditrisiko)
+  - **Schemas**: `yield_curve_10y2y` & `high_yield_spread` in MacroSnapshot
+
+### 🐛 Bugfixes
+- **Watchlist Web Prio**: `exclude_unset=True` fix für None-Werte
+  - **Problem**: Filter entfernte explizite `null` Werte → "Auto" nicht setzbar
+  - **Lösung**: Direkter Supabase-Zugriff mit `exclude_unset=True`
+  - **Result**: Web-Prio Dropdown speichert Werte korrekt ab
+
+### 📊 Smart Money Integration
+- **Contrarian Signals**: Put/Call Ratio > 1.5 = Retail-Panik → Kaufsignal
+- **Systemic Risk**: Yield Curve + Credit Spreads in KI-Bewertung
+- **Research Dashboard**: Alle Indikatoren sichtbar und nutzbar
+
 ## [5.3.8] - 2026-03-20 - Watchlist Performance Optimizations
 
 ### ⚡ Performance

@@ -11,6 +11,9 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cacheGet, cacheSet, cacheInvalidate } from "@/lib/clientCache";
+import { PriceRangeBar } from "@/components/visualizations/PriceRangeBar";
+import { VolumeProfile } from "@/components/visualizations/VolumeProfile";
+import { PEGGauge } from "@/components/visualizations/PEGGauge";
 
 // ── Typen ────────────────────────────────────────────────────
 type ResearchData = {
@@ -63,6 +66,17 @@ type ResearchData = {
   support: number | null;
   resistance: number | null;
   distance_52w_high_pct: number | null;
+  sma_20?: number | null;
+  atr_14?: number | null;
+  macd?: number | null;
+  macd_signal?: number | null;
+  macd_histogram?: number | null;
+  macd_bullish?: boolean | null;
+  obv_trend?: string | null;
+  rvol?: number | null;
+  float_shares?: number | null;
+  avg_volume?: number | null;
+  bid_ask_spread?: number | null;
   iv_atm: number | null;
   put_call_ratio: number | null;
   expected_move_pct: number | null;
@@ -98,6 +112,8 @@ type ResearchData = {
     is_material: boolean;
     category: string;
     date: string;
+    source?: string;
+    url?: string;
   }>;
   is_watchlist: boolean;
   web_prio: number | null;
@@ -485,6 +501,19 @@ export default function ResearchDashboard() {
           <StatCell label="Beta" value={fmt.num(data.beta)} sub="Marktkorrelation" />
           <StatCell label="Div. Yield" value={data.dividend_yield ? `${(data.dividend_yield * 100).toFixed(2)}%` : "—"} />
         </div>
+        
+        {/* 52-Week Price Range Visualization */}
+        <div className="mt-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-2">
+            52-Wochen Preisspanne
+          </p>
+          <PriceRangeBar 
+            current={data.price || 0}
+            low52w={data.fifty_two_week_low || 0}
+            high52w={data.fifty_two_week_high || 0}
+            ticker={data.ticker}
+          />
+        </div>
       </div>
 
       {/* Block 2: Bewertung */}
@@ -516,6 +545,16 @@ export default function ResearchDashboard() {
           <StatCell label="EPS TTM" value={fmt.usd(data.eps_ttm)} />
           <StatCell label="Revenue TTM" value={fmt.cap(data.revenue_ttm)} />
         </div>
+        
+        {/* PEG Ratio Gauge Visualization */}
+        {data.peg_ratio != null && data.peg_ratio >= 0 && (
+          <div className="mt-4 pt-4 border-t border-[var(--border)]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-3 text-center">
+              PEG Ratio Bewertung
+            </p>
+            <PEGGauge pegRatio={data.peg_ratio} />
+          </div>
+        )}
       </div>
 
       {/* Block 3: Technisches Bild + Analyst */}
@@ -526,19 +565,102 @@ export default function ResearchDashboard() {
           </p>
           <div className="grid grid-cols-2 gap-2">
             <StatCell label="RSI (14)" value={
-              <span className={data.rsi == null ? "text-[var(--text-muted)]" : data.rsi > 70 ? "text-[var(--accent-red)]" : data.rsi < 30 ? "text-[var(--accent-green)]" : "text-[var(--text-primary)]"}>
-                {fmt.num(data.rsi, 1)}
+              <span className={
+                data.rsi == null ? "text-[var(--text-muted)]" 
+                : data.rsi > 70 ? "text-[var(--accent-red)]" 
+                : data.rsi < 30 ? "text-[var(--accent-green)]" 
+                : "text-[var(--text-primary)]"
+              }>
+                {fmt.num(data.rsi)}
               </span>
             } sub={data.rsi != null ? (data.rsi > 70 ? "überkauft" : data.rsi < 30 ? "überverkauft" : "neutral") : undefined} />
-            <StatCell label="Trend" value={
-              <span className={uptrend ? "text-[var(--accent-green)]" : downtrend ? "text-[var(--accent-red)]" : "text-[var(--accent-amber)]"}>
-                {uptrend ? "↑ Aufwärts" : downtrend ? "↓ Abwärts" : "→ Seitwärts"}
-              </span>
-            } />
             <StatCell label="SMA 50" value={fmt.usd(data.sma_50)} sub={data.above_sma50 != null ? (data.above_sma50 ? "✓ darüber" : "✗ darunter") : undefined} />
             <StatCell label="SMA 200" value={fmt.usd(data.sma_200)} sub={data.above_sma200 != null ? (data.above_sma200 ? "✓ darüber" : "✗ darunter") : undefined} />
+            <StatCell label="SMA 20" value={fmt.usd(data.sma_20 ?? null)}
+              sub={data.sma_20 != null && data.price != null
+                ? (data.price > data.sma_20 ? "✓ darüber" : "✗ darunter")
+                : undefined} />
+            <StatCell label="ATR (14)" value={
+              data.atr_14 != null ? `$${data.atr_14.toFixed(2)}` : "—"
+            } sub="Tagesbewegung" />
+            <StatCell label="RVOL" value={
+              <span className={
+                data.rvol == null ? "text-[var(--text-muted)]"
+                : data.rvol >= 1.5 ? "text-[var(--accent-green)]"
+                : data.rvol < 0.5 ? "text-[var(--text-muted)]"
+                : "text-[var(--text-primary)]"
+              }>
+                {data.rvol != null ? `${data.rvol.toFixed(2)}x` : "—"}
+              </span>
+            } sub={data.rvol != null ? (data.rvol >= 1.5 ? "erhöhte Aktivität" : "normal") : undefined} />
+            <StatCell label="MACD" value={
+              <span className={
+                data.macd_bullish == null ? "text-[var(--text-muted)]"
+                : data.macd_bullish ? "text-[var(--accent-green)]"
+                : "text-[var(--accent-red)]"
+              }>
+                {data.macd != null ? data.macd.toFixed(3) : "—"}
+              </span>
+            } sub={data.macd_bullish != null ? (data.macd_bullish ? "bullish Cross" : "bearish Cross") : undefined} />
+            <StatCell label="OBV Trend" value={
+              <span className={
+                data.obv_trend === "steigend" ? "text-[var(--accent-green)]"
+                : data.obv_trend === "fallend" ? "text-[var(--accent-red)]"
+                : "text-[var(--text-muted)]"
+              }>
+                {data.obv_trend ? (data.obv_trend === "steigend" ? "↑ Steigend" : "↓ Fallend") : "—"}
+              </span>
+            } sub="5T Käuferdruck" />
             <StatCell label="Support" value={fmt.usd(data.support)} />
             <StatCell label="Resistance" value={fmt.usd(data.resistance)} />
+          </div>
+        </div>
+
+        <div className="card p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em]
+                text-[var(--text-muted)] mb-3">
+            Volumen & Marktstruktur
+          </p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-5">
+            <StatCell label="Avg. Volumen" value={
+              data.avg_volume
+                ? data.avg_volume >= 1e6
+                  ? `${(data.avg_volume / 1e6).toFixed(1)}M` 
+                  : `${(data.avg_volume / 1e3).toFixed(0)}K` 
+                : "—"
+            } sub="20-Tage-Ø" />
+            <StatCell label="Free Float" value={
+              data.float_shares
+                ? data.float_shares >= 1e9
+                  ? `${(data.float_shares / 1e9).toFixed(2)}B` 
+                  : `${(data.float_shares / 1e6).toFixed(0)}M` 
+                : "—"
+            } sub="handelbare Aktien" />
+            <StatCell label="Bid-Ask" value={
+              data.bid_ask_spread != null
+                ? `$${data.bid_ask_spread.toFixed(3)}` 
+                : "—"
+            } sub="Spread" />
+            <StatCell label="RVOL" value={
+              <span className={
+                data.rvol == null ? "text-[var(--text-muted)]"
+                : data.rvol >= 1.5 ? "text-[var(--accent-green)]"
+                : "text-[var(--text-primary)]"
+              }>
+                {data.rvol != null ? `${data.rvol.toFixed(2)}x` : "—"}
+              </span>
+            } sub={data.rvol != null && data.rvol >= 1.5 ? "⚡ erhöhte Aktivität" : "normal"} />
+            <StatCell label="ATR (14)" value={
+              data.atr_14 != null ? `$${data.atr_14.toFixed(2)}` : "—"
+            } sub="erwartete Tagesbewegung" />
+          </div>
+          
+          {/* Volume Profile Visualization */}
+          <div className="mt-4 pt-4 border-t border-[var(--border)]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-3">
+              Volumen-Profil
+            </p>
+            <VolumeProfile ticker={data.ticker} />
           </div>
         </div>
 
@@ -562,7 +684,7 @@ export default function ResearchDashboard() {
               </span>
             } sub={data.number_of_analysts ? `${data.number_of_analysts} Analysten` : undefined} />
             <StatCell label="IV (ATM)" value={data.iv_atm != null ? `${data.iv_atm.toFixed(1)}%` : "—"} />
-            <StatCell label="Put/Call" value={fmt.num(data.put_call_ratio)} />
+            <StatCell label="Put/Call Ratio" value={data.put_call_ratio ? data.put_call_ratio.toFixed(2) : "—"} />
             <StatCell label="Exp. Move" value={
               data.expected_move_pct != null
                 ? `±${data.expected_move_pct.toFixed(1)}%` 

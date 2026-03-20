@@ -193,6 +193,17 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **Zugriff**: http://localhost:3000 für das Web-Dashboard, http://localhost:8000 für die API-Dokumentation.
 
 ## 🔄 Letzte Updates (20. März 2026)
+### Smart Money Edge + Contrarian Trading Features
+- **Put/Call Ratio (Volumen)**: Neuer Smart Money Flow Indikator
+  - **Backend**: Volumen-basierte Put/Call Ratio aus yfinance Options-Chain
+  - **Frontend**: Im Research Dashboard unter "Analyst & Options" sichtbar
+  - **Contrarian Signals**: Ratio > 1.5 = Retail-Panik → Kaufsignal
+- **Macro Risk Indicators**: FRED-Daten um Yield Curve & Credit Spreads erweitert
+  - **T10Y2Y**: Yield Curve Inversion (Rezessionsindikator)
+  - **BAMLH0A0HYM2**: US High Yield Spread (Kreditrisiko)
+  - **KI-Integration**: In Audit Reports für systemische Risikobewertung
+- **Bugfix**: Watchlist Web Prio speichert None-Werte korrekt (exclude_unset=True)
+
 ### Watchlist Performance Optimizations + UX Enhancement
 - **Reloads eliminiert**: Keine API-Calls mehr bei Watchlist-CRUD-Operationen
   - **Ticker hinzufügen/entfernen**: Sofort im State sichtbar (Optimistic Updates)

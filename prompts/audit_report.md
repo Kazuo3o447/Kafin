@@ -73,6 +73,10 @@ Put/Call Ratio: {{put_call_ratio}}
 Expected Move (bis Earnings): {{expected_move}}
 Kursperformance letzte 30 Tage: {{price_change_30d}}
 
+SMART MONEY EDGE INDICATORS:
+* **Options Flow:** Put/Call Ratio (Volumen). Ein extrem hohes Ratio (>1.5) kann auf Retail-Panik deuten und ein Contrarian-Kaufsignal sein.
+* **Macro Risk:** High Yield Credit Spread & T10Y2Y Yield Curve. Berücksichtige systemische Risiken.
+
 SENTIMENT-ANALYSE (Composite):
 FinBERT News-Score (40%):   {{finbert_sentiment}}
 Web-Diskurs-Score (40%):    {{web_sentiment}} ({{web_sentiment_label}})

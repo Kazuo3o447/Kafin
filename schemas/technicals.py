@@ -23,11 +23,25 @@ class TechnicalSetup(BaseModel):
     historical_volatility_20d: Optional[float] = None  # 20-Tage historische Volatilität (%)
     historical_volatility_60d: Optional[float] = None  # 60-Tage historische Volatilität (%)
     beta: Optional[float] = None  # Beta zum S&P 500
+    sma_20: Optional[float] = None
+    atr_14: Optional[float] = None
+    macd: Optional[float] = None
+    macd_signal: Optional[float] = None
+    macd_histogram: Optional[float] = None
+    macd_bullish: Optional[bool] = None
+    obv: Optional[float] = None
+    obv_trend: Optional[str] = None
+    rvol: Optional[float] = None
+    float_shares: Optional[int] = None
+    avg_volume: Optional[int] = None
+    shares_outstanding: Optional[int] = None
+    bid_ask_spread: Optional[float] = None
     model_config = ConfigDict(from_attributes=True)
 
 class OptionsMetrics(BaseModel):
     """Options-Kennzahlen via yfinance."""
     put_call_ratio_oi: float = 0.0
+    put_call_ratio_vol: Optional[float] = None
     implied_volatility_atm: float = 0.0
     expiration: str = ""
     model_config = ConfigDict(from_attributes=True)

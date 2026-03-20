@@ -1350,7 +1350,7 @@ async def api_research_dashboard(
 
         # Options
         "iv_atm": round(getattr(options, "implied_volatility_atm", 0) * 100, 1) if options else None,
-        "put_call_ratio": getattr(options, "put_call_ratio_oi", None) if options else None,
+        "put_call_ratio": getattr(options, "put_call_ratio_vol", getattr(options, "put_call_ratio_oi", None)) if options else None,
         "expected_move_pct": expected_move_pct,
         "expected_move_usd": expected_move_usd,
 
@@ -2259,8 +2259,18 @@ async def api_watchlist_earnings_this_week():
 @watchlist_router.put("/{ticker}")
 async def api_update_watchlist_item(ticker: str, item: WatchlistItemUpdate):
     logger.info(f"API Call: update-watchlist-item {ticker}")
-    update_data = {k: v for k, v in item.dict().items() if v is not None}
-    return await update_ticker(ticker, **update_data)
+    # exclude_unset=True behält explizit gesendete None-Werte bei!
+    update_data = item.dict(exclude_unset=True) 
+    
+    try:
+        from backend.app.db import get_supabase_client
+        db = get_supabase_client()
+        if db and update_data:
+            db.table("watchlist").update(update_data).eq("ticker", ticker.upper()).execute()
+        return {"status": "success", "updated": update_data}
+    except Exception as e:
+        logger.error(f"Watchlist Update Error für {ticker}: {e}")
+        return {"status": "error", "message": str(e)}
 
 @watchlist_router.delete("/{ticker}")
 async def api_remove_watchlist_item(ticker: str):

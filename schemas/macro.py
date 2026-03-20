@@ -25,6 +25,8 @@ class MacroSnapshot(BaseModel):
     index_shorts_recommended: bool = False
     instrument_suggestions: Optional[str] = None
     geopolitical_notes: Optional[str] = None
+    yield_curve_10y2y: Optional[float] = None
+    high_yield_spread: Optional[float] = None
     model_config = ConfigDict(from_attributes=True)
 
 

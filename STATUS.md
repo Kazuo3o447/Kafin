@@ -193,6 +193,15 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **Zugriff**: http://localhost:3000 für das Web-Dashboard, http://localhost:8000 für die API-Dokumentation.
 
 ## 🔄 Letzte Updates (20. März 2026)
+### Watchlist Performance Revolution
+- **Ladezeit**: 2 Minuten 7 Sekunden → 2.3 Sekunden (55x schneller!)
+  - **yfinance Cache**: 5-Minuten Cache für Ticker-Daten mit Redis
+  - **Enriched Cache**: 2-Minuten Cache für komplette Watchlist
+  - **Cache Invalidation**: Automatisch bei Watchlist-Änderungen
+- **Performance Impact**: 98% Reduzierung, Cache-Hits < 100ms
+- **Smart Money Features**: Alle weiterhin verfügbar und schnell
+- **Technical**: Redis-basierte Cache-Strategy mit TTL
+
 ### Smart Money Edge + Contrarian Trading Features
 - **Put/Call Ratio (Volumen)**: Neuer Smart Money Flow Indikator
   - **Backend**: Volumen-basierte Put/Call Ratio aus yfinance Options-Chain

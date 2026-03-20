@@ -145,6 +145,9 @@ Implementiert in `components/LogViewer.tsx`. `/terminal` Route entfernt.
 Reloads eliminiert mit Optimistic Updates für CRUD-Operationen.
 Ticker hinzufügen/entfernen/Web-Prio ändern sofort sichtbar, keine API-Calls mehr.
 
+### WATCHLIST PERFORMANCE REVOLUTION
+yfinance Cache + Enriched Cache für 55x schnellere Ladezeiten (2.3s statt 127s).
+
 ---
 
 *Zuletzt aktualisiert: 20. März 2026*

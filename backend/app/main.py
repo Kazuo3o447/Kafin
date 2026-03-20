@@ -2026,13 +2026,22 @@ async def api_get_watchlist():
 
 def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
     """
-    Synchrone Hilfsfunktion für yfinance-Calls.
+    Synchrone Hilfsfunktion für yfinance-Calls mit Cache.
     Wird via asyncio.to_thread() im Thread-Pool ausgeführt.
     """
     import yfinance as yf
     from datetime import datetime as dt
+    from backend.app.cache import cache_get, cache_set
+
+    # Cache-Check
+    cache_key = f"yf:fast_info:{ticker.upper()}"
+    cached_data = cache_get(cache_key)
+    if cached_data:
+        entry.update(cached_data)
+        return entry
 
     stock = yf.Ticker(ticker)
+    result = {}
 
     # --- Kursdaten via fast_info (10x schneller als stock.info) ---
     try:
@@ -2040,36 +2049,36 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
         # Preis — separater Try-Block
         try:
             if fi.last_price:
-                entry["price"] = round(float(fi.last_price), 2)
+                result["price"] = round(float(fi.last_price), 2)
         except Exception:
             pass
         # Change % — separater Try-Block
         try:
             val = fi.regular_market_day_change_percent
             if val is not None:
-                entry["change_pct"] = round(float(val) * 100, 2)
+                result["change_pct"] = round(float(val) * 100, 2)
         except Exception:
             pass
         # Market Cap — separater Try-Block
         try:
             if fi.market_cap:
-                entry["market_cap_b"] = round(float(fi.market_cap) / 1e9, 1)
+                result["market_cap_b"] = round(float(fi.market_cap) / 1e9, 1)
         except Exception:
             pass
     except Exception:
         pass
 
     # Fallback für Preis wenn fast_info komplett fehlschlägt
-    if not entry.get("price"):
+    if not result.get("price"):
         try:
             hist = stock.history(period="2d")
             if not hist.empty:
-                entry["price"] = round(float(hist["Close"].iloc[-1]), 2)
+                result["price"] = round(float(hist["Close"].iloc[-1]), 2)
                 if len(hist) >= 2:
                     prev = float(hist["Close"].iloc[-2])
                     curr = float(hist["Close"].iloc[-1])
                     if prev:
-                        entry["change_pct"] = round(((curr - prev) / prev) * 100, 2)
+                        result["change_pct"] = round(((curr - prev) / prev) * 100, 2)
         except Exception:
             pass
 
@@ -2094,11 +2103,16 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
                     earnings_date = earnings_date.date()
                 if earnings_date:
                     days_until = (earnings_date - dt.now().date()).days
-                    entry["earnings_date"] = str(earnings_date)
-                    entry["earnings_countdown"] = days_until
+                    result["earnings_date"] = str(earnings_date)
+                    result["earnings_countdown"] = days_until
     except Exception:
         pass
 
+    # Cache für 5 Minuten speichern
+    if result:
+        cache_set(cache_key, result, ttl_seconds=300)
+
+    entry.update(result)
     return entry
 
 
@@ -2190,6 +2204,14 @@ async def _enrich_single(item: dict, scores_by_ticker: dict) -> dict:
 async def api_watchlist_enriched():
     """Gibt Watchlist inkl. Kurse, Scores und Earnings-Countdown zurück."""
     logger.info("API Call: watchlist-enriched")
+    
+    # Cache-Check für 2 Minuten
+    from backend.app.cache import cache_get, cache_set
+    cache_key = "watchlist:enriched:v2"
+    cached_result = cache_get(cache_key)
+    if cached_result:
+        logger.info("Watchlist enriched Cache-Hit")
+        return cached_result
 
     watchlist = await get_watchlist()
     db = get_supabase_client()
@@ -2226,11 +2248,16 @@ async def api_watchlist_enriched():
                 f"ist im Sektor '{dominant_sector}'. Diversifikation prüfen."
             )
 
-    return {
+    result = {
         "watchlist": enriched,
         "concentration_warning": concentration_warning,
         "sector_distribution": sectors,
     }
+    
+    # Cache für 2 Minuten speichern
+    cache_set(cache_key, result, ttl_seconds=120)
+    
+    return result
 
 @watchlist_router.post("")
 async def api_add_watchlist_item(item: WatchlistItemCreate):
@@ -2238,6 +2265,11 @@ async def api_add_watchlist_item(item: WatchlistItemCreate):
     # Wenn kein Firmenname: Ticker als Name verwenden
     company_name = item.company_name or item.ticker.upper()
     sector = item.sector or "Unknown"
+    
+    # Cache invalidieren
+    from backend.app.cache import cache_invalidate
+    cache_invalidate("watchlist:enriched:v2")
+    
     return await add_ticker(
         item.ticker, company_name, sector,
         item.notes or "", item.cross_signals or []
@@ -2267,6 +2299,11 @@ async def api_update_watchlist_item(ticker: str, item: WatchlistItemUpdate):
         db = get_supabase_client()
         if db and update_data:
             db.table("watchlist").update(update_data).eq("ticker", ticker.upper()).execute()
+        
+        # Cache invalidieren
+        from backend.app.cache import cache_invalidate
+        cache_invalidate("watchlist:enriched:v2")
+        
         return {"status": "success", "updated": update_data}
     except Exception as e:
         logger.error(f"Watchlist Update Error für {ticker}: {e}")
@@ -2275,6 +2312,11 @@ async def api_update_watchlist_item(ticker: str, item: WatchlistItemUpdate):
 @watchlist_router.delete("/{ticker}")
 async def api_remove_watchlist_item(ticker: str):
     logger.info(f"API Call: remove-watchlist-item {ticker}")
+    
+    # Cache invalidieren
+    from backend.app.cache import cache_invalidate
+    cache_invalidate("watchlist:enriched:v2")
+    
     success = await remove_ticker(ticker)
     if success:
          return {"status": "success"}

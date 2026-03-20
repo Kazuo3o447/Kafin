@@ -64,7 +64,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **Supabase**: Tabellen `long_term_memory`, `earnings_reviews`, `performance_tracking` produktiv, Schema SQL loggable via API.
 
 ### 8. Phase 4B: Web-Dashboard (Next.js) - Komplett
-*   **Framework**: Next.js 15 mit TypeScript, Tailwind CSS v4, App Router, Server Components.
+*   **Framework**: Next.js 16 mit TypeScript, Tailwind CSS v4, App Router, Server Components.
 *   **Design-System**: Modernes Dark Mode mit CSS-Variablen, JetBrains Mono + Inter Fonts, Trading-Terminal-Farbschema.
 *   **Layout**: Feste Sidebar-Navigation (220px breit), responsive Grid-Layouts, Echtzeit-Statusanzeige mit pulsierendem Online-Indikator.
 *   **Dashboard-Seite**: Makro-Regime-Banner, Index-/Sektor-/Makro-Karten, Morning-Briefing-Vorschau, Watchlist-Übersicht.
@@ -85,7 +85,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **Chart Integration**: Automatische Chart-Anzeige auf Ticker-Detailseiten, verbesserte Error-Handling bei fehlenden Daten.
 *   **Responsive Design**: Optimiert für Desktop mit festen Spaltenbreiten und flexiblen Inhaltsbereichen.
 
-### Phase 4D: Bug Fixes & Frontend Stabilisierung (März 2026)
+### 10. Phase 4D: Bug Fixes & Frontend Stabilisierung (März 2026)
 - [x] watchlist_router korrekt registriert
 - [x] Enriched Endpoint: fast_info + asyncio.gather + Batch Score-Query
 - [x] Earnings-Radar: Feldname-Bug behoben, Kalender funktioniert
@@ -138,6 +138,14 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] v5.2.2: Social Sentiment API Integration (Reddit/Twitter Mentions)
 - [x] v5.2.2: SocialSentimentData in Audit-Reports integriert
 
+### 11. Phase 5.X: Advanced Features & Performance (März 2026)
+- [x] **v5.2.3**: Report Generation Timeout Fixes (Next.js Route Handlers, DeepSeek API Timeout 300s)
+- [x] **v5.2.4**: Supabase Schema Fixes (audit_reports insert payload korrigiert)
+- [x] **v5.2.5**: Docker Environment Variable Overrides (INTERNAL_API_URL für Container-Netzwerk)
+- [x] **v5.2.6**: Enhanced Log System (Error/Warning Stats, Level Filtering, Terminal UI)
+- [x] **v5.2.7**: Command Palette Mini-Dashboard (lucide-react Icons, Audit Historie, Watchlist Management)
+- [x] **v5.2.8**: Performance Optimizations (Batch Queries, Caching, AsyncIO Improvements)
+
 ## 🚀 Aktuelle Features (Stand März 2026)
 
 ### Core Funktionalität
@@ -146,20 +154,35 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - ✅ **Chart Intelligence**: Interaktive Kurs-Charts mit SMA-Overlays und Event-Markern
 - ✅ **KI-Analysen**: DeepSeek-Integration für Reports und Stichpunkt-Extraktion
 - ✅ **Automatisierung**: n8n-Workflows für tägliche Briefings und wöchentliche Reports
+- ✅ **Command Palette**: Professionelles Mini-Dashboard mit Audit-Historie und lucide-react Icons
+- ✅ **Sentiment Intelligence**: Composite Sentiment (FinBERT + Web + Social) mit Divergenz-Erkennung
+- ✅ **Peer Monitoring**: Automatische Peer-Reaktion Alerts bei Earnings
+- ✅ **Web Intelligence**: Gecachte Web-Suche mit Prioritätssystem
 
 ### Data Sources
-- ✅ **Marktdaten**: yfinance (Kurse, Volumen, Indikatoren)
+- ✅ **Marktdaten**: yfinance (Kurse, Volumen, Indikatoren, Optionsdaten)
 - ✅ **News**: Finnhub (Company & General News), Google News Integration
 - ✅ **Makro**: FRED (VIX, Zinsen, Rohstoffe), Finnhub Economic Calendar
 - ✅ **Regulatorisch**: SEC EDGAR (Form 8-K, 4) für Insider-Transaktionen
 - ✅ **Sentiment**: FinBERT für deutsche/englische News-Analyse
+- ✅ **Social**: Reddit/Twitter Mentions via Finnhub Social Sentiment
+- ✅ **Web Intelligence**: Gecachte Web-Suche mit DeepSeek Analyse
 
 ### UI/UX
 - ✅ **Modern Dark Mode**: Konsistentes Design mit CSS-Variablen
+- ✅ **Command Palette**: Rich Mini-Dashboard mit lucide-react Icons
 - ✅ **2-Spalten News-Layout**: Kein Tab-Wechsel mehr nötig
 - ✅ **Automatische Charts**: Direkte Anzeige auf Ticker-Detailseiten
 - ✅ **Error Handling**: Klare Fehlermeldungen und Loading-States
 - ✅ **Responsive**: Optimiert für Desktop-Anwendung
+- ✅ **Enhanced Terminal**: Log-Filterung, Stats, Error/Warning Badges
+
+### Backend Performance
+- ✅ **Batch Processing**: Parallele Datenabfrage via asyncio.gather
+- ✅ **Smart Caching**: Redis + Supabase Cache-Layer für Web Intelligence
+- ✅ **Timeout Management**: Extended Timeouts für DeepSeek API (300s)
+- ✅ **Error Resilience**: Robustes Error Handling mit Fallbacks
+- ✅ **Schema Validation**: Korrekte Supabase Insert-Payloads
 
 ## 🛠️ System-Hinweis
 *   **Docker**: Backend, Redis, n8n und Frontend laufen stabil im Verbund.

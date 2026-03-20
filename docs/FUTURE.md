@@ -148,6 +148,12 @@ Ticker hinzufügen/entfernen/Web-Prio ändern sofort sichtbar, keine API-Calls m
 ### WATCHLIST PERFORMANCE REVOLUTION
 yfinance Cache + Enriched Cache für 55x schnellere Ladezeiten (2.3s statt 127s).
 
+### WATCHLIST DATA DISPLAY FIX
+Frontend umgestellt auf enriched API - alle Spalten jetzt sichtbar (1T % Opp Torp).
+
+### RESEARCH UX IMPROVEMENTS
+Firmenname verlinkt + bessere Loading States mit User Guidance.
+
 ---
 
 *Zuletzt aktualisiert: 20. März 2026*

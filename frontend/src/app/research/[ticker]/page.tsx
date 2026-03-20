@@ -398,12 +398,22 @@ export default function ResearchDashboard() {
   // ── Loading Skeleton ──────────────────────────────────────
   if (loading) return (
     <div className="space-y-4">
-      <Skeleton className="h-8 w-48" />
-      <Skeleton className="h-24 w-full" />
-      <div className="grid grid-cols-4 gap-3">
-        {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-16" />)}
+      <div className="flex items-center gap-2">
+        <RefreshCw size={16} className="animate-spin text-[var(--accent-blue)]" />
+        <span className="text-sm text-[var(--text-muted)]">
+          Lade Research-Daten für {tickerUpper}...
+        </span>
       </div>
-      <Skeleton className="h-48 w-full" />
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+      <div className="text-xs text-[var(--text-muted)] mt-4">
+        Erste Anfrage kann 20-30 Sekunden dauern (Datenaggregation)...
+      </div>
     </div>
   );
 

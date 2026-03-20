@@ -2,6 +2,34 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.3.11] - 2026-03-20 - Watchlist Data Display & Research UX
+
+### 🐛 Bugfixes
+- **Watchlist Datenanzeige**: "1T % Opp Torp" jetzt sichtbar
+  - **Problem**: Frontend nutzte schnelle `/api/watchlist` ohne enrichment Daten
+  - **Lösung**: Umstellung auf `/api/watchlist/enriched` mit allen Daten
+  - **Result**: Kurse, Scores, Performance jetzt korrekt angezeigt
+- **Research Dashboard UX**: Firmenname in Watchlist verlinkt
+  - **Problem**: Firmenname nicht klickbar → User verwirrt
+  - **Lösung**: Link zum Research Dashboard hinzugefügt
+  - **User Experience**: Ticker und Firmenname führen zur Research-Seite
+
+### 🎨 UX Improvements
+- **Research Loading State**: Bessere Kommunikation bei langsamer erster Anfrage
+  - **Loading Animation**: Rotierender Refresh-Icon mit Status-Text
+  - **User Guidance**: "Erste Anfrage kann 20-30 Sekunden dauern (Datenaggregation)"
+  - **Cache-Effizienz**: Zweite Anfrage < 1 Sekunde
+- **Web Intelligence Aufklärung**: Batch-Prozess vom Dashboard getrennt
+  - **Klarstellung**: "Web Intelligence Batch" ist Background-Prozess
+  - **Verwirrung eliminiert**: User verstehen den Unterschied
+
+### 📊 Data Display
+- **Watchlist Spalten**: Alle enrichment Daten jetzt sichtbar
+  - **1T %**: Tages-Performance in Prozent
+  - **Opp/Torp**: Opportunity/Torpedo Scores (Smart Money)
+  - **Kurs**: Aktueller Aktienpreis mit Change
+  - **Web-Prio**: Prioritätseinstellungen funktionieren
+
 ## [5.3.10] - 2026-03-20 - Watchlist Performance Revolution
 
 ### ⚡ Performance Optimization

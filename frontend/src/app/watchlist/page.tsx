@@ -46,28 +46,27 @@ export default function WatchlistPage() {
 
   const loadWatchlist = useCallback(async (invalidate = false) => {
     if (invalidate) {
-      cacheInvalidate('watchlist:list');
       cacheInvalidate('watchlist:enriched');
       setRefreshing(true);
     }
 
     // Sofort gecachte Daten anzeigen (kein Ladescreen wenn Cache vorhanden)
-    const cached = cacheGet<WatchlistItem[]>("watchlist:list");
+    const cached = cacheGet<any>("watchlist:enriched");
     if (cached && !invalidate) {
-      setWatchlist(cached);
+      setWatchlist(cached.watchlist || []);
       setLoading(false);
       setFromCache(true);
-      setDataAge(cacheAge("watchlist:list"));
+      setDataAge(cacheAge("watchlist:enriched"));
       return; // Cache ist frisch genug — kein API-Call
     }
 
     if (!invalidate) setLoading(true);
 
     try {
-      const { data, fromCache: isCached } = await cachedFetch("watchlist:list", () => api.getWatchlist(), 60);
-      setWatchlist(data || []);
+      const { data, fromCache: isCached } = await cachedFetch("watchlist:enriched", () => api.getWatchlistEnriched(), 60);
+      setWatchlist(data?.watchlist || []);
       setFromCache(isCached);
-      setDataAge(cacheAge("watchlist:list"));
+      setDataAge(cacheAge("watchlist:enriched"));
     } catch (error) {
       console.error("Watchlist fetch error", error);
     } finally {
@@ -101,7 +100,6 @@ export default function WatchlistPage() {
       });
       // Erfolg
       closeModal();
-      cacheInvalidate("watchlist:list");
       cacheInvalidate("watchlist:enriched");
       // Optimistic: Sofort den neuen Ticker hinzufügen
       setWatchlist(prev => [...prev, {
@@ -143,7 +141,6 @@ export default function WatchlistPage() {
     if (!confirm(`${ticker} wirklich entfernen?`)) return;
     try {
       await api.removeTicker(ticker);
-      cacheInvalidate('watchlist:list');
       cacheInvalidate('watchlist:enriched');
       // Optimistic: Sofort den Ticker entfernen
       setWatchlist(prev => prev.filter(item => item.ticker !== ticker));
@@ -270,7 +267,14 @@ export default function WatchlistPage() {
                     ↗
                   </Link>
                 </td>
-                <td className="px-4 py-3 text-[var(--text-primary)]">{item.company_name || "-"}</td>
+                <td className="px-4 py-3 text-[var(--text-primary)]">
+                  <Link
+                    href={`/research/${item.ticker}`}
+                    className="text-[var(--accent-blue)] hover:underline"
+                  >
+                    {item.company_name || "-"}
+                  </Link>
+                </td>
                 <td className="px-4 py-3 text-[var(--text-secondary)]">{item.sector || "-"}</td>
                 <td className="px-4 py-3 text-right text-[var(--text-primary)]">
                   ${item.price?.toFixed(2) || "--"}

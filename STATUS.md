@@ -193,6 +193,20 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **Zugriff**: http://localhost:3000 für das Web-Dashboard, http://localhost:8000 für die API-Dokumentation.
 
 ## 🔄 Letzte Updates (20. März 2026)
+### Watchlist Data Display & Research UX
+- **Datenanzeige**: "1T % Opp Torp" jetzt sichtbar
+  - **Problem**: Frontend nutzte schnelle Route ohne enrichment Daten
+  - **Lösung**: Umstellung auf enriched API mit allen Daten
+  - **Result**: Kurse, Scores, Performance jetzt korrekt angezeigt
+- **Research UX**: Firmenname in Watchlist verlinkt
+  - **Problem**: Firmenname nicht klickbar → User verwirrt
+  - **Lösung**: Link zum Research Dashboard hinzugefügt
+  - **User Experience**: Ticker und Firmenname führen zur Research-Seite
+- **Loading State**: Bessere Kommunikation bei langsamer erster Anfrage
+  - **Research Dashboard**: Loading-Animation mit User Guidance
+  - **Cache-Effizienz**: Zweite Anfrage < 1 Sekunde
+  - **Web Intelligence**: Batch-Prozess vom Dashboard getrennt
+
 ### Watchlist Performance Revolution
 - **Ladezeit**: 2 Minuten 7 Sekunden → 2.3 Sekunden (55x schneller!)
   - **yfinance Cache**: 5-Minuten Cache für Ticker-Daten mit Redis

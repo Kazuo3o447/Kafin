@@ -19,6 +19,7 @@ import { useMemo } from "react";
 const navItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Watchlist", href: "/watchlist", icon: ListChecks },
+  { label: "Research", href: "/research", icon: Search },
   { label: "Earnings-Radar", href: "/earnings", icon: CalendarDays },
   { label: "Reports", href: "/reports", icon: FileText },
   { label: "News", href: "/news", icon: Newspaper },

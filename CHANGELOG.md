@@ -2,6 +2,20 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.3.1] - 2026-03-20 - Research Dashboard Frontend
+
+### 🚀 Neue Features
+- **/research/[ticker]**: Vollständiges Trading-Research-Dashboard
+  — Oberer Teil: Sofort-Überblick mit Preis, Bewertung (P/E, PEG,
+  EV/EBITDA, ROE, ROA, FCF Yield), Technicals, Options, Insider,
+  Earnings-Historie mit Quartals-Tabelle, News-Stichpunkte
+  — Unterer Teil: KI-Analyse auf Knopfdruck mit Timestamp + Refresh
+  — Earnings-Banner wenn Termin ≤ 7 Tage
+- **/research**: Landing Page mit Suchleiste und letzten 5 Suchen
+- **Sidebar**: Research-Eintrag hinzugefügt
+- **CommandPalette**: Details-Link zeigt jetzt auf /research/[ticker]
+- **Letzte 5 Suchen**: Persistent in localStorage
+
 ## [5.3.2] - 2026-03-20 - Research Routing
 
 ### 🔄 Routing-Updates

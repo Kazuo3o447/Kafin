@@ -91,22 +91,17 @@ export function Sidebar() {
           );
         })}
         
-        {/* Terminal - Opens in new window */}
-        <a
-          href="/terminal"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="relative flex items-center gap-3 rounded-xl
+        {/* Log Viewer Toggle */}
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent("open-log-viewer"))}
+          className="relative flex w-full items-center gap-3 rounded-xl
                      px-3 py-2.5 text-xs font-medium
                      transition-all duration-150
                      text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
         >
-          <Terminal
-            size={15}
-            className="text-[var(--text-muted)]"
-          />
-          <span className="flex-1 truncate">Terminal</span>
-        </a>
+          <Terminal size={15} className="text-[var(--text-muted)]" />
+          <span className="flex-1 text-left truncate">Terminal <span className="ml-2 text-[9px] border border-[var(--border)] px-1 rounded opacity-50">⌘J</span></span>
+        </button>
       </nav>
 
       {/* Schnellsuche */}

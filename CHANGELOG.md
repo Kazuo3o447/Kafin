@@ -2,6 +2,90 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.3.7] - 2026-03-20 - Terminal UI Overhaul
+
+### 🎨 UI/UX Verbesserungen
+- **Terminal → Log Viewer**: Vollbild-Terminal ersetzt durch dezenten Bottom-Drawer
+  - **Hotkey**: `Cmd+J` / `Ctrl+J` zum schnellen Öffnen/Schließen
+  - **Sidebar-Button**: "Terminal ⌘J" statt externem Link
+  - **Slide-Up Overlay**: 40vh Höhe, nicht mehr reißt aus Workflow
+  - **Auto-Polling**: Nur wenn geöffnet, spart Ressourcen
+- **Log Features**: Suchen, Filtern (Error/Warning/Info), Export, Clear
+- **Design**: Dark-Mode optimiert, CSS-Variablen, responsive
+
+### 🔧 Backend Fixes
+- **Clear-Log Bug**: Safe file truncate statt unsicherem Überschreiben
+  - `f.truncate(0)` statt `f.write("")`
+  - Buffer-Clear mit `_log_buffer.clear()`
+  - Error-Handling für File-Access
+
+### 🗂️ Code Cleanup
+- **Terminal Page**: `/terminal` Route komplett entfernt
+- **LogViewer Component**: Neue globale Komponente in `layout.tsx`
+- **TypeScript**: Sauber kompiliert, keine Fehler
+
+## [5.3.6] - 2026-03-20 - Trading Visualizations
+
+### 📊 Neue Visualisierungen
+- **52-Week Price Range Bar**: Horizontaler Balken zeigt Position zwischen Jahrestief/hoch
+  - Farbgradient: rot (nahe Tief) → gelb (Mitte) → grün (nahe Hoch)
+  - Prozentuale Position und Label ("Nahe 52W-Tief" etc.)
+- **Volume Profile Chart**: 20-Tage Volumen-Balkendiagramm mit Recharts
+  - Grüne Balken bei steigendem Kurs, rote bei fallendem
+  - Durchschnittslinie als Referenz
+  - Custom Tooltip mit Datum, Volumen, Kurs, Change%
+- **PEG Ratio Gauge**: Halbkreis-Gauge für Bewertung
+  - Grün (< 1.0 = günstig), Gelb (1.0-2.0 = fair), Rot (> 2.0 = teuer)
+  - SVG-basiert mit animiertem Arc
+
+### 🔧 Backend
+- **Neuer Endpoint**: `/api/data/volume-profile/{ticker}` für 20-Tage Volumen-Daten
+  - Liefert: date, volume, close, change_pct, color
+  - Berechnet Durchschnittsvolumen
+
+### 🎨 Frontend
+- **3 neue Komponenten** in `components/visualizations/`
+  - PriceRangeBar.tsx, VolumeProfile.tsx, PEGGauge.tsx
+- **Integration** im Research Dashboard
+  - 52W Range unter "Preis & Performance"
+  - PEG Gauge unter "Bewertung" (nur wenn PEG ≥ 0)
+  - Volume Profile unter "Volumen & Marktstruktur"
+
+## [5.3.5] - 2026-03-20 - Performance Optimizations & Bug Fixes
+
+### ⚡ Performance
+- **Cache-Optimierung**: Fundamentals-Cache von 1h auf 24h erhöht (weniger API-Calls)
+- **Ticker Resolver**: US-Ticker (ohne Punkt) überspringen Suffix-Testing → 80% schneller
+- **Datetime Import**: Aus Hot-Path-Schleife entfernt (Code-Qualität)
+
+### 🐛 Bugfixes
+- **OBV-Berechnung**: Korrigiert für Tage mit gleichem Schlusskurs (diff=0)
+- **MACD**: Mindestlängenprüfung (26 Tage) verhindert falsche Werte bei IPOs
+- **IV Plausibilität**: Grenze von 5.0 auf 100 erhöht für Meme-Stocks (GME, AMC)
+
+### 📊 Datenqualität
+- OBV-Trend jetzt mathematisch korrekt (0 bei gleichem Close statt -Volume)
+- MACD nur berechnet wenn genug History vorhanden
+- IV-Check erlaubt jetzt 500%+ Volatilität (Short-Squeeze-Szenarien)
+
+## [5.3.4] - 2026-03-20 - Extended Trading Indicators
+
+### 🚀 Neue Features
+- **ATR (14)**: Durchschnittliche Tagesbewegung in $ — für Stop-Loss
+- **MACD**: Signal + Histogram + bullish/bearish Cross-Erkennung
+- **OBV Trend**: 5-Tage Käuferdruck-Indikator (steigend/fallend)
+- **RVOL**: Relatives Volumen vs. 20-Tage-Durchschnitt
+- **SMA 20**: Kurzfristiger Trend-MA
+- **Free Float**: Handelbare Aktien
+- **Avg. Volumen**: 20-Tage Volumen-Durchschnitt
+- **Bid-Ask Spread**: Live-Spread aus yfinance
+- **Neuer Block**: "Volumen & Marktstruktur" im Dashboard
+
+### 🐛 Bugfixes
+- **IV 0.0%**: Plausibilitätsprüfung verhindert ungültige Werte
+- **Short Interest**: yfinance Fallback wenn Finnhub Premium fehlt
+- **News**: Finnhub-News direkt angezeigt wenn keine FinBERT-Bullets
+
 ## [5.3.3] - 2026-03-20 - Ticker Resolver
 
 ### 🚀 Neue Features

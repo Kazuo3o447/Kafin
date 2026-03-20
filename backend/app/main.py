@@ -770,6 +770,56 @@ async def api_quick_snapshot(ticker: str):
         return {"ticker": ticker, "error": str(e), "price": None}
 
 
+@data_router.get("/volume-profile/{ticker}")
+async def api_volume_profile(ticker: str):
+    """
+    Holt 20-Tage Volumen-Profil für Visualisierung.
+    Returns: [{date, volume, close, change_pct, color}, ...]
+    """
+    ticker = ticker.upper().strip()
+    
+    try:
+        import yfinance as yf
+        import asyncio
+        import pandas as pd
+        
+        def _fetch_volume_data():
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period="25d")
+            
+            if hist.empty or len(hist) < 2:
+                return []
+            
+            # Berechne tägliche Änderung
+            hist["change_pct"] = hist["Close"].pct_change() * 100
+            
+            result = []
+            for idx, row in hist.iterrows():
+                result.append({
+                    "date": idx.strftime("%Y-%m-%d"),
+                    "volume": int(row["Volume"]),
+                    "close": round(float(row["Close"]), 2),
+                    "change_pct": round(float(row["change_pct"]), 2) if not pd.isna(row["change_pct"]) else 0,
+                    "color": "green" if row["change_pct"] > 0 else "red" if row["change_pct"] < 0 else "gray"
+                })
+            
+            return result[-20:]  # Letzte 20 Tage
+        
+        data = await asyncio.to_thread(_fetch_volume_data)
+        
+        # Durchschnittsvolumen berechnen
+        avg_volume = sum(d["volume"] for d in data) / len(data) if data else 0
+        
+        return {
+            "ticker": ticker,
+            "data": data,
+            "avg_volume": int(avg_volume),
+        }
+    except Exception as e:
+        logger.error(f"Volume Profile Fehler für {ticker}: {e}")
+        return {"ticker": ticker, "data": [], "avg_volume": 0}
+
+
 @data_router.get("/research/{ticker}")
 async def api_research_dashboard(
     ticker: str,
@@ -834,6 +884,7 @@ async def api_research_dashboard(
     from backend.app.memory.short_term import get_bullet_points
     from backend.app.memory.watchlist import get_watchlist
     from datetime import datetime, timedelta
+    import datetime as _dt  # For news fallback timestamp conversion
 
     now = datetime.now()
     month_ago = (now - timedelta(days=30)).strftime("%Y-%m-%d")
@@ -1081,6 +1132,17 @@ async def api_research_dashboard(
         days_to_cover      = getattr(short_int, "days_to_cover", None)
         squeeze_risk       = getattr(short_int, "squeeze_risk", None)
 
+    # yfinance Fallback wenn Finnhub nichts liefert
+    if not short_interest_pct:
+        try:
+            from backend.app.data.yfinance_data import get_short_interest_yf
+            yf_si = await get_short_interest_yf(effective_ticker)
+            if yf_si:
+                short_interest_pct = yf_si.get("short_interest_percent")
+                days_to_cover      = yf_si.get("short_ratio") or days_to_cover
+        except Exception:
+            pass
+
     insider_buys = 0
     insider_sells = 0
     insider_buy_value = 0.0
@@ -1095,14 +1157,38 @@ async def api_research_dashboard(
 
     # ── News-Stichpunkte (max 10 neueste) ─────────────────────
     news_bullets = []
-    for b in (news_mem or [])[:10]:
+
+    # Primär: FinBERT-verarbeitete Bullets aus Supabase (Watchlist-Ticker)
+    for b in (news_mem or [])[:8]:
         news_bullets.append({
             "text": b.get("bullet_text", "") or b.get("insight", ""),
             "sentiment": b.get("sentiment_score", 0),
             "is_material": b.get("is_material", False),
-            "category": b.get("category", ""),
+            "category": b.get("category", "News"),
             "date": b.get("date", "") or b.get("created_at", ""),
+            "source": "finbert",
         })
+
+    # Fallback/Ergänzung: Rohe Finnhub-News wenn < 5 Bullets vorhanden
+    if len(news_bullets) < 5 and news_items:
+        for item in (news_items or [])[:8]:
+            headline = item.get("headline", "") if isinstance(item, dict) else ""
+            if not headline:
+                continue
+            published = item.get("datetime", 0)
+            date_str = (
+                _dt.datetime.fromtimestamp(published).strftime("%Y-%m-%d")
+                if published else ""
+            )
+            news_bullets.append({
+                "text": headline,
+                "sentiment": 0,
+                "is_material": False,
+                "category": item.get("category", "News"),
+                "date": date_str,
+                "source": "finnhub",
+                "url": item.get("url", ""),
+            })
 
     # ── Price Target ───────────────────────────────────────────
     price_target_high = None
@@ -1130,6 +1216,18 @@ async def api_research_dashboard(
     support = None
     resistance = None
     distance_52w_high = None
+    sma_20 = None
+    atr_14 = None
+    macd = None
+    macd_signal_val = None
+    macd_histogram = None
+    macd_bullish = None
+    obv = None
+    obv_trend = None
+    rvol = None
+    float_shares = None
+    avg_volume = None
+    bid_ask_spread = None
 
     if tech:
         rsi          = getattr(tech, "rsi_14", None)
@@ -1143,6 +1241,18 @@ async def api_research_dashboard(
         support     = getattr(tech, "support_level", None)
         resistance  = getattr(tech, "resistance_level", None)
         distance_52w_high = getattr(tech, "distance_to_52w_high_percent", None)
+        sma_20            = getattr(tech, "sma_20", None)
+        atr_14            = getattr(tech, "atr_14", None)
+        macd              = getattr(tech, "macd", None)
+        macd_signal_val   = getattr(tech, "macd_signal", None)
+        macd_histogram    = getattr(tech, "macd_histogram", None)
+        macd_bullish      = getattr(tech, "macd_bullish", None)
+        obv               = getattr(tech, "obv", None)
+        obv_trend         = getattr(tech, "obv_trend", None)
+        rvol              = getattr(tech, "rvol", None)
+        float_shares      = getattr(tech, "float_shares", None)
+        avg_volume        = getattr(tech, "avg_volume", None)
+        bid_ask_spread    = getattr(tech, "bid_ask_spread", None)
 
     # ── Letzter Audit aus Supabase ─────────────────────────────
     last_audit = None
@@ -1226,6 +1336,17 @@ async def api_research_dashboard(
         "support": support,
         "resistance": resistance,
         "distance_52w_high_pct": distance_52w_high,
+        "sma_20": sma_20,
+        "atr_14": atr_14,
+        "macd": macd,
+        "macd_signal": macd_signal_val,
+        "macd_histogram": macd_histogram,
+        "macd_bullish": macd_bullish,
+        "obv_trend": obv_trend,
+        "rvol": rvol,
+        "float_shares": float_shares,
+        "avg_volume": avg_volume,
+        "bid_ask_spread": bid_ask_spread,
 
         # Options
         "iv_atm": round(getattr(options, "implied_volatility_atm", 0) * 100, 1) if options else None,
@@ -2773,9 +2894,13 @@ async def export_logs():
 
 @app.delete("/api/logs/file")
 async def clear_logs():
-    from backend.app.logger import LOG_FILE
-    with open(LOG_FILE, "w", encoding="utf-8") as f:
-        f.write("")
+    from backend.app.logger import LOG_FILE, _log_buffer
+    _log_buffer.clear()
+    try:
+        with open(LOG_FILE, "r+", encoding="utf-8") as f:
+            f.truncate(0)
+    except Exception as e:
+        logger.error(f"Clear Logs Error: {e}")
     return {"status": "cleared"}
 
 class ExternalLog(BaseModel):

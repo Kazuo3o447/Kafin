@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
 import { CommandPaletteWrapper } from "@/components/CommandPaletteWrapper";
+import { LogViewer } from "@/components/LogViewer";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -26,6 +27,7 @@ export default function RootLayout({
           </main>
         </div>
       <CommandPaletteWrapper />
+      <LogViewer />
     </body>
   </html>
   );

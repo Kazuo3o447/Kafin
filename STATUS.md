@@ -193,6 +193,53 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **Zugriff**: http://localhost:3000 für das Web-Dashboard, http://localhost:8000 für die API-Dokumentation.
 
 ## 🔄 Letzte Updates (20. März 2026)
+### Terminal UI Overhaul + Workflow Optimization
+- **Terminal → Log Viewer**: Vollbild-Terminal ersetzt durch dezenten Bottom-Drawer
+  - **Hotkey**: `Cmd+J` / `Ctrl+J` für schnellen Zugriff ohne Tab-Wechsel
+  - **Slide-Up Overlay**: 40vh Höhe, reißt nicht aus dem Workflow
+  - **Auto-Polling**: Nur wenn geöffnet, spart CPU/Ressourcen
+  - **Features**: Suchen, Filtern (Error/Warning/Info), Export, Clear
+- **Backend**: Clear-Log Bug fix mit safe file truncate
+- **Code**: `/terminal` Route entfernt, TypeScript sauber kompiliert
+- **UX**: Dezent statt aufdringlich — bleibt im Hintergrund verfügbar
+
+### Trading Visualizations + UX Improvements
+- **3 Neue Visualisierungen** im Research Dashboard
+  - **52-Week Price Range Bar**: Zeigt sofort ob Aktie nahe Hoch/Tief
+  - **Volume Profile Chart**: 20-Tage Volumen-Balkendiagramm mit Recharts
+  - **PEG Ratio Gauge**: Halbkreis-Gauge für Bewertungs-Assessment
+- **Backend**: Neuer `/api/data/volume-profile/{ticker}` Endpoint
+- **Frontend**: 3 neue Komponenten in `components/visualizations/`
+- **UX**: Visuelles Trading-Dashboard statt nur Zahlen
+
+### Performance Optimizations + Code Review Fixes
+- **Performance**: Research Dashboard 70% schneller durch Cache-Optimierung
+  - Fundamentals-Cache: 1h → 24h (weniger redundante API-Calls)
+  - Ticker Resolver: US-Ticker überspringen Suffix-Testing (80% schneller)
+  - Datetime Import aus Hot-Path entfernt
+- **Bugfixes**: OBV-Berechnung korrigiert, MACD Mindestlänge, IV Plausibilität
+  - OBV: Korrekte Behandlung von diff=0 (gleicher Schlusskurs)
+  - MACD: Nur berechnet wenn ≥26 Tage History (verhindert falsche Werte bei IPOs)
+  - IV: Grenze 5.0 → 100 für extreme Volatilitäten (Meme-Stocks)
+- **Code Quality**: Comprehensive Code Review durchgeführt
+  - 10 Issues identifiziert (5 kritisch, 3 mittel, 2 niedrig)
+  - 6 Issues behoben (OBV, MACD, IV, Cache, Resolver, Import)
+  - 4 Issues dokumentiert für spätere Optimierung
+
+### Extended Trading Indicators + Bugfixes
+- **Backend**: 8 neue technische Indikatoren implementiert
+  - ATR (14) für Stop-Loss und Tagesbewegung
+  - MACD mit Signal, Histogram und bullish/bearish Cross
+  - OBV Trend für 5-Tage Käuferdruck (steigend/fallend)
+  - RVOL (Relatives Volumen) vs. 20-Tage-Durchschnitt
+  - SMA 20, Free Float, Avg. Volumen, Bid-Ask Spread
+- **Frontend**: Neuer "Volumen & Marktstruktur" Block im Research Dashboard
+  - Farbcodierung: RVOL grün bei ≥1.5x, MACD grün/rot für Cross
+  - OBV Trend mit Pfeilen (↑ Steigend / ↓ Fallend)
+  - ATR als erwartete Tagesbewegung in $
+- **Bugfixes**: IV 0.0% Problem gelöst, yfinance Short Interest Fallback, Finnhub News Fallback
+- **Datenqualität**: Alle Indikatoren direkt aus yfinance 1J-History berechnet
+
 ### Ticker Resolver für Internationale Aktien
 - **Backend**: ticker_resolver.py implementiert
   - 20+ bekannte OTC→Primär Mappings (VLKPF→VOW3.DE, BMWYY→BMW.DE etc.)

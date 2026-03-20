@@ -112,6 +112,7 @@ docker-compose up -d kafin-frontend
 - **Post-Earnings Review**: Mo-Fr 22:00 Uhr
 
 ## 🐛 Letzte Fixes (20. März 2026)
+- **Bugfix**: Report-Generierung schlug aufgrund von Timeouts (DeepSeek > 120s) und fehlenden Supabase-Spalten (`report_text`) fehl. Next.js Proxy und `httpx` Timeouts auf 300s (5min) angehoben und Insert-Schema für `audit_reports` korrigiert.
 - **Bugfix**: 502 Bad Gateway / Timeout bei der Audit-Report Generierung behoben. Docker-Netzwerk-Routing repariert, indem `INTERNAL_API_URL` im Frontend-Container explizit auf `http://kafin-backend:8000` gesetzt wurde.
 - **Bugfix**: httpx.ReadTimeout in Finnhub Earnings-Kalender API behoben (Timeout auf 30s erhöht)
 - **Bugfix**: Dead `get_social_sentiment` Import aus Report-Generator entfernt

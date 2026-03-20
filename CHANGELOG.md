@@ -2,6 +2,14 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.2.10] - 2026-03-20 - DeepSeek Timeout & Supabase Schema Fixes
+
+### 🐛 Bugfixes
+- **fix(reports)**: Increased DeepSeek API timeout from 120s to 300s to prevent `httpx.ReadTimeout` during complex reasoning tasks.
+- **fix(reports)**: Increased Next.js `proxyTimeout` to 300s in `next.config.ts` to prevent `ECONNRESET` (socket hang up) when DeepSeek takes longer than 2 minutes.
+- **fix(reports)**: Fixed Supabase 400 Bad Request during `audit_reports` insertion by removing non-existent columns (`report_type`, `report_text`) and adding required columns (`report_date`, `earnings_date`).
+- **fix(docker)**: Resolved 502 Bad Gateway error in frontend by explicitly setting `INTERNAL_API_URL=http://kafin-backend:8000` in `docker-compose.yml` to override local `.env` values.
+
 ## [5.2.9] - 2026-03-19 - Fix Report Generation & Enhanced Log System
 
 ### 🐛 Bugfixes

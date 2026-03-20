@@ -111,6 +111,12 @@ docker-compose up -d kafin-frontend
 - **Sonntags-Report**: Sonntag 19:00 Uhr
 - **Post-Earnings Review**: Mo-Fr 22:00 Uhr
 
+## 🐛 Letzte Fixes (20. März 2026)
+- **Bugfix**: 502 Bad Gateway / Timeout bei der Audit-Report Generierung behoben. Docker-Netzwerk-Routing repariert, indem `INTERNAL_API_URL` im Frontend-Container explizit auf `http://kafin-backend:8000` gesetzt wurde.
+- **Bugfix**: httpx.ReadTimeout in Finnhub Earnings-Kalender API behoben (Timeout auf 30s erhöht)
+- **Bugfix**: Dead `get_social_sentiment` Import aus Report-Generator entfernt
+- **Feature**: Enhanced Log-System mit Error/Warning Filtern und Live-Zählern
+
 ## 🐛 Letzte Fixes (18. März 2026)
 - Backend: Watchlist-Endpunkte mit optionalen Feldern robust gemacht
 - Frontend: Dark Mode Design-System implementiert

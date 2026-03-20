@@ -2,6 +2,15 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.3.2] - 2026-03-20 - Research Routing
+
+### 🔄 Routing-Updates
+- **Watchlist**: Ticker-Name → /research/[ticker] (↗ Link zur alten Detailseite bleibt)
+- **Dashboard Heatmap**: Ticker → /research/[ticker]
+- **Earnings-Radar**: Ticker → /research/[ticker]
+- **CommandPalette**: Details → /research/[ticker]
+- **Alte Ticker-Seite**: "Research öffnen" Button ergänzt
+
 ## [5.3.0] - 2026-03-20 - Research Dashboard API
 
 ### 🚀 Neue Features

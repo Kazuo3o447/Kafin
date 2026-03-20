@@ -367,7 +367,7 @@ function WatchlistHeatmap({ items, sparklines, concentrationWarning }: {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">{item.sector || "Unknown"}</p>
-                  <Link href={`/watchlist/${item.ticker}`} className="text-2xl font-semibold text-[var(--text-primary)] hover:underline">
+                  <Link href={`/research/${item.ticker}`} className="text-2xl font-semibold text-[var(--text-primary)] hover:underline">
                     {item.ticker}
                   </Link>
                   <p className="text-sm text-[var(--text-secondary)]">{item.company_name || ""}</p>

@@ -238,10 +238,17 @@ export default function WatchlistPage() {
               <tr key={item.ticker} className="border-b border-[var(--border)] hover:bg-[var(--bg-tertiary)]">
                 <td className="px-4 py-3">
                   <Link
-                    href={`/watchlist/${item.ticker}`}
+                    href={`/research/${item.ticker}`}
                     className="font-semibold text-[var(--accent-blue)] hover:underline"
                   >
                     {item.ticker}
+                  </Link>
+                  <Link
+                    href={`/watchlist/${item.ticker}`}
+                    className="ml-2 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                    title="News & Track Record"
+                  >
+                    ↗
                   </Link>
                 </td>
                 <td className="px-4 py-3 text-[var(--text-primary)]">{item.company_name || "-"}</td>

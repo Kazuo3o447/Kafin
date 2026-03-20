@@ -285,7 +285,7 @@ export function CommandPalette() {
                   )}
                   
                   <a 
-                    href={`/watchlist/${snapshot.ticker}`} 
+                    href={`/research/${snapshot.ticker}`} 
                     target="_blank" 
                     rel="noreferrer"
                     className="flex-none flex items-center justify-center gap-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] font-semibold px-4 py-2.5 rounded-lg hover:bg-[var(--border)] transition"

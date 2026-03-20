@@ -200,6 +200,13 @@ export default async function TickerDetailPage({ params }: TickerDetailProps) {
           <ArrowLeft size={16} />
           Zurück zur Watchlist
         </Link>
+        <Link
+          href={`/research/${ticker}`}
+          className="flex items-center gap-2 rounded-lg bg-[var(--accent-blue)] px-3 py-1.5
+                     text-xs font-semibold text-white hover:opacity-90"
+        >
+          Research öffnen →
+        </Link>
       </div>
 
       <div>

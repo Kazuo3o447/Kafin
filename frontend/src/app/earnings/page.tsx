@@ -351,7 +351,7 @@ export default function EarningsRadarPage() {
                                      <button onClick={() => handleAddToWatchlist(entry.ticker)} className="hover:text-[var(--text-primary)] transition">+ Zur Watchlist</button>
                                   )}
                                   {isWl && <span className="text-emerald-400">✓ Auf Watchlist</span>}
-                                  <Link href={`/watchlist/${entry.ticker}`} target="_blank" className="flex items-center gap-1 hover:text-[var(--text-primary)] transition ml-2">
+                                  <Link href={`/research/${entry.ticker}`} target="_blank" className="flex items-center gap-1 hover:text-[var(--text-primary)] transition ml-2">
                                     Detailseite <ExternalLink size={12}/>
                                   </Link>
                                 </div>

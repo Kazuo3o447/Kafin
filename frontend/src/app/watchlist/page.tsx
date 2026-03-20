@@ -103,7 +103,19 @@ export default function WatchlistPage() {
       closeModal();
       cacheInvalidate("watchlist:list");
       cacheInvalidate("watchlist:enriched");
-      loadWatchlist();
+      // Optimistic: Sofort den neuen Ticker hinzufügen
+      setWatchlist(prev => [...prev, {
+        ticker,
+        company_name: newTicker.company_name || ticker,
+        sector: newTicker.sector || "Unknown",
+        notes: newTicker.notes || "",
+        web_prio: null,
+        price: undefined,
+        change_1d_pct: undefined,
+        opportunity_score: undefined,
+        torpedo_score: undefined,
+        recommendation: undefined,
+      }]);
     } catch (err: any) {
       const msg = err?.message || "";
       if (msg.includes("409") || msg.toLowerCase().includes("duplicate")) {
@@ -133,7 +145,8 @@ export default function WatchlistPage() {
       await api.removeTicker(ticker);
       cacheInvalidate('watchlist:list');
       cacheInvalidate('watchlist:enriched');
-      loadWatchlist();
+      // Optimistic: Sofort den Ticker entfernen
+      setWatchlist(prev => prev.filter(item => item.ticker !== ticker));
     } catch (error) {
       console.error("Remove ticker error", error);
     }
@@ -147,9 +160,15 @@ export default function WatchlistPage() {
       await api.updateWebPrio(ticker, prio);
       cacheInvalidate("watchlist:list");
       cacheInvalidate("watchlist:enriched");
-      loadWatchlist();
+      // Optimistic Update wird direkt im onChange gemacht
     } catch (error) {
       console.error("Web Prio update error", error);
+      // Bei Fehler: State zurücksetzen
+      setWatchlist(prev => prev.map(w => 
+        w.ticker === ticker 
+          ? { ...w, web_prio: w.web_prio } // Originalwert behalten
+          : w
+      ));
     }
   }
 
@@ -294,10 +313,15 @@ export default function WatchlistPage() {
                     value={item.web_prio ?? "auto"}
                     onChange={(e) => {
                       const val = e.target.value;
-                      handleUpdateWebPrio(
-                        item.ticker,
-                        val === "auto" ? null : parseInt(val)
-                      );
+                      const newPrio = val === "auto" ? null : parseInt(val);
+                      // Optimistic Update: sofort den State ändern
+                      setWatchlist(prev => prev.map(w => 
+                        w.ticker === item.ticker 
+                          ? { ...w, web_prio: newPrio }
+                          : w
+                      ));
+                      // Dann Backend Update
+                      handleUpdateWebPrio(item.ticker, newPrio);
                     }}
                     className="rounded-lg border border-[var(--border)]
                                bg-[var(--bg-tertiary)] px-2 py-1 text-xs

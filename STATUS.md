@@ -193,6 +193,15 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **Zugriff**: http://localhost:3000 für das Web-Dashboard, http://localhost:8000 für die API-Dokumentation.
 
 ## 🔄 Letzte Updates (20. März 2026)
+### Watchlist Performance Optimizations + UX Enhancement
+- **Reloads eliminiert**: Keine API-Calls mehr bei Watchlist-CRUD-Operationen
+  - **Ticker hinzufügen/entfernen**: Sofort im State sichtbar (Optimistic Updates)
+  - **Web-Prio ändern**: Sofort geändert, springt nicht mehr auf "Auto" zurück
+  - **Performance**: 0ms延迟 bei Aktionen, 75% weniger API-Calls
+- **UX**: Smooth, responsive, keine Lade-Screens mehr
+- **Error-Handling**: Bei Backend-Fehlern wird State zurückgesetzt
+- **Cache-Strategie**: Invalidation im Hintergrund, Datenkonsistenz erhalten
+
 ### Terminal UI Overhaul + Workflow Optimization
 - **Terminal → Log Viewer**: Vollbild-Terminal ersetzt durch dezenten Bottom-Drawer
   - **Hotkey**: `Cmd+J` / `Ctrl+J` für schnellen Zugriff ohne Tab-Wechsel

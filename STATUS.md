@@ -193,6 +193,34 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **Zugriff**: http://localhost:3000 für das Web-Dashboard, http://localhost:8000 für die API-Dokumentation.
 
 ## 🔄 Letzte Updates (20. März 2026)
+### Ticker Resolver für Internationale Aktien
+- **Backend**: ticker_resolver.py implementiert
+  - 20+ bekannte OTC→Primär Mappings (VLKPF→VOW3.DE, BMWYY→BMW.DE etc.)
+  - Automatisches Suffix-Testing (.DE, .F, .L, .PA, .AS, .MI, .SW, .TO, .AX, .HK, .T)
+  - Wechsel nur wenn deutlich mehr Felder verfügbar (>2 Felder Unterschied)
+  - Data Quality Gate: "good" | "partial" | "poor" pro Ticker
+  - KI-Analyse geblockt wenn < 3 Kernfelder verfügbar
+- **Frontend**: Resolution-Banner, Datenqualitäts-Warnung, Override-Input
+  - Automatische Auflösung wird mit amber Banner angezeigt
+  - Bei "poor" Datenqualität: roter Banner + Alternativen Ticker eingeben
+  - KI-Analyse Button deaktiviert mit Begründung bei unzureichenden Daten
+- **API**: override_ticker Parameter für manuelle Korrektur
+- **UX**: Internationale Ticker jetzt automatisch auflösbar (z.B. VLKPF→VOW3.DE)
+
+### Research Dashboard API & Frontend Complete
+- **Backend**: `/api/data/research/{ticker}` aggregierter Endpoint implementiert
+  - Alle Daten in einem Call: Preis, Bewertung (P/E, PEG, EV/EBITDA, ROE, ROA, FCF Yield)
+  - Technicals, Options, Insider, Earnings-Historie, News-Bullets, letzter Audit
+  - PEG Ratio aus FMP key-metrics-ttm, Expected Move Berechnung
+  - 10min Cache mit force_refresh=true Override
+- **Frontend**: `/research/[ticker]` vollständiges Trading-Research-Dashboard
+  - Oberer Teil: Sofort-Überblick mit allen Kennzahlen, Earnings-Banner
+  - Unterer Teil: KI-Analyse auf Knopfdruck mit Timestamp + Refresh
+  - `/research` Landing Page mit Suchleiste und letzten 5 Suchen
+  - Sidebar Research-Eintrag, CommandPalette Integration
+- **Code Quality**: Alle kritischen Issues aus Code Review behoben (React State, Cache Consistency, PEG Logic)
+- **Deployment**: Docker Build erfolgreich, Frontend-Container neu gestartet
+
 ### Command Palette Mini-Dashboard Enhancement
 - **Backend**: `/quick-snapshot/{ticker}` Endpoint erweitert - lädt jetzt den letzten AI Audit aus Supabase (Datum, Empfehlung, Opportunity/Torpedo Scores)
 - **Frontend**: CommandPalette.tsx komplett überarbeitet mit professionellem Mini-Dashboard Layout

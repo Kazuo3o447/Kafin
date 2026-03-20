@@ -82,11 +82,18 @@ export const api = {
   getChartOverlays: (ticker: string) => fetchAPI(`/api/data/chart-overlays/${ticker}`),
   getQuickSnapshot: (ticker: string) => fetchAPI(`/api/data/quick-snapshot/${ticker.toUpperCase()}`),
   getEarningsRadar: (days = 14) => fetchAPI(`/api/data/earnings-radar?days=${days}`),
-  getResearchDashboard: (ticker: string, forceRefresh = false) =>
-    fetchAPI(
-      `/api/data/research/${ticker.toUpperCase()}` +
-      (forceRefresh ? "?force_refresh=true" : "")
-    ),
+  getResearchDashboard: (
+    ticker: string,
+    forceRefresh = false,
+    overrideTicker?: string,
+  ) => {
+    let url = `/api/data/research/${ticker.toUpperCase()}`;
+    const params = new URLSearchParams();
+    if (forceRefresh) params.set("force_refresh", "true");
+    if (overrideTicker) params.set("override_ticker", overrideTicker);
+    const qs = params.toString();
+    return fetchAPI(qs ? `${url}?${qs}` : url);
+  },
 
   // Google News Search Terms
   getSearchTerms: () => fetchAPI("/api/google-news/search-terms"),

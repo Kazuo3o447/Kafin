@@ -2,6 +2,30 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.3.3] - 2026-03-20 - Ticker Resolver
+
+### 🚀 Neue Features
+- **ticker_resolver.py**: Automatische Erkennung besserer Börsensuffixe
+  — 20+ bekannte OTC→Primär Mappings (VLKPF→VOW3.DE, BMWYY→BMW.DE etc.)
+  — Automatisches Suffix-Testing (.DE, .F, .L, .PA, .AS, .MI, .SW...)
+  — Wechselt nur wenn deutlich mehr Felder verfügbar (>2 Felder Unterschied)
+- **override_ticker**: Manueller Override via URL-Parameter
+- **data_quality**: "good" | "partial" | "poor" pro Ticker
+- **data_sufficient_for_ai**: KI-Analyse geblockt wenn < 3 Kernfelder
+- **Frontend**: Resolution-Banner, Datenqualitäts-Warnung,
+  Override-Input-Feld, gesperrter KI-Button mit Begründung
+
+## [5.3.0] - 2026-03-20 - Research Dashboard API
+
+### 🚀 Neue Features
+- **GET /api/data/research/{ticker}**: Aggregierter Research-Endpoint
+  — Alle Daten in einem Call: Preis, Bewertung (P/E, PEG, EV/EBITDA,
+  ROE, ROA, FCF Yield), Technicals, Options, Insider, Earnings-Historie,
+  News-Bullets, letzter Audit, Expected Move
+- **PEG Ratio**: Aus FMP key-metrics-ttm (priceEarningsToGrowthRatioTTM)
+- **Cache**: 10 Minuten Gesamtcache, force_refresh=true für sofortiges Update
+- **api.ts**: getResearchDashboard() Method
+
 ## [5.3.1] - 2026-03-20 - Research Dashboard Frontend
 
 ### 🚀 Neue Features

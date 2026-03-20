@@ -10,11 +10,19 @@ import {
   Clock, BarChart2, Activity, DollarSign, Users,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { cacheGet, cacheSet } from "@/lib/clientCache";
+import { cacheGet, cacheSet, cacheInvalidate } from "@/lib/clientCache";
 
 // ── Typen ────────────────────────────────────────────────────
 type ResearchData = {
   ticker: string;
+  resolved_ticker?: string;
+  was_resolved?: boolean;
+  resolution_note?: string;
+  data_quality?: "good" | "partial" | "poor" | "unknown";
+  available_fields?: number;
+  core_fields_available?: number;
+  data_sufficient_for_ai?: boolean;
+  ai_blocked_reason?: string;
   company_name: string;
   sector: string | null;
   industry: string | null;
@@ -169,6 +177,8 @@ export default function ResearchDashboard() {
 
   const [onWatchlist, setOnWatchlist] = useState(false);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
+  const [overrideTicker, setOverrideTicker] = useState("");
+  const [showOverrideInput, setShowOverrideInput] = useState(false);
 
   // Letzte 5 Suchen speichern
   useEffect(() => {
@@ -182,6 +192,10 @@ export default function ResearchDashboard() {
   }, [tickerUpper]);
 
   const loadData = useCallback(async (forceRefresh = false) => {
+    if (forceRefresh) {
+      cacheInvalidate(`research:${tickerUpper}`);
+    }
+    
     if (!forceRefresh) {
       const cached = cacheGet<ResearchData>(`research:${tickerUpper}`);
       if (cached) {
@@ -201,7 +215,11 @@ export default function ResearchDashboard() {
     setError(null);
 
     try {
-      const result = await api.getResearchDashboard(tickerUpper, forceRefresh);
+      const result = await api.getResearchDashboard(
+        tickerUpper,
+        forceRefresh,
+        overrideTicker || undefined,
+      );
       setData(result);
       setOnWatchlist(result.is_watchlist);
       cacheSet(`research:${tickerUpper}`, result, 600);
@@ -227,8 +245,20 @@ export default function ResearchDashboard() {
       const text = result.report || result.message || "Report generiert.";
       setAiReport(text);
       setAiDate(new Date().toISOString());
-      // Cache invalidieren damit frischer Report geladen wird
-      cacheSet(`research:${tickerUpper}`, { ...data!, last_audit: { ...data!.last_audit!, report_text: text, date: new Date().toISOString() } }, 600);
+      // Cache sicher aktualisieren
+      if (data) {
+        const updatedData = {
+          ...data,
+          last_audit: {
+            date: new Date().toISOString(),
+            recommendation: data.last_audit?.recommendation || "",
+            opportunity_score: data.last_audit?.opportunity_score || 0,
+            torpedo_score: data.last_audit?.torpedo_score || 0,
+            report_text: text
+          }
+        };
+        cacheSet(`research:${tickerUpper}`, updatedData, 600);
+      }
     } catch {
       setAiReport("Report-Generierung fehlgeschlagen. Bitte erneut versuchen.");
     } finally {
@@ -279,6 +309,75 @@ export default function ResearchDashboard() {
       )}
     </div>
   ) : null;
+
+  {/* ── Resolution-Banner ────────────────────────────────── */}
+  {data?.was_resolved && data.resolution_note && (
+    <div className="rounded-xl border border-[var(--accent-amber)]/40
+                    bg-[var(--accent-amber)]/10 px-4 py-3
+                    flex items-center gap-3">
+      <span className="text-[var(--accent-amber)] text-sm">⚡</span>
+      <span className="text-sm text-[var(--accent-amber)]">
+        <strong>Automatisch aufgelöst:</strong> {data.resolution_note}
+      </span>
+    </div>
+  )}
+
+  {/* ── Datenqualitäts-Warnung ────────────────────────────── */}
+  {data && data.data_quality === "poor" && (
+    <div className="rounded-xl border border-[var(--accent-red)]/40
+                    bg-[var(--accent-red)]/10 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <AlertTriangle size={16} className="text-[var(--accent-red)]" />
+        <span className="text-sm font-semibold text-[var(--accent-red)]">
+          Begrenzte Datenverfügbarkeit ({data.available_fields ?? 0} Kernfelder)
+        </span>
+      </div>
+      <p className="text-xs text-[var(--text-secondary)]">
+        {data.resolution_note ||
+          "Für diesen Ticker sind kaum Fundamentaldaten verfügbar. " +
+          "Versuche den primären Börsenticker."}
+      </p>
+
+      {/* Override-Input */}
+      {!showOverrideInput ? (
+        <button
+          onClick={() => setShowOverrideInput(true)}
+          className="text-xs text-[var(--accent-blue)] hover:underline"
+        >
+          + Alternativen Ticker eingeben
+        </button>
+      ) : (
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={overrideTicker}
+            onChange={e => setOverrideTicker(e.target.value.toUpperCase())}
+            placeholder="z.B. VOW3.DE"
+            className="flex-1 rounded-lg border border-[var(--border)]
+                       bg-[var(--bg-secondary)] px-3 py-1.5 text-sm
+                       font-mono text-[var(--text-primary)]
+                       focus:border-[var(--accent-blue)] outline-none"
+          />
+          <button
+            onClick={() => { setShowOverrideInput(false); loadData(true); }}
+            disabled={!overrideTicker.trim()}
+            className="rounded-lg bg-[var(--accent-blue)] px-3 py-1.5
+                       text-xs font-semibold text-white
+                       hover:opacity-90 disabled:opacity-40"
+          >
+            Laden
+          </button>
+          <button
+            onClick={() => { setOverrideTicker(""); setShowOverrideInput(false); }}
+            className="rounded-lg border border-[var(--border)]
+                       px-3 py-1.5 text-xs text-[var(--text-muted)]"
+          >
+            Abbrechen
+          </button>
+        </div>
+      )}
+    </div>
+  )}
 
   // ── Loading Skeleton ──────────────────────────────────────
   if (loading) return (
@@ -399,13 +498,14 @@ export default function ResearchDashboard() {
           <StatCell label="PEG Ratio" value={
             <span className={
               data.peg_ratio == null ? "text-[var(--text-muted)]"
+              : data.peg_ratio < 0 ? "text-gray-400"  // Negative earnings
               : data.peg_ratio < 1 ? "text-[var(--accent-green)]"
               : data.peg_ratio > 2 ? "text-[var(--accent-red)]"
               : "text-[var(--accent-amber)]"
             }>
               {fmt.num(data.peg_ratio)}
             </span>
-          } sub={data.peg_ratio != null ? (data.peg_ratio < 1 ? "günstig" : data.peg_ratio > 2 ? "teuer" : "fair") : undefined} />
+          } sub={data.peg_ratio != null ? (data.peg_ratio < 0 ? "negative earnings" : data.peg_ratio < 1 ? "günstig" : data.peg_ratio > 2 ? "teuer" : "fair") : undefined} />
           <StatCell label="P/S Ratio" value={fmt.num(data.ps_ratio)} />
           <StatCell label="EV/EBITDA" value={fmt.num(data.ev_ebitda)} />
           <StatCell label="ROE" value={data.roe != null ? `${data.roe.toFixed(1)}%` : "—"} />
@@ -587,10 +687,15 @@ export default function ResearchDashboard() {
             )}
             <button
               onClick={handleAuditReport}
-              disabled={aiLoading}
+              disabled={aiLoading || data?.data_sufficient_for_ai === false}
+              title={data?.data_sufficient_for_ai === false
+                ? data?.ai_blocked_reason
+                : undefined}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm
                          font-semibold transition-all disabled:opacity-50 ${
-                aiReport
+                data?.data_sufficient_for_ai === false
+                  ? "border border-[var(--accent-red)]/40 text-[var(--accent-red)] cursor-not-allowed"
+                  : aiReport
                   ? "border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
                   : "bg-[var(--accent-blue)] text-white hover:opacity-90"
               }`}
@@ -634,6 +739,20 @@ export default function ResearchDashboard() {
             <Skeleton className="h-4 w-4/6" />
             <Skeleton className="h-4 w-full mt-4" />
             <Skeleton className="h-4 w-3/4" />
+          </div>
+        )}
+
+        {!aiReport && !aiLoading && data?.data_sufficient_for_ai === false && (
+          <div className="rounded-xl border border-dashed
+                          border-[var(--accent-red)]/40 py-8 text-center px-4">
+            <AlertTriangle size={20} className="mx-auto mb-2
+                                               text-[var(--accent-red)]" />
+            <p className="text-sm font-semibold text-[var(--accent-red)] mb-1">
+              Analyse nicht möglich
+            </p>
+            <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto">
+              {data.ai_blocked_reason}
+            </p>
           </div>
         )}
 

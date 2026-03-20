@@ -771,7 +771,11 @@ async def api_quick_snapshot(ticker: str):
 
 
 @data_router.get("/research/{ticker}")
-async def api_research_dashboard(ticker: str, force_refresh: bool = False):
+async def api_research_dashboard(
+    ticker: str,
+    force_refresh: bool = False,
+    override_ticker: Optional[str] = None,
+):
     """
     Aggregierter Research-Endpoint für das Trading-Dashboard.
     Liefert alle Daten für einen Ticker in einem Call.
@@ -787,6 +791,24 @@ async def api_research_dashboard(ticker: str, force_refresh: bool = False):
     """
     ticker = ticker.upper().strip()
     cache_key = f"research_dashboard_{ticker}"
+
+    # ── Ticker Resolver ────────────────────────────────────────
+    from backend.app.data.ticker_resolver import resolve_ticker
+
+    # override_ticker: User hat manuell einen anderen Ticker angegeben
+    if override_ticker:
+        effective_ticker = override_ticker.upper().strip()
+        resolution = {
+            "resolved_ticker": effective_ticker,
+            "original_ticker": ticker,
+            "was_resolved": effective_ticker != ticker,
+            "resolution_note": f"Manuell überschrieben: {effective_ticker}",
+            "data_quality": "unknown",
+            "available_fields": 0,
+        }
+    else:
+        resolution = await resolve_ticker(ticker)
+        effective_ticker = resolution["resolved_ticker"]
 
     if not force_refresh:
         cached = cache_get(cache_key)
@@ -818,19 +840,19 @@ async def api_research_dashboard(ticker: str, force_refresh: bool = False):
     today_str = now.strftime("%Y-%m-%d")
 
     results = await asyncio.gather(
-        get_technical_setup(ticker),           # 0
-        get_fundamentals_yf(ticker),           # 1
-        get_company_profile(ticker),           # 2
-        get_key_metrics(ticker),               # 3
-        get_analyst_estimates(ticker),         # 4
-        get_earnings_history(ticker, limit=8), # 5
-        get_price_target_consensus(ticker),    # 6
-        get_short_interest(ticker),            # 7
-        get_insider_transactions(ticker),      # 8
-        get_bullet_points(ticker),             # 9
+        get_technical_setup(effective_ticker),           # 0
+        get_fundamentals_yf(effective_ticker),           # 1
+        get_company_profile(effective_ticker),           # 2
+        get_key_metrics(effective_ticker),               # 3
+        get_analyst_estimates(effective_ticker),         # 4
+        get_earnings_history(effective_ticker, limit=8), # 5
+        get_price_target_consensus(effective_ticker),    # 6
+        get_short_interest(effective_ticker),            # 7
+        get_insider_transactions(effective_ticker),      # 8
+        get_bullet_points(effective_ticker),             # 9
         get_watchlist(),                       # 10
-        get_options_metrics(ticker),           # 11
-        get_company_news(ticker, month_ago, today_str),  # 12
+        get_options_metrics(effective_ticker),           # 11
+        get_company_news(effective_ticker, month_ago, today_str),  # 12
         return_exceptions=True,
     )
 
@@ -868,7 +890,7 @@ async def api_research_dashboard(ticker: str, force_refresh: bool = False):
     try:
         import yfinance as yf
         def _fetch_price():
-            s = yf.Ticker(ticker)
+            s = yf.Ticker(effective_ticker)
             fi = s.fast_info
             p = getattr(fi, "last_price", None)
             c = getattr(fi, "regular_market_day_change_percent", None)
@@ -1040,7 +1062,7 @@ async def api_research_dashboard(ticker: str, force_refresh: bool = False):
     try:
         def _fetch_30d():
             import yfinance as yf
-            hist = yf.Ticker(ticker).history(period="35d")
+            hist = yf.Ticker(effective_ticker).history(period="35d")
             if hist.empty or len(hist) < 2:
                 return None
             p0 = float(hist["Close"].iloc[0])
@@ -1151,6 +1173,11 @@ async def api_research_dashboard(ticker: str, force_refresh: bool = False):
     # ── Response zusammenbauen ─────────────────────────────────
     response = {
         "ticker": ticker,
+        "resolved_ticker": effective_ticker,
+        "was_resolved": resolution["was_resolved"],
+        "resolution_note": resolution["resolution_note"],
+        "data_quality": resolution["data_quality"],
+        "available_fields": resolution["available_fields"],
         "company_name": company_name or ticker,
         "sector": sector,
         "industry": industry,
@@ -1241,6 +1268,22 @@ async def api_research_dashboard(ticker: str, force_refresh: bool = False):
         # Letzter Audit
         "last_audit": last_audit,
     }
+
+    # ── Datenvollständigkeit prüfen ────────────────────────────
+    core_available = sum(1 for v in [
+        price, pe_ratio, rsi, revenue_ttm, market_cap
+    ] if v is not None)
+
+    response["core_fields_available"] = core_available
+    response["data_sufficient_for_ai"] = core_available >= 3
+
+    if not response["data_sufficient_for_ai"]:
+        response["ai_blocked_reason"] = (
+            f"Nur {core_available}/5 Kernfelder verfügbar. "
+            "Die KI-Analyse wäre auf falschen oder unvollständigen "
+            "Daten basiert. Bitte alternativen Ticker eingeben "
+            "(z.B. VOW3.DE statt VLKPF für Volkswagen)."
+        )
 
     cache_set(cache_key, response, ttl_seconds=600)
     return response

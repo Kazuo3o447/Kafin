@@ -707,6 +707,25 @@ async def api_quick_snapshot(ticker: str):
         except Exception:
             pass
 
+        # Letztes Audit aus Supabase laden
+        latest_audit = None
+        try:
+            from backend.app.db import get_supabase_client
+            db = get_supabase_client()
+            if db:
+                audit_res = (
+                    db.table("audit_reports")
+                    .select("report_date, recommendation, opportunity_score, torpedo_score")
+                    .eq("ticker", ticker)
+                    .order("report_date", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                if audit_res and audit_res.data:
+                    latest_audit = audit_res.data[0]
+        except Exception as e:
+            logger.debug(f"Fehler beim Laden des letzten Audits für {ticker}: {e}")
+
         snapshot = {
             "ticker": ticker,
             "is_on_watchlist": is_on_watchlist,
@@ -729,6 +748,7 @@ async def api_quick_snapshot(ticker: str):
             "short_interest_pct": getattr(short_int, "short_interest_percent", None) if short_int else None,
             "days_to_cover": getattr(short_int, "days_to_cover", None) if short_int else None,
             "iv_approx": iv_rank,
+            "latest_audit": latest_audit,
         }
 
         if snapshot["next_earnings_date"]:

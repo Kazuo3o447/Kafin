@@ -167,6 +167,19 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **Build**: Frontend wird per `docker-compose build kafin-frontend && docker-compose up -d kafin-frontend` deployed.
 *   **Zugriff**: http://localhost:3000 für das Web-Dashboard, http://localhost:8000 für die API-Dokumentation.
 
+## 🔄 Letzte Updates (20. März 2026)
+### Command Palette Mini-Dashboard Enhancement
+- **Backend**: `/quick-snapshot/{ticker}` Endpoint erweitert - lädt jetzt den letzten AI Audit aus Supabase (Datum, Empfehlung, Opportunity/Torpedo Scores)
+- **Frontend**: CommandPalette.tsx komplett überarbeitet mit professionellem Mini-Dashboard Layout
+- **UI**: Alle Emojis durch lucide-react Icons ersetzt (Sparkles, TrendingUp, BookmarkPlus/Minus, Clock, ExternalLink)
+- **Features**: 
+  - KI Audit Historie mit Datum, Empfehlung und Scores
+  - Strukturierte Marktdaten-Kacheln (RSI, IV, Short Interest, Surprise)
+  - Vollständige Watchlist-Verwaltung (Hinzufügen/Entfernen mit State-Management)
+  - Verbesserte Action Buttons mit dynamischen Labels ("Audit aktualisieren" vs "Deep-Dive Audit starten")
+  - Responsive Grid-Layout für Marktdaten
+- **UX**: Größere Ticker-Preis-Anzeige, klarere Status-Indikatoren, verbesserte visuelle Hierarchie
+
 ## 🔄 Letzte Updates (19. März 2026)
 - Backend: Batch-Supabase-Query für Score-History implementiert (Performance-Boost von 2-4s auf ~500ms)
 - Backend: Earnings-Radar gefixt - report_date Feld-Mapping korrigiert, 1243 Einträge jetzt sichtbar

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
-import { Loader2, ExternalLink } from "lucide-react";
+import { Loader2, ExternalLink, Sparkles, TrendingUp, BookmarkPlus, BookmarkMinus, Clock } from "lucide-react";
 
 type SnapshotData = {
   ticker: string;
@@ -23,6 +23,12 @@ type SnapshotData = {
   earnings_today: boolean;
   earnings_this_week: boolean;
   is_on_watchlist: boolean;
+  latest_audit?: {
+    report_date: string;
+    recommendation: string;
+    opportunity_score: number;
+    torpedo_score: number;
+  } | null;
   error?: string;
 };
 
@@ -32,6 +38,7 @@ export function CommandPalette() {
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
   const [loading, setLoading] = useState(false);
   const [addedToWatchlist, setAddedToWatchlist] = useState(false);
+  const [removedFromWatchlist, setRemovedFromWatchlist] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [reportText, setReportText] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -68,6 +75,7 @@ export function CommandPalette() {
       setSnapshot(null);
       setReportText(null);
       setAddedToWatchlist(false);
+      setRemovedFromWatchlist(false);
     }
   }, [open]);
 
@@ -124,8 +132,20 @@ export function CommandPalette() {
         notes: "Manuell hinzugefügt via Schnellsuche (Cmd+K)",
       });
       setAddedToWatchlist(true);
+      setRemovedFromWatchlist(false);
     } catch (err) {
       console.error("Watchlist add error:", err);
+    }
+  }
+
+  async function handleRemoveFromWatchlist() {
+    if (!snapshot) return;
+    try {
+      await api.removeTicker(snapshot.ticker);
+      setRemovedFromWatchlist(true);
+      setAddedToWatchlist(false);
+    } catch (err) {
+      console.error("Watchlist remove error:", err);
     }
   }
 
@@ -136,7 +156,7 @@ export function CommandPalette() {
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() => setOpen(false)} />
       <div className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-xl z-50 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[70vh]">
         <div className="p-4 border-b border-[var(--border)] flex items-center gap-3">
-          <span className="text-[var(--text-muted)]">🔍</span>
+          <Sparkles size={16} className="text-[var(--text-muted)]" />
           <input
             ref={inputRef}
             type="text"
@@ -164,94 +184,103 @@ export function CommandPalette() {
               </div>
             ) : (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
+                {/* Header Section */}
+                <div className="flex items-center justify-between border-b border-[var(--border)] pb-4">
                   <div>
-                    <h2 className="text-3xl font-bold font-mono text-[var(--text-primary)]">{snapshot.ticker}</h2>
+                    <h2 className="text-4xl font-bold font-mono text-[var(--text-primary)]">{snapshot.ticker}</h2>
                     {snapshot.price !== null && snapshot.price !== undefined ? (
-                      <p className="text-xl font-mono text-[var(--text-primary)]">
-                        ${snapshot.price.toFixed(2)}
-                      </p>
+                      <p className="text-2xl font-mono text-[var(--text-primary)] mt-1">${snapshot.price.toFixed(2)}</p>
                     ) : (
-                      <p className="text-sm text-[var(--text-muted)] mt-1">
-                        Kein US-Kurs verfügbar
-                      </p>
+                      <p className="text-sm text-[var(--text-muted)] mt-1">Kursdaten nicht verfügbar</p>
                     )}
                   </div>
-                  {snapshot.is_on_watchlist ? (
-                    <span className="bg-[var(--accent-green)] bg-opacity-20 text-[var(--accent-green)] text-xs font-bold px-3 py-1 rounded-full">✓ Watchlist</span>
+                  {(snapshot.is_on_watchlist || addedToWatchlist) && !removedFromWatchlist ? (
+                    <span className="bg-[var(--accent-green)]/20 border border-[var(--accent-green)]/30 text-[var(--accent-green)] text-xs font-bold px-4 py-2 rounded-full flex items-center gap-2">
+                      <BookmarkMinus size={14} /> Auf Watchlist
+                    </span>
                   ) : (
-                    <span className="bg-[var(--bg-tertiary)] text-[var(--text-muted)] text-xs px-3 py-1 rounded-full">Nicht auf Watchlist</span>
+                    <span className="bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-muted)] text-xs px-4 py-2 rounded-full flex items-center gap-2">
+                      <BookmarkPlus size={14} /> Nicht beobachtet
+                    </span>
                   )}
                 </div>
 
-                {snapshot.price === null && snapshot.beats_of_8 === null && (
-                  <div className="rounded-lg border border-[var(--accent-amber)]/30
-                                  bg-[var(--accent-amber)]/10 px-4 py-3 text-sm
-                                  text-[var(--accent-amber)] mt-2">
-                    ⚠ Keine Marktdaten verfügbar — möglicherweise kein US-Listing,
-                    OTC-Ticker oder delisted.
+                {/* KI Audit Historie */}
+                <div className="p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border)]">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles size={16} className="text-[var(--accent-blue)]" />
+                    <h3 className="text-sm font-bold text-[var(--text-primary)]">KI Audit Status</h3>
                   </div>
-                )}
+                  {snapshot.latest_audit ? (
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <div className="text-xs text-[var(--text-muted)] flex items-center gap-1"><Clock size={12}/> Letztes Update</div>
+                        <div className="text-sm font-mono text-[var(--text-primary)] mt-1">
+                          {new Date(snapshot.latest_audit.report_date).toLocaleDateString('de-DE')}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-[var(--text-muted)]">Empfehlung</div>
+                        <div className={`text-sm font-bold mt-1 ${snapshot.latest_audit.recommendation.toUpperCase() === 'BUY' ? 'text-[var(--accent-green)]' : snapshot.latest_audit.recommendation.toUpperCase() === 'SELL' ? 'text-[var(--accent-red)]' : 'text-amber-400'}`}>
+                          {snapshot.latest_audit.recommendation.toUpperCase()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-[var(--text-muted)]">Opp / Torp Score</div>
+                        <div className="text-sm font-mono text-[var(--text-primary)] mt-1">
+                          <span className="text-[var(--accent-blue)]">{snapshot.latest_audit.opportunity_score}</span> / <span className="text-rose-400">{snapshot.latest_audit.torpedo_score}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted)]">Bisher kein Audit-Report vorhanden. Generiere einen Report für fundamentale und psychologische Insights.</p>
+                  )}
+                </div>
 
-                {snapshot.next_earnings_date && (
-                  <div className={`p-4 rounded-xl border ${snapshot.earnings_today ? 'bg-amber-500/10 border-amber-500/30' : snapshot.earnings_this_week ? 'bg-blue-500/10 border-blue-500/30' : 'bg-[var(--bg-primary)] border-[var(--border)]'}`}>
-                    <div className={`font-bold ${snapshot.earnings_today ? 'text-amber-500' : snapshot.earnings_this_week ? 'text-blue-400' : 'text-[var(--text-primary)]'}`}>
-                      {snapshot.earnings_today ? '⚡ Meldet HEUTE' : snapshot.earnings_this_week ? `📅 Meldet in ${snapshot.earnings_countdown_days} Tagen` : `📅 Nächste Earnings: ${snapshot.next_earnings_date}`}
-                      {' — '}
-                      {snapshot.report_timing === 'pre_market' ? 'Pre-Market 🌅' : snapshot.report_timing === 'after_hours' ? 'After-Hours 🌙' : ''}
-                    </div>
-                    <div className="mt-2 text-sm text-[var(--text-secondary)] font-mono">
-                      EPS Konsens: ${snapshot.eps_consensus?.toFixed(2) ?? '—'} | Revenue: {snapshot.revenue_consensus ? snapshot.revenue_consensus > 1e9 ? `${(snapshot.revenue_consensus/1e9).toFixed(2)}B` : `${(snapshot.revenue_consensus/1e6).toFixed(0)}M` : '—'}
-                    </div>
+                {/* Marktdaten Mini-Dashboard (Aus bestehenden Daten) */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border)]">
+                    <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-1">RSI & Trend</div>
+                    <div className="font-mono text-sm text-[var(--text-primary)]">{snapshot.rsi?.toFixed(1) ?? '—'} <span className="text-[var(--text-secondary)] text-xs">({snapshot.trend ?? '—'})</span></div>
                   </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="card p-3">
-                    <div className="text-xs text-[var(--text-muted)] mb-1">RSI / Trend</div>
-                    <div className="font-mono text-[var(--text-primary)]">{snapshot.rsi?.toFixed(1) ?? '—'} | {snapshot.trend ?? '—'}</div>
+                  <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border)]">
+                    <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-1 flex items-center gap-1">Implizite Vola</div>
+                    <div className="font-mono text-sm text-[var(--text-primary)]">{snapshot.iv_approx ? `${snapshot.iv_approx.toFixed(1)}%` : '—'}</div>
                   </div>
-                  <div className="card p-3">
-                    <div className="text-xs text-[var(--text-muted)] mb-1">Surprise Historie (8Q)</div>
-                    <div className="font-mono text-[var(--text-primary)]">
-                      Letzter: <span className={snapshot.last_beat === true ? 'text-emerald-400' : snapshot.last_beat === false ? 'text-rose-400' : ''}>{snapshot.last_eps_surprise_pct != null ? `${snapshot.last_eps_surprise_pct>0?'+':''}${snapshot.last_eps_surprise_pct}%` : '—'}</span>
-                      <br/>Ø: {snapshot.avg_surprise_pct != null ? `${snapshot.avg_surprise_pct>0?'+':''}${snapshot.avg_surprise_pct}%` : '—'}
-                    </div>
+                  <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border)]">
+                    <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-1">Short Interest</div>
+                    <div className="font-mono text-sm text-[var(--text-primary)]">{snapshot.short_interest_pct ? `${snapshot.short_interest_pct.toFixed(1)}%` : '—'}</div>
                   </div>
-                  <div className="card p-3">
-                    <div className="text-xs text-[var(--text-muted)] mb-1">Market Data</div>
-                    <div className="font-mono text-[var(--text-primary)]">
-                      SI: {snapshot.short_interest_pct?.toFixed(1) ?? '—'}%<br/>
-                      IV: {snapshot.iv_approx?.toFixed(1) ?? '—'}%
-                    </div>
-                  </div>
-                  <div className="card p-3">
-                    <div className="text-xs text-[var(--text-muted)] mb-1">Consistency</div>
-                    <div className="font-mono text-[var(--text-primary)]">{snapshot.beats_of_8 ?? '—'}/8 Quartale geschlagen</div>
+                  <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border)]">
+                    <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-1">Surprise Ø</div>
+                    <div className="font-mono text-sm text-[var(--text-primary)]">{snapshot.avg_surprise_pct != null ? `${snapshot.avg_surprise_pct>0?'+':''}${snapshot.avg_surprise_pct}%` : '—'}</div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                {/* Action Buttons */}
+                <div className="flex flex-wrap items-center gap-3 pt-2">
                   <button 
                     onClick={handleGenerateReport}
                     disabled={generatingReport}
-                    className="flex-1 bg-[var(--accent-blue)] text-white font-semibold py-2 rounded-lg hover:opacity-90 transition disabled:opacity-50"
+                    className="flex-1 min-w-[180px] bg-[var(--accent-blue)] text-white font-semibold py-2.5 rounded-lg hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[var(--accent-blue)]/20"
                   >
-                    🤖 Audit-Report
+                    {generatingReport ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />} 
+                    {snapshot.latest_audit ? "Audit aktualisieren" : "Deep-Dive Audit starten"}
                   </button>
                   
-                  {!snapshot.is_on_watchlist && !addedToWatchlist && (
+                  {(!snapshot.is_on_watchlist && !addedToWatchlist) || removedFromWatchlist ? (
                     <button 
                       onClick={handleAddToWatchlist}
-                      className="flex-1 bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] font-semibold py-2 rounded-lg hover:bg-[var(--border)] transition"
+                      className="flex-1 min-w-[160px] bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] font-semibold py-2.5 rounded-lg hover:bg-[var(--border)] transition flex items-center justify-center gap-2"
                     >
-                      + Zur Watchlist
+                      <BookmarkPlus size={16} /> Zur Watchlist
                     </button>
-                  )}
-                  
-                  {(snapshot.is_on_watchlist || addedToWatchlist) && (
-                    <button disabled className="flex-1 bg-[var(--accent-green)] bg-opacity-20 text-[var(--accent-green)] font-semibold py-2 rounded-lg cursor-default border border-[var(--accent-green)] border-opacity-30">
-                      ✓ Auf Watchlist
+                  ) : (
+                    <button 
+                      onClick={handleRemoveFromWatchlist}
+                      className="flex-1 min-w-[160px] bg-rose-500/10 text-rose-400 border border-rose-500/30 font-semibold py-2.5 rounded-lg hover:bg-rose-500/20 transition flex items-center justify-center gap-2"
+                    >
+                      <BookmarkMinus size={16} /> Entfernen
                     </button>
                   )}
                   
@@ -259,26 +288,24 @@ export function CommandPalette() {
                     href={`/watchlist/${snapshot.ticker}`} 
                     target="_blank" 
                     rel="noreferrer"
-                    className="flex-1 flex items-center justify-center gap-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] font-semibold py-2 rounded-lg hover:bg-[var(--border)] transition"
+                    className="flex-none flex items-center justify-center gap-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] font-semibold px-4 py-2.5 rounded-lg hover:bg-[var(--border)] transition"
                   >
-                    Details <ExternalLink size={16} />
+                    <TrendingUp size={16} /> Details
                   </a>
                 </div>
 
+                {/* Report Generation Feedback */}
                 {generatingReport && (
                   <div className="p-4 rounded-lg bg-[var(--bg-primary)] border border-[var(--border)] flex items-center justify-center gap-3 text-sm text-[var(--text-secondary)]">
-                    <Loader2 className="animate-spin text-[var(--accent-blue)]" size={16} /> Audit-Report wird generiert... (30-60 Sekunden)
+                    <Loader2 className="animate-spin text-[var(--accent-blue)]" size={16} /> Audit-Report wird tiefgehend analysiert und erstellt...
                   </div>
                 )}
                 
                 {reportText && !generatingReport && (
                   <div className="mt-4 p-4 rounded-lg bg-[var(--bg-primary)] border border-[var(--border)]">
-                    <h4 className="text-xs font-bold text-[var(--text-muted)] mb-2">KI Audit-Report</h4>
+                    <h4 className="text-xs font-bold text-[var(--text-muted)] mb-2 flex items-center gap-1"><Sparkles size={12}/> Frischer KI Audit-Report</h4>
                     <div className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                       {reportText}
-                    </div>
-                    <div className="mt-3 text-center">
-                      <a href="/reports" className="text-xs text-[var(--accent-blue)] hover:underline">Volltext auf Reports-Seite ansehen</a>
                     </div>
                   </div>
                 )}

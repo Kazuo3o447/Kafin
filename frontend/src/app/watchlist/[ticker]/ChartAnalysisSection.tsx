@@ -8,6 +8,10 @@ import {
   IChartApi,
   ISeriesApi,
   IPriceLine,
+  CandlestickSeries,
+  LineSeries,
+  HistogramSeries,
+  Time,
 } from "lightweight-charts";
 import {
   LineChart,
@@ -215,7 +219,7 @@ export function ChartAnalysisSection({ ticker }: { ticker: string }) {
     });
     chartRef.current = chart;
 
-    const candleSeries = (chart as any).addCandlestickSeries({
+    const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: "#22c55e",
       downColor: "#ef4444",
       borderUpColor: "#22c55e",
@@ -226,10 +230,8 @@ export function ChartAnalysisSection({ ticker }: { ticker: string }) {
     candleSeries.setData(ohlcvData.candles);
     candleSeriesRef.current = candleSeries;
 
-    const volumeSeries = (chart as any).addHistogramSeries({
+    const volumeSeries = chart.addSeries(HistogramSeries, {
       color: "#6b7280",
-      priceScaleId: "volume",
-      scaleMargins: { top: 0.85, bottom: 0 },
       priceFormat: { type: "volume" },
     });
     volumeSeries.setData(
@@ -241,7 +243,7 @@ export function ChartAnalysisSection({ ticker }: { ticker: string }) {
     );
 
     if (ohlcvData.sma_50.length) {
-      const sma50 = (chart as any).addLineSeries({
+      const sma50 = chart.addSeries(LineSeries, {
         color: "#3b82f6",
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
@@ -250,7 +252,7 @@ export function ChartAnalysisSection({ ticker }: { ticker: string }) {
     }
 
     if (ohlcvData.sma_200.length) {
-      const sma200 = (chart as any).addLineSeries({
+      const sma200 = chart.addSeries(LineSeries, {
         color: "#a855f7",
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,

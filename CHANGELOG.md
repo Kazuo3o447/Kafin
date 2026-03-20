@@ -2,6 +2,15 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.2.11] - 2026-03-20 - Chart API Fix
+
+### 🐛 Bugfixes
+- **fix(charts)**: addCandlestickSeries() → chart.addSeries() für lightweight-charts v5 Kompatibilität
+- **fix(charts)**: addLineSeries() → chart.addSeries() für SMA 50/200 Linien
+- **fix(charts)**: addHistogramSeries() → chart.addSeries() für Volumen-Chart
+- **fix(charts)**: Import CandlestickSeries, LineSeries, HistogramSeries als Named Exports
+- **fix(ticker-detail)**: Kein TypeError mehr beim Öffnen von /watchlist/[ticker] Seiten
+
 ## [5.2.10] - 2026-03-20 - DeepSeek Timeout & Supabase Schema Fixes
 
 ### 🐛 Bugfixes

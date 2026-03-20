@@ -227,6 +227,28 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
   - **KI-Integration**: In Audit Reports für systemische Risikobewertung
 - **Bugfix**: Watchlist Web Prio speichert None-Werte korrekt (exclude_unset=True)
 
+## 🔍 System Health & Known Issues
+
+### yfinance 404 Errors (Expected Behavior)
+**Symptom:** Log zeigt `HTTP Error 404: Quote not found for symbol: CEP/LVTX/PBBK/USCTF/SCS/IRRX/ZK`
+
+**Ursache:** Opportunity Scanner scannt Earnings-Kalender nach delisted/defekte Ticker
+- **Quelle:** `backend/app/analysis/opportunity_scanner.py`
+- **Trigger:** Finnhub Earnings-Kalender enthält alte/inaktive Ticker
+- **Fehler-Typ:** Erwartetes Verhalten für delisted Securities
+
+**System Verhalten:**
+- ✅ **Robust**: Try-Catch Blöcke fangen 404 Fehler ab
+- ✅ **Graceful**: Scanner läuft weiter und findet valide Kandidaten
+- ✅ **Logging**: Fehler werden korrekt für Debugging geloggt
+- ✅ **No Impact**: Watchlist, Research Dashboard funktionieren normal
+
+**Betroffene Ticker (Beispiele):**
+- CEP, LVTX, PBBK, USCTF, SCS, IRRX, ZK (alle delisted/defekte)
+
+**Lösung:** Nicht erforderlich - dies ist normales Systemverhalten
+**Monitoring:** Fehler sind normal und erfordern keine Aktion
+
 ### Watchlist Performance Optimizations + UX Enhancement
 - **Reloads eliminiert**: Keine API-Calls mehr bei Watchlist-CRUD-Operationen
   - **Ticker hinzufügen/entfernen**: Sofort im State sichtbar (Optimistic Updates)

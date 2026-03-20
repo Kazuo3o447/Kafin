@@ -704,13 +704,20 @@ async def generate_audit_report(ticker: str) -> str:
 
         db = get_supabase_client()
         if db:
+            # Versuche das Earnings-Datum aus Estimates zu holen
+            e_date = getattr(estimates, "report_date", None) if estimates else None
+            if not e_date or e_date == "Unknown":
+                e_date = datetime.now().strftime("%Y-%m-%d")  # Fallback
+            elif hasattr(e_date, "strftime"):
+                e_date = e_date.strftime("%Y-%m-%d")
+
             db.table("audit_reports").insert({
                 "ticker": ticker,
-                "report_type": "audit",
+                "report_date": datetime.now().strftime("%Y-%m-%d"),
+                "earnings_date": str(e_date),
                 "recommendation": rec.recommendation if rec else "unknown",
                 "opportunity_score": opp_score.total_score if opp_score else 0,
                 "torpedo_score": torp_score.total_score if torp_score else 0,
-                "report_text": mock_response[:2000],
                 "created_at": datetime.now().isoformat()
             }).execute()
             logger.info(f"Audit-Report für {ticker} in Supabase gespeichert")

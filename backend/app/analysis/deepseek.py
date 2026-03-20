@@ -62,7 +62,7 @@ async def call_deepseek(
     # very simple retry backoff
     for attempt in range(3):
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 response = await client.post(
                     f"{base_url}/chat/completions",
                     headers=headers,

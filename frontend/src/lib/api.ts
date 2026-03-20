@@ -82,6 +82,11 @@ export const api = {
   getChartOverlays: (ticker: string) => fetchAPI(`/api/data/chart-overlays/${ticker}`),
   getQuickSnapshot: (ticker: string) => fetchAPI(`/api/data/quick-snapshot/${ticker.toUpperCase()}`),
   getEarningsRadar: (days = 14) => fetchAPI(`/api/data/earnings-radar?days=${days}`),
+  getResearchDashboard: (ticker: string, forceRefresh = false) =>
+    fetchAPI(
+      `/api/data/research/${ticker.toUpperCase()}` +
+      (forceRefresh ? "?force_refresh=true" : "")
+    ),
 
   // Google News Search Terms
   getSearchTerms: () => fetchAPI("/api/google-news/search-terms"),

@@ -2,6 +2,17 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.3.0] - 2026-03-20 - Research Dashboard API
+
+### 🚀 Neue Features
+- **GET /api/data/research/{ticker}**: Aggregierter Research-Endpoint
+  — Alle Daten in einem Call: Preis, Bewertung (P/E, PEG, EV/EBITDA,
+  ROE, ROA, FCF Yield), Technicals, Options, Insider, Earnings-Historie,
+  News-Bullets, letzter Audit, Expected Move
+- **PEG Ratio**: Aus FMP key-metrics-ttm (priceEarningsToGrowthRatioTTM)
+- **Cache**: 10 Minuten Gesamtcache, force_refresh=true für sofortiges Update
+- **api.ts**: getResearchDashboard() Method
+
 ## [5.2.11] - 2026-03-20 - Chart API Fix
 
 ### 🐛 Bugfixes

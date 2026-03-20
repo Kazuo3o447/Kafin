@@ -770,6 +770,482 @@ async def api_quick_snapshot(ticker: str):
         return {"ticker": ticker, "error": str(e), "price": None}
 
 
+@data_router.get("/research/{ticker}")
+async def api_research_dashboard(ticker: str, force_refresh: bool = False):
+    """
+    Aggregierter Research-Endpoint für das Trading-Dashboard.
+    Liefert alle Daten für einen Ticker in einem Call.
+
+    Cache-Strategie:
+    - Technicals (Kurs, RSI, SMA):  15 Minuten
+    - Fundamentals (P/E, PEG etc.): 24 Stunden
+    - Earnings-History:             6 Stunden
+    - News-Memory:                  1 Stunde
+    - Gesamtantwort Cache:          10 Minuten
+
+    force_refresh=True überspringt den Cache.
+    """
+    ticker = ticker.upper().strip()
+    cache_key = f"research_dashboard_{ticker}"
+
+    if not force_refresh:
+        cached = cache_get(cache_key)
+        if cached:
+            return cached
+
+    logger.info(f"Research Dashboard: Lade Daten für {ticker}")
+
+    # ── Alle Daten parallel laden ──────────────────────────────
+    import asyncio
+    from backend.app.data.yfinance_data import (
+        get_technical_setup, get_fundamentals_yf,
+        get_options_metrics, get_atm_implied_volatility,
+    )
+    from backend.app.data.fmp import (
+        get_company_profile, get_key_metrics,
+        get_analyst_estimates, get_earnings_history,
+        get_price_target_consensus,
+    )
+    from backend.app.data.finnhub import (
+        get_short_interest, get_insider_transactions, get_company_news,
+    )
+    from backend.app.memory.short_term import get_bullet_points
+    from backend.app.memory.watchlist import get_watchlist
+    from datetime import datetime, timedelta
+
+    now = datetime.now()
+    month_ago = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+    today_str = now.strftime("%Y-%m-%d")
+
+    results = await asyncio.gather(
+        get_technical_setup(ticker),           # 0
+        get_fundamentals_yf(ticker),           # 1
+        get_company_profile(ticker),           # 2
+        get_key_metrics(ticker),               # 3
+        get_analyst_estimates(ticker),         # 4
+        get_earnings_history(ticker, limit=8), # 5
+        get_price_target_consensus(ticker),    # 6
+        get_short_interest(ticker),            # 7
+        get_insider_transactions(ticker),      # 8
+        get_bullet_points(ticker),             # 9
+        get_watchlist(),                       # 10
+        get_options_metrics(ticker),           # 11
+        get_company_news(ticker, month_ago, today_str),  # 12
+        return_exceptions=True,
+    )
+
+    def safe(idx):
+        r = results[idx]
+        return None if isinstance(r, Exception) else r
+
+    tech       = safe(0)
+    yf_fund    = safe(1)
+    profile    = safe(2)
+    metrics    = safe(3)
+    estimates  = safe(4)
+    history    = safe(5)
+    price_tgt  = safe(6)
+    short_int  = safe(7)
+    insiders   = safe(8)
+    news_mem   = safe(9) or []
+    watchlist  = safe(10) or []
+    options    = safe(11)
+    news_items = safe(12) or []
+
+    # ── Watchlist-Status ───────────────────────────────────────
+    is_watchlist = any(
+        w.get("ticker", "").upper() == ticker
+        for w in (watchlist if isinstance(watchlist, list) else [])
+    )
+    watchlist_item = next(
+        (w for w in watchlist if w.get("ticker", "").upper() == ticker),
+        None
+    )
+
+    # ── Preis & Technicals ─────────────────────────────────────
+    price = None
+    change_pct = None
+    try:
+        import yfinance as yf
+        def _fetch_price():
+            s = yf.Ticker(ticker)
+            fi = s.fast_info
+            p = getattr(fi, "last_price", None)
+            c = getattr(fi, "regular_market_day_change_percent", None)
+            return (
+                round(float(p), 2) if p else None,
+                round(float(c) * 100, 2) if c else None,
+            )
+        price, change_pct = await asyncio.to_thread(_fetch_price)
+    except Exception:
+        pass
+
+    if not price and yf_fund:
+        price = yf_fund.get("price")
+
+    # ── Fundamentals zusammenführen (FMP > yfinance) ───────────
+    pe_ratio = None
+    forward_pe = None
+    ps_ratio = None
+    peg_ratio = None
+    ev_ebitda = None
+    debt_equity = None
+    fcf_yield = None
+    current_ratio = None
+    market_cap = None
+    beta = None
+    dividend_yield = None
+    revenue_ttm = None
+    eps_ttm = None
+    sector = None
+    industry = None
+    company_name = None
+    fifty_two_week_high = None
+    fifty_two_week_low = None
+    analyst_target = None
+    analyst_recommendation = None
+    number_of_analysts = None
+
+    # FMP Key Metrics (Priorität)
+    if metrics:
+        pe_ratio    = getattr(metrics, "pe_ratio", None)
+        ps_ratio    = getattr(metrics, "ps_ratio", None)
+        market_cap  = getattr(metrics, "market_cap", None)
+        debt_equity = getattr(metrics, "debt_to_equity", None)
+        fcf_yield   = getattr(metrics, "free_cash_flow_yield", None)
+        current_ratio = getattr(metrics, "current_ratio", None)
+        sector      = getattr(metrics, "sector", None)
+        industry    = getattr(metrics, "industry", None)
+
+    # yfinance Fallback + Ergänzungen
+    if yf_fund:
+        pe_ratio        = pe_ratio or yf_fund.get("pe_ratio")
+        forward_pe      = yf_fund.get("forward_pe")
+        ps_ratio        = ps_ratio or yf_fund.get("ps_ratio")
+        market_cap      = market_cap or yf_fund.get("market_cap")
+        beta            = yf_fund.get("beta")
+        dividend_yield  = yf_fund.get("dividend_yield")
+        revenue_ttm     = yf_fund.get("revenue_ttm")
+        eps_ttm         = yf_fund.get("eps_ttm")
+        sector          = sector or yf_fund.get("sector")
+        industry        = industry or yf_fund.get("industry")
+        fifty_two_week_high = yf_fund.get("fifty_two_week_high")
+        fifty_two_week_low  = yf_fund.get("fifty_two_week_low")
+        analyst_target        = yf_fund.get("analyst_target")
+        analyst_recommendation = yf_fund.get("analyst_recommendation")
+        number_of_analysts    = yf_fund.get("number_of_analysts")
+
+    # FMP Profil
+    if profile:
+        company_name = getattr(profile, "company_name", None)
+        sector   = sector or getattr(profile, "sector", None)
+        industry = industry or getattr(profile, "industry", None)
+
+    # PEG berechnen: PE / EPS_Growth (aus FMP key-metrics wenn vorhanden)
+    # FMP liefert priceEarningsToGrowthRatioTTM in key-metrics-ttm
+    # Wir versuchen es aus den Rohdaten zu holen
+    try:
+        from backend.app.data.fmp import _fmp_get
+        raw_metrics = await _fmp_get(
+            "/stable/key-metrics-ttm", {"symbol": ticker}
+        )
+        if raw_metrics and isinstance(raw_metrics, list) and raw_metrics:
+            raw = raw_metrics[0]
+            peg_ratio = raw.get("priceEarningsToGrowthRatioTTM") or \
+                        raw.get("pegRatioTTM")
+            ev_ebitda = raw.get("enterpriseValueOverEBITDATTM") or \
+                        raw.get("evToEbitdaTTM")
+            # ROE und ROA ergänzen
+            roe = raw.get("returnOnEquityTTM")
+            roa = raw.get("returnOnAssetsTTM")
+        else:
+            roe = roa = None
+    except Exception:
+        roe = roa = None
+
+    # ── Expected Move berechnen ────────────────────────────────
+    expected_move_pct = None
+    expected_move_usd = None
+    try:
+        import math
+        from datetime import date as _date
+        iv = getattr(options, "implied_volatility_atm", None) if options else None
+        earnings_dt = getattr(estimates, "report_date", None) if estimates else None
+        days_to_earnings = 1
+        if earnings_dt:
+            try:
+                if hasattr(earnings_dt, "toordinal"):
+                    days_to_earnings = max(1, (earnings_dt - _date.today()).days)
+                else:
+                    days_to_earnings = max(
+                        1, (_date.fromisoformat(str(earnings_dt)) - _date.today()).days
+                    )
+            except Exception:
+                days_to_earnings = 1
+        if iv and iv > 0 and price and price > 0:
+            expected_move_pct = round(iv * math.sqrt(days_to_earnings / 365) * 100, 1)
+            expected_move_usd = round(price * iv * math.sqrt(days_to_earnings / 365), 2)
+    except Exception:
+        pass
+
+    # ── Earnings-Daten ─────────────────────────────────────────
+    earnings_date = None
+    report_timing = None
+    eps_consensus = None
+    revenue_consensus = None
+    beats_of_8 = None
+    avg_surprise = None
+    last_surprise_pct = None
+    last_beat = None
+    quarterly_history = []
+
+    if estimates:
+        earnings_date     = str(getattr(estimates, "report_date", None) or "")
+        report_timing     = getattr(estimates, "report_timing", None)
+        eps_consensus     = getattr(estimates, "eps_consensus", None)
+        revenue_consensus = getattr(estimates, "revenue_consensus", None)
+
+    if history:
+        beats_of_8   = getattr(history, "quarters_beat", None)
+        avg_surprise = getattr(history, "avg_surprise_percent", None)
+        last_q = getattr(history, "last_quarter", None)
+        if last_q:
+            last_surprise_pct = getattr(last_q, "eps_surprise_percent", None)
+            last_beat = (last_surprise_pct or 0) > 0
+        # Letzte 8 Quartale für Tabelle
+        all_q = getattr(history, "all_quarters", [])
+        for q in all_q[:8]:
+            quarterly_history.append({
+                "quarter": getattr(q, "quarter", ""),
+                "eps_actual": getattr(q, "eps_actual", None),
+                "eps_consensus": getattr(q, "eps_consensus", None),
+                "surprise_pct": getattr(q, "eps_surprise_percent", None),
+                "reaction_1d": getattr(q, "stock_reaction_1d", None),
+            })
+
+    # ── Tage bis Earnings ──────────────────────────────────────
+    earnings_countdown = None
+    earnings_today = False
+    if earnings_date:
+        try:
+            from datetime import date as _date2
+            ed = _date2.fromisoformat(earnings_date)
+            earnings_countdown = (ed - _date2.today()).days
+            earnings_today = earnings_countdown == 0
+        except Exception:
+            pass
+
+    # ── 30-Tage Kursperformance ────────────────────────────────
+    price_change_30d = None
+    try:
+        def _fetch_30d():
+            import yfinance as yf
+            hist = yf.Ticker(ticker).history(period="35d")
+            if hist.empty or len(hist) < 2:
+                return None
+            p0 = float(hist["Close"].iloc[0])
+            p1 = float(hist["Close"].iloc[-1])
+            return round(((p1 - p0) / p0) * 100, 1) if p0 > 0 else None
+        price_change_30d = await asyncio.to_thread(_fetch_30d)
+    except Exception:
+        pass
+
+    # ── Short Interest & Insider ───────────────────────────────
+    short_interest_pct = None
+    days_to_cover = None
+    squeeze_risk = None
+    if short_int:
+        short_interest_pct = getattr(short_int, "short_interest_percent", None)
+        days_to_cover      = getattr(short_int, "days_to_cover", None)
+        squeeze_risk       = getattr(short_int, "squeeze_risk", None)
+
+    insider_buys = 0
+    insider_sells = 0
+    insider_buy_value = 0.0
+    insider_sell_value = 0.0
+    insider_assessment = "normal"
+    if insiders:
+        insider_buys      = getattr(insiders, "total_buys", 0) or 0
+        insider_sells     = getattr(insiders, "total_sells", 0) or 0
+        insider_buy_value  = getattr(insiders, "total_buy_value", 0.0) or 0.0
+        insider_sell_value = getattr(insiders, "total_sell_value", 0.0) or 0.0
+        insider_assessment = getattr(insiders, "assessment", "normal") or "normal"
+
+    # ── News-Stichpunkte (max 10 neueste) ─────────────────────
+    news_bullets = []
+    for b in (news_mem or [])[:10]:
+        news_bullets.append({
+            "text": b.get("bullet_text", "") or b.get("insight", ""),
+            "sentiment": b.get("sentiment_score", 0),
+            "is_material": b.get("is_material", False),
+            "category": b.get("category", ""),
+            "date": b.get("date", "") or b.get("created_at", ""),
+        })
+
+    # ── Price Target ───────────────────────────────────────────
+    price_target_high = None
+    price_target_low  = None
+    price_target_avg  = None
+    if price_tgt:
+        price_target_high = price_tgt.get("targetHigh") or \
+                           price_tgt.get("targetHighPrice")
+        price_target_low  = price_tgt.get("targetLow") or \
+                           price_tgt.get("targetLowPrice")
+        price_target_avg  = price_tgt.get("targetConsensus") or \
+                           price_tgt.get("targetMeanPrice")
+    if not price_target_avg and analyst_target:
+        price_target_avg = analyst_target
+
+    # ── Technicals zusammenführen ──────────────────────────────
+    rsi = None
+    trend = None
+    sma_50 = None
+    sma_200 = None
+    above_sma50 = None
+    above_sma200 = None
+    sma50_distance = None
+    sma200_distance = None
+    support = None
+    resistance = None
+    distance_52w_high = None
+
+    if tech:
+        rsi          = getattr(tech, "rsi_14", None)
+        trend        = getattr(tech, "trend", None)
+        sma_50       = getattr(tech, "sma_50", None)
+        sma_200      = getattr(tech, "sma_200", None)
+        above_sma50  = getattr(tech, "above_sma50", None)
+        above_sma200 = getattr(tech, "above_sma200", None)
+        sma50_distance  = getattr(tech, "sma50_distance_pct", None)
+        sma200_distance = getattr(tech, "sma200_distance_pct", None)
+        support     = getattr(tech, "support_level", None)
+        resistance  = getattr(tech, "resistance_level", None)
+        distance_52w_high = getattr(tech, "distance_to_52w_high_percent", None)
+
+    # ── Letzter Audit aus Supabase ─────────────────────────────
+    last_audit = None
+    try:
+        from backend.app.db import get_supabase_client
+        db = get_supabase_client()
+        if db:
+            res = (
+                db.table("audit_reports")
+                .select("report_date, recommendation, opportunity_score, torpedo_score, report_text")
+                .eq("ticker", ticker)
+                .order("report_date", desc=True)
+                .limit(1)
+                .execute()
+            )
+            rows = res.data if res and res.data else []
+            if rows:
+                last_audit = {
+                    "date": rows[0].get("report_date"),
+                    "recommendation": rows[0].get("recommendation"),
+                    "opportunity_score": rows[0].get("opportunity_score"),
+                    "torpedo_score": rows[0].get("torpedo_score"),
+                    "report_text": rows[0].get("report_text", "")[:500],
+                }
+    except Exception as e:
+        logger.debug(f"Research: last audit {ticker}: {e}")
+
+    # ── Response zusammenbauen ─────────────────────────────────
+    response = {
+        "ticker": ticker,
+        "company_name": company_name or ticker,
+        "sector": sector,
+        "industry": industry,
+        "fetched_at": now.isoformat(),
+
+        # Preis & Performance
+        "price": price,
+        "change_pct": change_pct,
+        "price_change_30d": price_change_30d,
+        "fifty_two_week_high": fifty_two_week_high,
+        "fifty_two_week_low": fifty_two_week_low,
+
+        # Bewertung
+        "pe_ratio": pe_ratio,
+        "forward_pe": forward_pe,
+        "ps_ratio": ps_ratio,
+        "peg_ratio": round(peg_ratio, 2) if peg_ratio else None,
+        "ev_ebitda": round(ev_ebitda, 2) if ev_ebitda else None,
+        "market_cap": market_cap,
+        "beta": beta,
+        "dividend_yield": dividend_yield,
+        "revenue_ttm": revenue_ttm,
+        "eps_ttm": eps_ttm,
+        "roe": round(roe * 100, 1) if roe else None,
+        "roa": round(roa * 100, 1) if roa else None,
+        "debt_equity": debt_equity,
+        "fcf_yield": round(fcf_yield * 100, 2) if fcf_yield else None,
+        "current_ratio": current_ratio,
+
+        # Analyst
+        "analyst_target": price_target_avg or analyst_target,
+        "analyst_target_high": price_target_high,
+        "analyst_target_low": price_target_low,
+        "analyst_recommendation": analyst_recommendation,
+        "number_of_analysts": number_of_analysts,
+
+        # Technicals
+        "rsi": rsi,
+        "trend": trend,
+        "sma_50": sma_50,
+        "sma_200": sma_200,
+        "above_sma50": above_sma50,
+        "above_sma200": above_sma200,
+        "sma50_distance_pct": sma50_distance,
+        "sma200_distance_pct": sma200_distance,
+        "support": support,
+        "resistance": resistance,
+        "distance_52w_high_pct": distance_52w_high,
+
+        # Options
+        "iv_atm": round(getattr(options, "implied_volatility_atm", 0) * 100, 1) if options else None,
+        "put_call_ratio": getattr(options, "put_call_ratio_oi", None) if options else None,
+        "expected_move_pct": expected_move_pct,
+        "expected_move_usd": expected_move_usd,
+
+        # Short Interest
+        "short_interest_pct": short_interest_pct,
+        "days_to_cover": days_to_cover,
+        "squeeze_risk": squeeze_risk,
+
+        # Insider
+        "insider_buys": insider_buys,
+        "insider_sells": insider_sells,
+        "insider_buy_value": insider_buy_value,
+        "insider_sell_value": insider_sell_value,
+        "insider_assessment": insider_assessment,
+
+        # Earnings
+        "earnings_date": earnings_date,
+        "report_timing": report_timing,
+        "earnings_countdown": earnings_countdown,
+        "earnings_today": earnings_today,
+        "eps_consensus": eps_consensus,
+        "revenue_consensus": revenue_consensus,
+        "beats_of_8": beats_of_8,
+        "avg_surprise_pct": avg_surprise,
+        "last_surprise_pct": last_surprise_pct,
+        "last_beat": last_beat,
+        "quarterly_history": quarterly_history,
+
+        # News
+        "news_bullets": news_bullets,
+
+        # Watchlist
+        "is_watchlist": is_watchlist,
+        "web_prio": watchlist_item.get("web_prio") if watchlist_item else None,
+
+        # Letzter Audit
+        "last_audit": last_audit,
+    }
+
+    cache_set(cache_key, response, ttl_seconds=600)
+    return response
+
+
 @data_router.get("/earnings-radar")
 async def api_earnings_radar(days: int = 14):
     from datetime import datetime, timedelta

@@ -145,6 +145,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] **v5.2.6**: Enhanced Log System (Error/Warning Stats, Level Filtering, Terminal UI)
 - [x] **v5.2.7**: Command Palette Mini-Dashboard (lucide-react Icons, Audit Historie, Watchlist Management)
 - [x] **v5.2.8**: Performance Optimizations (Batch Queries, Caching, AsyncIO Improvements)
+- [x] **v5.3.0**: Research Dashboard API (aggregierter Endpoint mit PEG, EV/EBITDA, ROE, ROA, FCF Yield)
 
 ## 🚀 Aktuelle Features (Stand März 2026)
 
@@ -158,6 +159,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - ✅ **Sentiment Intelligence**: Composite Sentiment (FinBERT + Web + Social) mit Divergenz-Erkennung
 - ✅ **Peer Monitoring**: Automatische Peer-Reaktion Alerts bei Earnings
 - ✅ **Web Intelligence**: Gecachte Web-Suche mit Prioritätssystem
+- ✅ **Research Dashboard**: Aggregierter Endpoint für alle Trading-Daten in einem Call
 
 ### Data Sources
 - ✅ **Marktdaten**: yfinance (Kurse, Volumen, Indikatoren, Optionsdaten)

@@ -5,7 +5,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 5.6.3 (Energie-Signal + DeepSeek Kontext-Anreicherung)
+**Version**: 5.6.4 (Market-Signal Cache-Invalidierung)
 **Stand**: 2026-03-21
 
 ---
@@ -48,6 +48,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 - **News + FinBERT**: Kategorisierte Nachrichten mit Sentiment
 - **Rotation-Story**: Automatische Erkennung von Risk-On/Risk-Off
 - **Stagflations-Warnung**: Wenn Öl steigt + S&P fällt gleichzeitig
+- **Cache-Invalidierung**: Versionierte Cache-Keys (`market:overview:v2`, `market:intermarket:v2`) verhindern stale Signal-Daten
 
 ---
 

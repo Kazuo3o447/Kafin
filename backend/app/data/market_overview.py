@@ -163,7 +163,7 @@ async def get_market_overview() -> dict:
         except Exception:
             return {"error": "Mock-Daten nicht verfügbar"}
 
-    cache_key = "market:overview"
+    cache_key = "market:overview:v2"
     cached = cache_get(cache_key)
     if cached:
         logger.debug("Marktübersicht aus Cache")
@@ -477,7 +477,7 @@ async def get_intermarket_signals() -> dict:
         "HYG":  "High Yield Bonds",
     }
 
-    cache_key = "market:intermarket"
+    cache_key = "market:intermarket:v2"
     cached = cache_get(cache_key)
     if cached:
         return cached

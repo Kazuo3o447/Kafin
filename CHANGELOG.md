@@ -2,6 +2,17 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.6.4] - 2026-03-21 - Market-Signal Cache-Invalidierung
+
+### 🐛 Fixes
+- **Cache-Keys versioniert**: `market:overview:v2` und `market:intermarket:v2`
+- Neue Energie-/Stagflations-Signale werden nicht mehr von alten Redis-Einträgen verdeckt
+- Market Audit erhält aktuelle Intermarket-Daten sofort nach Deploy
+
+### 🔧 Backend
+- `market_overview.py`: versionierte Cache-Keys für Übersicht und Intermarket-Signale
+- `api_market_audit`: DeepSeek-Prompt weiterhin mit Energie-, News- und Rotations-Kontext
+
 ## [5.4.4] - 2026-03-21 - FinBERT/torch Verifikation
 
 ### ✅ Verifikation

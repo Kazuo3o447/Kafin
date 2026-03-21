@@ -5,7 +5,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 5.10.1 (Sentiment-/Log-Bugfixes)
+**Version**: 5.10.2 (Ignore-Filter für erwartbare yfinance-404s)
 **Stand**: 2026-03-21
 
 ---
@@ -53,11 +53,12 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 - **Earnings**: `/api/data/earnings-radar` - Pre-Earnings Sentiment
 - **Background Tasks**: Sofortiger News-Scan bei neuen Ticker-Additions
 
-### Bugfixes in v5.10.1
+### Bugfixes in v5.10.2
 - **Logs**: `/api/logs` bleibt array-kompatibel für den Admin-Viewer
 - **Cache-Invalidierung**: News-Scans invalidieren Research-, Watchlist- und Earnings-Caches direkt
 - **Null-Safety**: Ticker ohne News erzeugen keine irreführende Market-Divergenz mehr
 - **Batch-Fairness**: Sentiment-Batch lädt fehlende Ticker bei Bedarf gezielt nach
+- **Ignore-Filter**: Erwartbare yfinance-404s werden in `Ignore` einsortiert
 
 ---
 

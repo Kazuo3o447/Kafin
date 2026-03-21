@@ -2,6 +2,14 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.10.2] - 2026-03-21 - Ignore-Filter für erwartbare yfinance-404s
+
+### 🐛 Fixes
+- **Log-Filter**: Neue Kategorie `Ignore` für erwartbare yfinance-404-Fehler
+- **Backend-Klassifizierung**: `category=ignore` wird zentral im Logger gesetzt
+- **Error-Buckets**: `Errors` enthalten nur noch echte Fehler, keine erwartbaren 404s
+- **Viewer UI**: Admin-Logviewer und React-LogViewer unterstützen `Ignore`
+
 ## [5.10.1] - 2026-03-21 - Sentiment-/Log-Bugfixes
 
 ### 🐛 Fixes

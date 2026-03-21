@@ -34,6 +34,36 @@ LOG_FILE = os.path.join(LOG_DIR, "kafin.log")
 LOG_BUFFER_SIZE = 500
 _log_buffer: deque = deque(maxlen=LOG_BUFFER_SIZE)
 
+
+_EXPECTED_YFINANCE_404_PATTERNS = (
+    re.compile(r"HTTP Error 404", re.IGNORECASE),
+    re.compile(r"No fundamentals data found for symbol", re.IGNORECASE),
+    re.compile(r"Quote not found for symbol", re.IGNORECASE),
+    re.compile(r"quoteSummary.*Not Found", re.IGNORECASE),
+)
+
+
+def is_expected_yfinance_error(event: Any, logger_name: str | None = None) -> bool:
+    """Erkennt erwartbare yfinance-404 Fehler, die im Log als Ignore laufen sollen."""
+    text = str(event or "")
+    logger_name = (logger_name or "").lower()
+
+    if logger_name and logger_name != "yfinance":
+        # yfinance-404s kommen meist direkt vom yfinance-Logger oder werden dort gespiegelt.
+        # Ohne passenden Logger-Namen bleiben wir konservativ.
+        return any(pattern.search(text) for pattern in _EXPECTED_YFINANCE_404_PATTERNS)
+
+    return any(pattern.search(text) for pattern in _EXPECTED_YFINANCE_404_PATTERNS)
+
+
+def classify_log_entry(event_dict: Dict[str, Any]) -> str:
+    """Ordnet einen Log-Eintrag in 'ignore' oder 'normal' ein."""
+    logger_name = str(event_dict.get("logger", "") or "")
+    event = event_dict.get("event", "")
+    if is_expected_yfinance_error(event, logger_name):
+        return "ignore"
+    return "normal"
+
 def get_recent_logs() -> List[Dict[str, Any]]:
     """Gibt die letzten LOG_BUFFER_SIZE Einträge zurück, neueste zuerst."""
     return list(_log_buffer)
@@ -54,7 +84,10 @@ def _memory_buffer_processor(logger, log_method, event_dict):
     # Levelname aus dem Methoden-Namen ableiten, falls nicht gesetzt
     if "level" not in log_entry:
         log_entry["level"] = log_method
-    
+
+    if "category" not in log_entry:
+        log_entry["category"] = classify_log_entry(log_entry)
+
     _log_buffer.appendleft(log_entry)
     
     return event_dict

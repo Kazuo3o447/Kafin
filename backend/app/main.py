@@ -88,14 +88,28 @@ async def api_admin_init_tables():
 @app.get("/api/logs")
 async def api_get_logs(level: str = None, limit: int = 200):
     """Gibt die letzten Log-Einträge zurück."""
+    from backend.app.logger import is_expected_yfinance_error
     logs = get_recent_logs()
     if level:
-        logs = [l for l in logs if l.get("level") == level]
+        level_upper = level.upper()
+        if level_upper == "IGNORE":
+            logs = [
+                l for l in logs
+                if l.get("category") == "ignore"
+                or is_expected_yfinance_error(l.get("event", ""), l.get("logger", ""))
+            ]
+        else:
+            logs = [
+                l for l in logs
+                if l.get("level", "").upper() == level_upper
+                and not is_expected_yfinance_error(l.get("event", ""), l.get("logger", ""))
+            ]
     return logs[:limit]
 
 @app.get("/api/logs/errors")
 async def api_get_logs_errors():
     """Gibt nur Log-Einträge mit level 'error' oder 'warning' der letzten 24 Stunden zurück, maximal 50."""
+    from backend.app.logger import is_expected_yfinance_error
     logs = get_recent_logs()
     now = datetime.utcnow()
     cutoff = now - timedelta(hours=24)
@@ -105,6 +119,9 @@ async def api_get_logs_errors():
         level = log.get("level", "").lower()
         if level in ("error", "warning", "critical"):
             try:
+                event = log.get("event", "")
+                if is_expected_yfinance_error(event, log.get("logger", "")):
+                    continue
                 ts_str = log.get("timestamp")
                 if ts_str:
                     ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
@@ -3645,42 +3662,52 @@ app.include_router(web_intel_router)
 # --- LOG MANAGEMENT ---
 @app.get("/api/logs/file")
 async def get_file_logs(lines: int = 1000, level: str | None = None):
-    from backend.app.logger import LOG_FILE
-    import re
-    if not os.path.exists(LOG_FILE): return {"logs": [], "stats": {"total": 0, "error": 0, "warning": 0, "info": 0}}
+    from backend.app.logger import LOG_FILE, is_expected_yfinance_error
+    if not os.path.exists(LOG_FILE): return {"logs": [], "stats": {"total": 0, "error": 0, "warning": 0, "info": 0, "ignore": 0}}
     with open(LOG_FILE, "r", encoding="utf-8") as f:
         all_lines = f.readlines()
     
-    # Zähle Errors/Warnings/Info in ALLEN Zeilen
-    stats = {"total": len(all_lines), "error": 0, "warning": 0, "info": 0}
+    # Zähle Errors/Warnings/Info/Ignore in ALLEN Zeilen
+    stats = {"total": len(all_lines), "error": 0, "warning": 0, "info": 0, "ignore": 0}
     for line in all_lines:
-        if "[ERROR]" in line: stats["error"] += 1
-        elif "[WARNING]" in line: stats["warning"] += 1
-        elif "[INFO]" in line: stats["info"] += 1
+        if is_expected_yfinance_error(line):
+            stats["ignore"] += 1
+        elif "[ERROR]" in line:
+            stats["error"] += 1
+        elif "[WARNING]" in line:
+            stats["warning"] += 1
+        elif "[INFO]" in line:
+            stats["info"] += 1
     
     result_lines = all_lines[-lines:]
     
     # Level-Filter anwenden
     if level:
-        level_tag = f"[{level.upper()}]"
-        result_lines = [l for l in result_lines if level_tag in l]
+        level_upper = level.upper()
+        if level_upper == "IGNORE":
+            result_lines = [l for l in result_lines if is_expected_yfinance_error(l)]
+        else:
+            level_tag = f"[{level_upper}]"
+            result_lines = [l for l in result_lines if level_tag in l and not is_expected_yfinance_error(l)]
     
     return {"logs": result_lines, "stats": stats}
 
 @app.get("/api/logs/stats")
 async def get_log_stats():
     """Gibt Statistiken über Log-Level-Verteilung zurück (Error/Warning/Info Counts)."""
-    from backend.app.logger import LOG_FILE
-    if not os.path.exists(LOG_FILE): return {"stats": {"total": 0, "error": 0, "warning": 0, "info": 0}, "recent_errors": []}
+    from backend.app.logger import LOG_FILE, is_expected_yfinance_error
+    if not os.path.exists(LOG_FILE): return {"stats": {"total": 0, "error": 0, "warning": 0, "info": 0, "ignore": 0}, "recent_errors": []}
     with open(LOG_FILE, "r", encoding="utf-8") as f:
         all_lines = f.readlines()
     
-    stats = {"total": len(all_lines), "error": 0, "warning": 0, "info": 0}
+    stats = {"total": len(all_lines), "error": 0, "warning": 0, "info": 0, "ignore": 0}
     recent_errors = []
     recent_warnings = []
     
     for line in all_lines:
-        if "[ERROR]" in line:
+        if is_expected_yfinance_error(line):
+            stats["ignore"] += 1
+        elif "[ERROR]" in line:
             stats["error"] += 1
             recent_errors.append(line.strip())
         elif "[WARNING]" in line:

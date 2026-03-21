@@ -372,6 +372,7 @@ ADMIN_HTML = """
                         <option value="INFO">INFO</option>
                         <option value="WARNING">WARNING</option>
                         <option value="ERROR">ERROR</option>
+                        <option value="IGNORE">IGNORE</option>
                     </select>
                 </div>
             </div>
@@ -1049,16 +1050,23 @@ ADMIN_HTML = """
                 "DEBUG": "text-gray-500",
                 "INFO": "text-gray-200",
                 "WARNING": "text-yellow-400",
-                "ERROR": "text-red-500 font-bold"
+                "ERROR": "text-red-500 font-bold",
+                "IGNORE": "text-slate-400"
             };
             
             let count = 0;
             currentLogs.forEach(log => {
-                if(filter !== 'ALL' && log.level !== filter.toLowerCase()) return;
-                count++;
-                
+                const category = (log.category || "normal").toLowerCase();
                 const level = log.level ? log.level.toUpperCase() : "INFO";
-                const colorClass = colors[level] || colors["INFO"];
+                if(filter === 'IGNORE') {
+                    if(category !== 'ignore') return;
+                } else if(filter !== 'ALL' && level !== filter) {
+                    return;
+                }
+                count++;
+                const colorClass = filter === 'IGNORE'
+                    ? colors["IGNORE"]
+                    : colors[level] || colors["INFO"];
                 const timeStr = log.timestamp ? log.timestamp.split('T')[1].substring(0,8) : "";
                 const name = log.logger || "app";
                 const event = log.event || "";
@@ -1069,7 +1077,7 @@ ADMIN_HTML = """
                     <span class="text-gray-500 whitespace-nowrap">[${timeStr}]</span>
                     <span class="${colorClass} w-16">${level}</span>
                     <span class="text-gray-500 w-32 truncate" title="${name}">${name}</span>
-                    <span class="${colorClass} flex-1 break-all">${event}</span>
+                    <span class="${colorClass} flex-1 break-all">${event}${category === 'ignore' ? ' <span class="ml-2 text-slate-500">[Ignore]</span>' : ''}</span>
                 `;
                 list.appendChild(div);
             });

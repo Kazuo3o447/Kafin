@@ -2,13 +2,13 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Terminal, Download, Pause, Play, Trash2, Search, AlertTriangle, AlertCircle, Info, Filter, X } from "lucide-react";
 
-type LogStats = { total: number; error: number; warning: number; info: number };
-type LevelFilter = "all" | "error" | "warning" | "info";
+type LogStats = { total: number; error: number; warning: number; info: number; ignore: number };
+type LevelFilter = "all" | "error" | "warning" | "info" | "ignore";
 
 export function LogViewer() {
     const [isOpen, setIsOpen] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
-    const [stats, setStats] = useState<LogStats>({ total: 0, error: 0, warning: 0, info: 0 });
+    const [stats, setStats] = useState<LogStats>({ total: 0, error: 0, warning: 0, info: 0, ignore: 0 });
     const [isPolling, setIsPolling] = useState(true);
     const [autoScroll, setAutoScroll] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
@@ -78,12 +78,13 @@ export function LogViewer() {
     const handleClear = async () => {
         await fetch("/api/logs/file", { method: "DELETE" });
         setLogs([]);
-        setStats({ total: 0, error: 0, warning: 0, info: 0 });
+        setStats({ total: 0, error: 0, warning: 0, info: 0, ignore: 0 });
     };
 
     if (!isOpen) return null;
 
     const filteredLogs = logs.filter(l => l.toLowerCase().includes(searchTerm.toLowerCase()));
+    const isIgnoreFilter = levelFilter === "ignore";
 
     const filterBtn = (level: LevelFilter, label: string, count: number, color: string, bgActive: string) => (
         <button
@@ -95,6 +96,7 @@ export function LogViewer() {
             {level === "error" && <AlertCircle size={12} />}
             {level === "warning" && <AlertTriangle size={12} />}
             {level === "info" && <Info size={12} />}
+            {level === "ignore" && <X size={12} />}
             {label}
             <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-black/20">{count}</span>
         </button>
@@ -131,6 +133,7 @@ export function LogViewer() {
                 {filterBtn("error", "Errors", stats.error, "text-rose-400", "bg-rose-950/40")}
                 {filterBtn("warning", "Warnings", stats.warning, "text-amber-400", "bg-amber-950/40")}
                 {filterBtn("info", "Info", stats.info, "text-blue-400", "bg-blue-950/40")}
+                {filterBtn("ignore", "Ignore", stats.ignore, "text-slate-400", "bg-slate-950/40")}
                 <div className="ml-auto text-[10px] text-[var(--text-muted)]">Zeilen: {filteredLogs.length} / {stats.total}</div>
             </div>
 
@@ -140,10 +143,17 @@ export function LogViewer() {
                     const l = log.toLowerCase();
                     const isErr = l.includes("[error]") || l.includes("error_code");
                     const isWarn = l.includes("[warning]");
-                    const col = isErr ? "text-rose-400 font-bold bg-rose-950/20" : isWarn ? "text-amber-400 bg-amber-950/10" : "text-[var(--text-secondary)]";
+                    const col = isIgnoreFilter
+                      ? "text-slate-400 bg-slate-950/20"
+                      : isErr
+                      ? "text-rose-400 font-bold bg-rose-950/20"
+                      : isWarn
+                      ? "text-amber-400 bg-amber-950/10"
+                      : "text-[var(--text-secondary)]";
                     return (
                         <div key={i} className={`flex gap-3 px-2 py-0.5 break-all whitespace-pre-wrap hover:bg-white/5 ${col}`}>
-                            {isErr && <AlertCircle size={13} className="mt-0.5 shrink-0" />}
+                            {isIgnoreFilter && <X size={13} className="mt-0.5 shrink-0" />}
+                            {!isIgnoreFilter && isErr && <AlertCircle size={13} className="mt-0.5 shrink-0" />}
                             {isWarn && <AlertTriangle size={13} className="mt-0.5 shrink-0" />}
                             <span className="opacity-70">[{i+1}]</span> {log}
                         </div>

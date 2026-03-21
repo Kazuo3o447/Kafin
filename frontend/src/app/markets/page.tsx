@@ -20,6 +20,7 @@ import {
   Timer,
   Info,
 } from "lucide-react";
+import Link from "next/link";
 
 // Types
 type IndexData = {
@@ -191,54 +192,6 @@ function isStale(timestamp: string, maxMinutes: number): boolean {
   return deltaMins > maxMinutes;
 }
 
-function DashboardInfoBlock() {
-  const refreshLegend = [
-    { label: "60s", value: "Indizes / Sektoren / Makro-Proxys" },
-    { label: "5m", value: "Marktbreite" },
-    { label: "10m", value: "Cross-Asset / News" },
-    { label: "30m", value: "Makro / Kalender" },
-  ];
-
-  return (
-    <div className="card p-6 border border-[var(--border)] bg-[var(--bg-secondary)]">
-      <div className="flex items-center justify-between gap-4 mb-4">
-        <div className="flex items-center gap-2">
-          <Info size={18} className="text-[var(--accent-blue)]" />
-          <h3 className="text-lg font-bold text-[var(--text-primary)]">Dashboard-Info</h3>
-        </div>
-        <span className="rounded-full border border-[var(--border)] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
-          10. Block
-        </span>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
-        <div className="space-y-3 text-sm text-[var(--text-secondary)]">
-          <p>
-            Diese Seite zeigt Marktregime, Breite, Sektoren, Cross-Asset-Signale,
-            News-Sentiment, den Wirtschaftskalender und den KI-Markt-Audit in einem
-            gemeinsamen Layout.
-          </p>
-          <p>
-            <span className="font-semibold text-[var(--text-primary)]">News + FinBERT</span>
-            analysiert relevante Markt-Headlines. Wenn keine Headlines verfügbar sind,
-            bleibt die Karte sichtbar und zeigt den Status statt einfach zu verschwinden.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          {refreshLegend.map((item) => (
-            <div key={item.label} className="rounded-lg bg-[var(--bg-tertiary)] p-3">
-              <div className="text-xs font-bold uppercase tracking-widest text-[var(--accent-blue)]">
-                {item.label}
-              </div>
-              <div className="mt-1 text-xs text-[var(--text-secondary)]">{item.value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function BlockHeaderBadge({ block, cadence }: { block: string; cadence: string }) {
   return (
@@ -1142,6 +1095,14 @@ export default function MarketsPage() {
               <span>Zuletzt aktualisiert: {lastUpdate.toLocaleTimeString("de-DE")}</span>
             )}
           </div>
+          <Link
+            href="/markets/info"
+            className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+            title="Dashboard-Info öffnen"
+          >
+            <Info size={16} />
+            <span className="hidden sm:inline">Info</span>
+          </Link>
           <button
             onClick={fetchAll}
             disabled={loading}
@@ -1153,8 +1114,7 @@ export default function MarketsPage() {
         </div>
       </div>
 
-      <DashboardInfoBlock />
-      
+            
       {/* 9 Data Blocks Grid */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Block 1: Global Indices */}

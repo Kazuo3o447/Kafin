@@ -41,6 +41,23 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 - **api.ts**: getMarketNewsSentiment(), getEconomicCalendar() hinzugefügt
 - **Error Handling**: Alle fetch-Funktionen setzen undefined bei Fehlern
 
+## [5.5.2] - 2026-03-21 - P1b: Markets Dashboard Info-Seite & Container-Fix
+### UI-Verbesserungen
+- **Info-Unterseite** erstellt: `/markets/info` mit vollständiger Dashboard-Dokumentation
+- **"i" Button** im Dashboard Header für einfachen Zugriff auf Info-Seite
+- **Inline Info-Block** entfernt - Dashboard wieder sauber und fokussiert
+
+### Container- & Runtime-Fixes
+- **Frontend Source-Mount** hinzugefügt: `./frontend/src:/app/src`
+- **Next.js Config-Mount** hinzugefügt: `./frontend/next.config.ts:/app/next.config.ts`
+- **API-Proxy umgestellt** auf `INTERNAL_API_URL` für Docker-Kompatibilität
+- **Container neu aufgebaut** - Änderungen jetzt sofort im Browser sichtbar
+
+### Problembehebung
+- **Frontend zeigte keine Änderungen**: Grund war falscher API-Proxy (`localhost:8000` im Container)
+- **API-Calls liefen ins Leere**: jetzt korrekt auf `kafin-backend:8000` geroutet
+- **Datenabfragen funktionieren wieder**: `/api/data/*` Endpunkte erreichbar
+
 ## [5.5.1] - 2026-03-21 - P1b: Markets Dashboard v2 UI-Vervollständigung
 ### UI-Fehlerbehebung & Info-Block
 - **Dashboard-Info Block** hinzugefügt (10. Block mit Refresh-Legende)

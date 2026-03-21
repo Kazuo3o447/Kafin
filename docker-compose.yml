@@ -64,6 +64,9 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/next.config.ts:/app/next.config.ts
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - INTERNAL_API_URL=http://kafin-backend:8000  # <-- WICHTIG: Überschreibt lokale Env-Werte für Container-zu-Container Kommunikation

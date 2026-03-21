@@ -2273,7 +2273,7 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
     from backend.app.cache import cache_get, cache_set
 
     # Cache-Check
-    cache_key = f"yf:fast_info:{ticker.upper()}"
+    cache_key = f"yf:enriched_v2:{ticker.upper()}"
     cached_data = cache_get(cache_key)
     if cached_data:
         entry.update(cached_data)
@@ -2307,19 +2307,68 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
     except Exception:
         pass
 
-    # Fallback für Preis wenn fast_info komplett fehlschlägt
-    if not result.get("price"):
-        try:
-            hist = stock.history(period="2d")
-            if not hist.empty:
-                result["price"] = round(float(hist["Close"].iloc[-1]), 2)
-                if len(hist) >= 2:
-                    prev = float(hist["Close"].iloc[-2])
-                    curr = float(hist["Close"].iloc[-1])
-                    if prev:
-                        result["change_pct"] = round(((curr - prev) / prev) * 100, 2)
-        except Exception:
-            pass
+    # --- Einmaliger history-Call für alle Technicals ---
+    try:
+        hist = stock.history(period="65d")
+
+        if len(hist) >= 2:
+            # Preis-Fallback wenn fast_info fehlgeschlagen
+            if not result.get("price"):
+                result["price"] = round(
+                    float(hist["Close"].iloc[-1]), 2
+                )
+                prev = float(hist["Close"].iloc[-2])
+                cur  = float(hist["Close"].iloc[-1])
+                if prev:
+                    result["change_pct"] = round(
+                        ((cur - prev) / prev) * 100, 2
+                    )
+
+        if len(hist) >= 5:
+            # 5T-Performance
+            c_now = float(hist["Close"].iloc[-1])
+            c_5d  = float(hist["Close"].iloc[-5])
+            if c_5d:
+                result["change_5d_pct"] = round(
+                    ((c_now - c_5d) / c_5d) * 100, 2
+                )
+
+        if len(hist) >= 15:
+            # ATR(14)
+            hi = hist["High"]
+            lo = hist["Low"]
+            cl = hist["Close"]
+            tr = [
+                max(
+                    float(hi.iloc[i]) - float(lo.iloc[i]),
+                    abs(float(hi.iloc[i]) - float(cl.iloc[i-1])),
+                    abs(float(lo.iloc[i]) - float(cl.iloc[i-1])),
+                )
+                for i in range(1, len(hist))
+            ]
+            result["atr_14"] = round(
+                sum(tr[-14:]) / 14, 2
+            ) if len(tr) >= 14 else None
+
+        if len(hist) >= 20:
+            # RVOL
+            vol_today = float(hist["Volume"].iloc[-1])
+            vol_avg20 = float(
+                hist["Volume"].tail(20).mean()
+            )
+            if vol_avg20 > 0:
+                result["rvol"] = round(
+                    vol_today / vol_avg20, 2
+                )
+
+        if len(hist) >= 50:
+            # above_sma50
+            sma50 = float(hist["Close"].tail(50).mean())
+            cur   = float(hist["Close"].iloc[-1])
+            result["above_sma50"] = cur > sma50
+
+    except Exception:
+        pass
 
     # --- Earnings-Datum via calendar ---
     try:
@@ -2347,73 +2396,33 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
     except Exception:
         pass
 
-    # --- 5T-Performance ---
+    # iv_atm: nur laden wenn Earnings bald (≤14T)
+    # und nur wenn bereits ein earnings_countdown
+    # im result vorhanden ist
     try:
-        hist5 = stock.history(period="6d")
-        if len(hist5) >= 5:
-            c_now = float(hist5["Close"].iloc[-1])
-            c_5d  = float(hist5["Close"].iloc[-5])
-            if c_5d:
-                result["change_5d_pct"] = round(
-                    ((c_now - c_5d) / c_5d) * 100, 2
-                )
-    except Exception:
-        pass
-
-    # --- ATR(14) + RVOL ---
-    try:
-        hist20 = stock.history(period="25d")
-        if len(hist20) >= 14:
-            hi = hist20["High"]
-            lo = hist20["Low"]
-            cl = hist20["Close"]
-            tr = [
-                max(
-                    hi.iloc[i] - lo.iloc[i],
-                    abs(hi.iloc[i] - cl.iloc[i-1]),
-                    abs(lo.iloc[i] - cl.iloc[i-1]),
-                )
-                for i in range(1, len(hist20))
-            ]
-            result["atr_14"] = round(
-                sum(tr[-14:]) / 14, 2
-            ) if len(tr) >= 14 else None
-
-        if len(hist20) >= 20:
-            vol_today = float(hist20["Volume"].iloc[-1])
-            vol_avg20 = float(hist20["Volume"].tail(20).mean())
-            result["rvol"] = round(
-                vol_today / vol_avg20, 2
-            ) if vol_avg20 else None
-    except Exception:
-        pass
-
-    # --- above_sma50 ---
-    try:
-        hist60 = stock.history(period="60d")
-        if len(hist60) >= 50:
-            sma50 = float(hist60["Close"].tail(50).mean())
-            cur   = float(hist60["Close"].iloc[-1])
-            result["above_sma50"] = cur > sma50
-    except Exception:
-        pass
-
-    # --- IV ATM (implied volatility) ---
-    try:
-        opts = stock.options
-        if opts:
-            nearest_exp = opts[0]
-            chain = stock.option_chain(nearest_exp)
-            atm_calls = chain.calls
-            if not atm_calls.empty and result.get("price"):
-                idx = (
-                    (atm_calls["strike"] - result["price"])
-                    .abs()
-                    .idxmin()
-                )
-                iv = atm_calls.loc[idx, "impliedVolatility"]
-                if iv and float(iv) > 0:
-                    result["iv_atm"] = round(float(iv) * 100, 1)
+        countdown = result.get("earnings_countdown")
+        if countdown is not None and 0 <= countdown <= 14:
+            opts = stock.options
+            if opts and len(opts) > 0:
+                chain = stock.option_chain(opts[0])
+                atm_calls = chain.calls
+                cur_price = result.get("price")
+                if (
+                    not atm_calls.empty
+                    and cur_price
+                    and cur_price > 0
+                ):
+                    idx = (
+                        (atm_calls["strike"] - cur_price)
+                        .abs()
+                        .idxmin()
+                    )
+                    iv = float(
+                        atm_calls.loc[idx, "impliedVolatility"]
+                        or 0
+                    )
+                    if iv > 0:
+                        result["iv_atm"] = round(iv * 100, 1)
     except Exception:
         pass
 
@@ -2456,10 +2465,13 @@ def _fetch_all_scores_sync(tickers: list, db) -> dict:
     if not db or not tickers:
         return {}
     try:
+        max_rows = len(tickers) * 8  # 8 statt 7 als Puffer
         res = (
             db.table("score_history")
             .select("*")
             .in_("ticker", tickers)
+            .order("date", desc=True)
+            .limit(max_rows)
             .execute()
         )
         rows = res.data if res and res.data else []

@@ -564,10 +564,14 @@ export default function WatchlistPage() {
     field: SortField; label: string; align?: string;
   }) {
     const active = sortField === field;
+    const alignClass =
+      align === "left"   ? "text-left"
+      : align === "center" ? "text-center"
+      : "text-right";
     return (
       <th
         onClick={() => toggleSort(field)}
-        className={`px-3 py-3 text-${align} font-semibold
+        className={`px-3 py-3 ${alignClass} font-semibold
                     text-[var(--text-secondary)] cursor-pointer
                     select-none hover:text-[var(--text-primary)]
                     transition-colors ${active

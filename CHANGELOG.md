@@ -2,6 +2,21 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.8.1] - 2026-03-21 - Watchlist Hotfix
+
+### 🐛 Bugfixes (Review-Findings)
+- **history()-Calls**: 4 → 1 Call pro Ticker
+  (65d-Call liefert change_5d, atr_14, rvol, sma50)
+  Geschätzte Verbesserung: 4× schnellere Erstladezeit
+- **Cache-Key**: yf:fast_info → yf:enriched_v2
+  Verhindert stale Cache nach Deploy
+- **iv_atm**: Option-Chain nur noch bei
+  Earnings ≤14T — nicht bei jedem Load
+- **score_history**: DB-Query mit .order + .limit
+  statt Python-seitigem Kürzen
+- **SortHeader**: statisches Tailwind-Klassen-Mapping
+  statt dynamischer String-Interpolation
+
 ## [5.8.0] - 2026-03-21 - Watchlist: Trading-Werkzeug
 
 ### 🚀 Trading-Mehrwert

@@ -71,6 +71,7 @@ services:
       - kafin-backend
     networks:
       - kafin-net
+    command: npm run dev
 
 volumes:
   redis-data:

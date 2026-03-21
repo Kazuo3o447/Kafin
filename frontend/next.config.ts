@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: "http://kafin-backend:8000/api/:path*",
+        destination: "http://localhost:8001/api/:path*",
       },
     ];
   },

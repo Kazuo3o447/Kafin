@@ -6,15 +6,20 @@ Wird bei jeder Session gepflegt.
 
 ---
 
-## ✅ IMPLEMENTIERT: Markets Seite (/markets)
-- Regime-Ampel (Risk-On / Mixed / Risk-Off)
-- 6 Indizes inkl. DAX + MSCI World
-- Marktbreite: % Aktien über SMA50/200 (30-Titel-Sample)
-- Sektor-Heatmap (11 ETFs, farbcodiert)
-- Cross-Asset Signale (VIX-Struktur, Risk Appetite, Credit)
-- Makro: Fed, VIX, Credit Spread, Yield Curve
-- Finnhub Nachrichten-Feed
-- DeepSeek Markt-Audit auf Knopfdruck
+## ✅ IMPLEMENTIERT: Markets Dashboard v2 (/markets)
+- **Granulare Refresh-Zyklen**: 9 Blöcke mit individuellen Intervallen (60s-30min)
+- **Block 1: Globale Indizes**: SPY, QQQ, DIA, IWM, DAX, Euro Stoxx 50, Nikkei 225, MSCI World
+- **Block 2: Sektor-Rotation**: 11 Sektoren mit 5d Performance und Ranking
+- **Block 3: Marktbreite**: S&P 500 Top 50 statt Dow 30, mit breadth_index
+- **Block 4: Makro-Dashboard**: Fed Rate, VIX, Credit Spread, Yield Curve
+- **Block 5: Cross-Asset Signale**: Risk Appetite, VIX-Struktur, Credit-Signal
+- **Block 6: Marktnachrichten + FinBERT**: Kategorisierte News mit Sentiment-Scores
+- **Block 7: Wirtschaftskalender**: 48h Events mit Impact-Bewertung
+- **Block 8: KI-Markt-Audit**: DeepSeek Regime-Einschätzung auf Knopfdruck
+- **Block 9: Makro-Proxys**: VIX, TLT, UUP, GLD, USO mit RSI
+- **Promise.allSettled**: Robuste Parallel-Fetches für alle Blöcke
+- **Timestamp-Delta**: "vor 5 min" Anzeige mit Stale-Warnungen
+- **BlockError**: Fallback-Komponente für fehlgeschlagene API-Calls
 
 ## 🟡 FUTURE: General News Endpoint
 GET /api/news/general fehlt noch.

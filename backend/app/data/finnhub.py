@@ -343,3 +343,56 @@ async def get_insider_transactions_list(ticker: str) -> List[dict]:
             logger.debug(f"Finnhub Social Sentiment Fehler für {ticker}: {e}")
             return None
 
+
+@rate_limit("finnhub")
+async def get_general_news(category: str = "general", min_id: int = 0) -> list[dict]:
+    """
+    Holt allgemeine Marktnachrichten von Finnhub.
+    Endpoint: GET /news?category=general
+    Kostenlos im Free Tier.
+    """
+    if settings.use_mock_data:
+        return [
+            {"headline": "Mock: Fed signals continued rate cuts", "source": "mock", "summary": "", "url": "", "datetime": 0},
+            {"headline": "Mock: Inflation data shows cooling trend", "source": "mock", "summary": "", "url": "", "datetime": 0}
+        ]
+
+    url = f"https://finnhub.io/api/v1/news?category={category}&token={settings.finnhub_api_key}"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        news = response.json()
+
+        # Nimm die 15 neuesten, filtere auf relevante Quellen
+        filtered = []
+        for n in news[:30]:
+            source = n.get("source", "").lower()
+            # Priorisiere Qualitätsquellen
+            if any(s in source for s in ["reuters", "bloomberg", "cnbc", "wsj", "ft", "associated press", "yahoo"]):
+                filtered.append({
+                    "headline": n.get("headline", ""),
+                    "summary": n.get("summary", "")[:200],
+                    "source": n.get("source", ""),
+                    "url": n.get("url", ""),
+                    "datetime": n.get("datetime", 0)
+                })
+            if len(filtered) >= 10:
+                break
+
+        # Falls nicht genug Qualitätsquellen: Auffüllen mit allen
+        if len(filtered) < 5:
+            for n in news[:15]:
+                if n.get("headline", "") not in [f["headline"] for f in filtered]:
+                    filtered.append({
+                        "headline": n.get("headline", ""),
+                        "summary": n.get("summary", "")[:200],
+                        "source": n.get("source", ""),
+                        "url": n.get("url", ""),
+                        "datetime": n.get("datetime", 0)
+                    })
+                if len(filtered) >= 10:
+                    break
+
+        logger.info(f"Allgemeine Marktnachrichten: {len(filtered)} geladen")
+        return filtered
+

@@ -2,6 +2,37 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.6.0] - 2026-03-21 - Markets Dashboard v2
+
+### 🚀 Trading-Mehrwert
+- **Granulare Refresh-Zyklen**: 9 Blöcke mit individuellen Intervallen (60s-30min)
+- **Block 1: Globale Indizes**: SPY, QQQ, DIA, IWM, DAX, Euro Stoxx 50, Nikkei 225, MSCI World
+- **Block 2: Sektor-Rotation**: 11 Sektoren mit 5d Performance und Ranking
+- **Block 3: Marktbreite**: S&P 500 Top 50 statt Dow 30, mit breadth_index
+- **Block 4: Makro-Dashboard**: Fed Rate, VIX, Credit Spread, Yield Curve
+- **Block 5: Cross-Asset Signale**: Risk Appetite, VIX-Struktur, Credit-Signal
+- **Block 6: Marktnachrichten + FinBERT**: Kategorisierte News mit Sentiment-Scores
+- **Block 7: Wirtschaftskalender**: 48h Events mit Impact-Bewertung
+- **Block 8: KI-Markt-Audit**: DeepSeek Regime-Einschätzung auf Knopfdruck
+- **Block 9: Makro-Proxys**: VIX, TLT, UUP, GLD, USO mit RSI
+
+### 🔧 Backend-Änderungen
+- **market_overview.py**: SP500_TOP50 statt DOW_COMPONENTS, breadth_index hinzugefügt
+- **get_market_news_for_sentiment()**: FinBERT-Sentiment für Marktnachrichten
+- **get_general_news()**: Finnhub General News Endpoint
+- **Neue Endpoints**: /market-news-sentiment, /economic-calendar
+- **Promise.allSettled**: Robuste Parallel-Fetches für alle Blöcke
+
+### 🎨 Frontend-Verbesserungen
+- **Timestamp-Delta**: "vor 5 min" Anzeige mit Stale-Warnungen
+- **BlockError**: Fallback-Komponente für fehlgeschlagene API-Calls
+- **Isolierte State-Verwaltung**: Jeder Block hat eigenen State und Refresh
+- **TypeScript**: Alle Typen definiert, null → undefined für Konsistenz
+
+### 📊 API-Updates
+- **api.ts**: getMarketNewsSentiment(), getEconomicCalendar() hinzugefügt
+- **Error Handling**: Alle fetch-Funktionen setzen undefined bei Fehlern
+
 ## [5.5.0] - 2026-03-21 - P1a: Scores im Research Dashboard
 
 ### 🚀 Trading-Mehrwert

@@ -107,6 +107,8 @@ export const api = {
   // Markets Dashboard
   getMarketBreadth: () => fetchAPI("/api/data/market-breadth"),
   getIntermarket: () => fetchAPI("/api/data/intermarket"),
+  getMarketNewsSentiment: () => fetchAPI("/api/data/market-news-sentiment"),
+  getEconomicCalendar: () => fetchAPI("/api/data/economic-calendar"),
   generateMarketAudit: () => fetchAPI("/api/data/market-audit", {
     method: "POST",
   }),

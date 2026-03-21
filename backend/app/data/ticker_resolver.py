@@ -155,7 +155,20 @@ async def resolve_ticker(ticker: str) -> dict:
             "available_fields": orig_fields,
         }
 
-    # 3. Suffixe durchprobieren (nur wenn Original schwach)
+    # Optimierung: US-Ticker (kein Punkt im Symbol) haben selten bessere Alternativen
+    # Skip Suffix-Testing wenn Original-Ticker US-Format hat und Preis vorhanden
+    if "." not in ticker and orig_price and orig_fields >= 2:
+        quality = "good" if orig_fields >= 5 else "partial"
+        return {
+            "resolved_ticker": ticker,
+            "original_ticker": ticker,
+            "was_resolved": False,
+            "resolution_note": "",
+            "data_quality": quality,
+            "available_fields": orig_fields,
+        }
+
+    # 3. Suffixe durchprobieren (nur wenn Original schwach oder international)
     # Extrahiere Basis-Ticker ohne existierendes Suffix
     base = ticker.split(".")[0]
 

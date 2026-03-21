@@ -24,6 +24,21 @@ Lösung:
 - Score-Breakdown als aufklappbares Detail (welcher Faktor wie?)
 - Scores werden gecacht (600s) zusammen mit research data
 
+### P1b — Markets Dashboard v2
+**Status: ✅ ERLEDIGT (21.03.2026)**
+Marktsseite zeigt nur 6 Indizes, keine granularen Refreshes,
+keine News-Sentiment, keine Wirtschaftskalender.
+
+Lösung:
+- **9 Blöcke mit granularen Refresh-Zyklen** (60s-30min)
+- **Globale Indizes**: SPY, QQQ, DIA, IWM, DAX, Euro Stoxx 50, Nikkei 225, MSCI World
+- **Marktbreite**: S&P 500 Top 50 statt Dow 30
+- **News + FinBERT**: Kategorisierte Nachrichten mit Sentiment-Scores
+- **Wirtschaftskalender**: 48h Events mit Impact-Bewertung
+- **Promise.allSettled**: Robuste Parallel-Fetches
+- **Timestamp-Delta**: "vor 5 min" mit Stale-Warnungen
+- **BlockError**: Fallback-Komponente für API-Fehler
+
 ### P1b — Hardcoded Placeholders füllen
 **Status: OFFEN** (nach P1a)
 40% der Score-Gewichtung immer auf 5.0 (neutral).

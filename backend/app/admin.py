@@ -16,8 +16,8 @@ import os
 from datetime import datetime
 from typing import Dict, Any
 
-from backend.app.config import settings, YAML_PATH, ENV_PATH
-from backend.app.logger import get_recent_logs, get_logger
+from app.config import settings, YAML_PATH, ENV_PATH
+from app.logger import get_recent_logs, get_logger
 
 logger = get_logger(__name__)
 router = APIRouter()

@@ -18,24 +18,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import os
-from backend.app.config import settings
-from backend.app.logger import get_logger, get_recent_logs, get_module_status
-from backend.app.admin import router as admin_router
-from backend.app.init_watchlist import ensure_watchlist_populated
-from backend.app.init_db import (
+from app.config import settings
+from app.logger import get_logger, get_recent_logs, get_module_status
+from app.admin import router as admin_router
+from app.init_watchlist import ensure_watchlist_populated
+from app.init_db import (
     ensure_daily_snapshots_table,
     log_schema_extension_sql,
     get_schema_extension_sql,
     log_custom_search_terms_sql,
 )
-from backend.app.analysis.post_earnings_review import run_post_earnings_review
-from backend.app.analysis.shadow_portfolio import (
+from app.analysis.post_earnings_review import run_post_earnings_review
+from app.analysis.shadow_portfolio import (
     get_shadow_portfolio_summary,
     get_weekly_shadow_report,
 )
-from backend.app.memory.long_term import get_insights
-from backend.app.db import get_supabase_client
-from backend.app.cache import cache_get, cache_set
+from app.memory.long_term import get_insights
+from app.db import get_supabase_client
+from app.cache import cache_get, cache_set
 from schemas.base import HealthCheckResponse
 
 logger = get_logger(__name__)
@@ -2762,6 +2762,60 @@ async def api_intermarket():
     """Cross-Asset-Signale für Regime-Erkennung."""
     from backend.app.data.market_overview import get_intermarket_signals
     return await get_intermarket_signals()
+
+
+@data_router.get("/market-news-sentiment")
+async def api_market_news_sentiment():
+    """Marktnachrichten mit FinBERT-Sentiment, kategorisiert."""
+    from backend.app.data.market_overview import get_market_news_for_sentiment
+    return await get_market_news_for_sentiment()
+
+
+@data_router.get("/economic-calendar")
+async def api_economic_calendar():
+    """
+    Wirtschaftskalender nächste 48h aus GENERAL_MACRO Ticker.
+    Nutzt bestehende Finnhub Economic Calendar Integration.
+    """
+    logger.info("API Call: economic-calendar")
+    try:
+        from backend.app.db import get_supabase_client
+        from datetime import datetime, timedelta
+        db = get_supabase_client()
+        if not db:
+            return {"events": []}
+
+        now = datetime.utcnow()
+        in_48h = now + timedelta(hours=48)
+
+        res = (
+            db.table("short_term_memory")
+            .select("*")
+            .eq("ticker", "GENERAL_MACRO")
+            .gte("date", now.isoformat())
+            .lte("date", in_48h.isoformat())
+            .order("date")
+            .limit(10)
+            .execute()
+        )
+        rows = res.data if res and res.data else []
+        events = []
+        for row in rows:
+            bullets = row.get("bullet_points", {})
+            if isinstance(bullets, dict):
+                events.append({
+                    "title": bullets.get("event", "Makro-Event"),
+                    "date": row.get("date"),
+                    "impact": bullets.get("impact", "medium"),
+                    "country": bullets.get("country", "US"),
+                    "actual": bullets.get("actual"),
+                    "estimate": bullets.get("estimate"),
+                })
+        return {"events": events}
+    except Exception as e:
+        logger.warning(f"Economic Calendar: {e}")
+        return {"events": []}
+
 
 @data_router.post("/market-audit")
 async def api_market_audit():

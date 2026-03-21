@@ -28,8 +28,9 @@ INDICES = {
     "DIA": "Dow Jones",
     "IWM": "Russell 2000",
     "^GDAXI": "DAX",
+    "^STOXX50E": "Euro Stoxx 50",
+    "^N225": "Nikkei 225",
     "URTH": "MSCI World",
-    "^NDX": "Nasdaq 100 (Index)",
 }
 
 # Sektor-ETFs für Rotationsanalyse
@@ -46,6 +47,16 @@ SECTOR_ETFS = {
     "XLB": "Materials",
     "XLRE": "Real Estate",
 }
+
+# S&P 500 Top 50 nach Marktkapitalisierung (XLG-Komponenten)
+SP500_TOP50 = [
+    "NVDA","AAPL","MSFT","AMZN","META","GOOGL","GOOG","BRK-B","AVGO",
+    "TSLA","JPM","LLY","UNH","V","XOM","MA","COST","HD","PG","JNJ",
+    "ABBV","WMT","BAC","NFLX","KO","CRM","CVX","MRK","ORCL","ACN",
+    "AMD","MCD","TMO","ABT","PEP","ADBE","CSCO","LIN","DIS","DHR",
+    "WFC","TXN","PM","AMGN","IBM","ISRG","GE","INTU","CAT","NOW"
+]
+
 
 # Wichtige Makro-Proxys
 MACRO_TICKERS = {
@@ -316,14 +327,18 @@ async def get_yesterday_snapshot() -> dict | None:
 async def get_market_breadth() -> dict:
     """
     Berechnet Marktbreite: Anteil S&P 500 Aktien über SMA50/SMA200.
-    Nutzt ein repräsentatives Sample der 30 größten S&P 500 Titel
-    (Dow Jones Komponenten als Proxy — alle via yfinance kostenlos).
+    Nutzt S&P 500 Top 50 nach Marktkapitalisierung.
 
     Gibt zurück:
     - pct_above_sma50: Prozent der Titel über SMA50
     - pct_above_sma200: Prozent der Titel über SMA200
     - breadth_signal: "stark" | "neutral" | "schwach"
     - advance_decline: Steigende vs. fallende Titel heute (aus sample)
+    - breadth_index: "S&P 500 Top 50 (Marktkapitalisierung)"
+    # NEU: letzte Woche und letzten Monat aus Cache/Supabase
+    # Wenn nicht verfügbar: None — Frontend zeigt "—"
+    - pct_above_sma50_5d_ago: None,   # Placeholder
+    - pct_above_sma50_20d_ago: None,  # Placeholder
     """
     DOW_COMPONENTS = [
         "AAPL","MSFT","AMZN","NVDA","GOOGL","META","TSLA","BRK-B",
@@ -344,7 +359,7 @@ async def get_market_breadth() -> dict:
         declining = 0
         total = 0
 
-        for ticker in DOW_COMPONENTS:
+        for ticker in SP500_TOP50:
             try:
                 stock = yf.Ticker(ticker)
                 hist = stock.history(period="1y")
@@ -391,6 +406,9 @@ async def get_market_breadth() -> dict:
             "advancing": advancing,
             "declining": declining,
             "sample_size": total,
+            "breadth_index": "S&P 500 Top 50 (Marktkapitalisierung)",
+            "pct_above_sma50_5d_ago": None,   # Placeholder
+            "pct_above_sma50_20d_ago": None,  # Placeholder
         }
 
     result = await asyncio.to_thread(_calc_breadth)
@@ -502,5 +520,141 @@ async def get_intermarket_signals() -> dict:
             signals["credit_signal"] = "neutral"
 
     result = {"assets": data, "signals": signals}
+    cache_set(cache_key, result, ttl_seconds=600)
+    return result
+
+
+async def get_market_news_for_sentiment() -> dict:
+    """
+    Holt Marktnachrichten und bereitet sie für FinBERT auf.
+
+    WICHTIG für FinBERT-Qualität:
+    - Nur Englisch (FinBERT auf englische Finanztexte trainiert)
+    - Nur Headlines, kein Fließtext (kürzer = klarer für FinBERT)
+    - Gefiltert nach Markt-Relevanz (nicht jede News)
+    - Kategorisiert nach Themenbereich für Aggregation
+
+    Kategorien:
+    - "fed_rates": Fed, Zinsen, Geldpolitik, FOMC
+    - "macro_data": CPI, GDP, Jobs, Inflation, PMI
+    - "geopolitics": Handelskrieg, Sanktionen, Konflikte die Märkte bewegen
+    - "earnings_sector": Quartalszahlen die Sektoren bewegen
+    - "market_general": Allgemeine Marktbewegungen
+
+    Keywords für Kategorisierung (case-insensitive):
+    FED_KEYWORDS = ["fed", "federal reserve", "fomc", "powell",
+                    "rate", "interest rate", "monetary policy",
+                    "rate hike", "rate cut", "quantitative"]
+    MACRO_KEYWORDS = ["cpi", "inflation", "gdp", "unemployment",
+                      "jobs report", "payroll", "pmi", "retail sales",
+                      "consumer confidence", "housing"]
+    GEO_KEYWORDS = ["tariff", "sanction", "trade war", "china",
+                    "geopolitical", "conflict", "war", "opec",
+                    "supply chain"]
+    """
+    from backend.app.data.finnhub import get_general_news
+    from datetime import datetime, timedelta
+
+    cache_key = "market:news_sentiment"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
+
+    try:
+        # Finnhub General News — kostenlos, Englisch
+        # category="general" = breite Marktnachrichten
+        news_raw = await get_general_news("general", min_id=0)
+    except Exception:
+        news_raw = []
+
+    if not news_raw:
+        return {"categories": {}, "headlines": [], "error": "no_data"}
+
+    FED_KW = ["fed","federal reserve","fomc","powell","rate","monetary","quantitative"]
+    MACRO_KW = ["cpi","inflation","gdp","unemployment","jobs","payroll","pmi",
+                "retail sales","consumer","housing","deficit"]
+    GEO_KW = ["tariff","sanction","trade war","china","geopolit","conflict",
+               "war","opec","supply chain","ukraine","taiwan"]
+
+    def categorize(headline: str) -> str:
+        h = headline.lower()
+        if any(k in h for k in FED_KW): return "fed_rates"
+        if any(k in h for k in MACRO_KW): return "macro_data"
+        if any(k in h for k in GEO_KW): return "geopolitics"
+        return "market_general"
+
+    # Nur Headlines, max 24h alt, max 30 Items
+    cutoff = datetime.now().timestamp() - 86400
+    headlines = []
+    for item in (news_raw or [])[:60]:
+        if not isinstance(item, dict): continue
+        headline = item.get("headline", "")
+        timestamp = item.get("datetime", 0)
+        if not headline or timestamp < cutoff: continue
+        source = item.get("source", "")
+        # Nur bekannte Qualitätsquellen
+        if not any(q in source.lower() for q in [
+            "reuters","bloomberg","cnbc","wsj","ft","marketwatch",
+            "ap","yahoo","seekingalpha","barron"
+        ]):
+            continue
+        headlines.append({
+            "headline": headline,  # Nur Headline, kein Summary
+            "category": categorize(headline),
+            "source": source,
+            "timestamp": timestamp,
+            "url": item.get("url", ""),
+        })
+        if len(headlines) >= 30: break
+
+    # FinBERT Sentiment pro Headline
+    categories = {
+        "fed_rates": [],
+        "macro_data": [],
+        "geopolitics": [],
+        "market_general": [],
+    }
+
+    try:
+        from backend.app.analysis.finbert import analyze_sentiment_batch
+        # Alle Headlines auf einmal (Batch ist effizienter)
+        all_headlines = [h["headline"] for h in headlines]
+        scores = analyze_sentiment_batch(all_headlines)
+
+        for i, item in enumerate(headlines):
+            score = scores[i] if i < len(scores) else 0.0
+            item["sentiment_score"] = round(score, 3)
+            categories[item["category"]].append(score)
+
+    except Exception:
+        for item in headlines:
+            item["sentiment_score"] = 0.0
+
+    # Aggregiertes Sentiment pro Kategorie
+    category_sentiment = {}
+    for cat, scores in categories.items():
+        if scores:
+            avg = round(sum(scores) / len(scores), 3)
+            category_sentiment[cat] = {
+                "score": avg,
+                "count": len(scores),
+                "label": (
+                    "bullish" if avg > 0.15
+                    else "bearish" if avg < -0.15
+                    else "neutral"
+                )
+            }
+
+    result = {
+        "headlines": sorted(
+            headlines,
+            key=lambda x: abs(x.get("sentiment_score", 0)),
+            reverse=True  # Stärkste Signale zuerst
+        )[:12],
+        "category_sentiment": category_sentiment,
+        "total_analyzed": len(headlines),
+        "fetched_at": datetime.now().isoformat(),
+    }
+
     cache_set(cache_key, result, ttl_seconds=600)
     return result

@@ -468,7 +468,7 @@ async def get_intermarket_signals() -> dict:
     signals = {}
 
     # Risk-On/Off: Aktien vs. Anleihen
-    if spy.get("change_1w") and tlt.get("change_1w"):
+    if spy.get("change_1w") is not None and tlt.get("change_1w") is not None:
         if spy["change_1w"] > 0 and tlt["change_1w"] < 0:
             signals["risk_appetite"] = "risk_on"
         elif spy["change_1w"] < 0 and tlt["change_1w"] > 0:
@@ -477,7 +477,7 @@ async def get_intermarket_signals() -> dict:
             signals["risk_appetite"] = "mixed"
 
     # VIX Struktur: Backwardation = Panik, Contango = Ruhe
-    if vix.get("price") and vix3m.get("price"):
+    if vix.get("price") is not None and vix3m.get("price") is not None:
         vix_val = vix["price"]
         vix3m_val = vix3m["price"]
         if vix_val > vix3m_val * 1.05:
@@ -491,7 +491,7 @@ async def get_intermarket_signals() -> dict:
             signals["vix_note"] = "VIX-Kurve flach"
 
     # HYG (High Yield) als Credit-Signal
-    if hyg.get("change_1w"):
+    if hyg.get("change_1w") is not None:
         if hyg["change_1w"] < -1.5:
             signals["credit_signal"] = "warnung"
             signals["credit_note"] = "High Yield Bonds unter Druck — Kreditmarkt zeigt Stress"

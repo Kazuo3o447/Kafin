@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
-import { cacheGet, cacheSet } from "@/lib/clientCache";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -17,7 +16,6 @@ import {
   ChevronUp,
   AlertTriangle,
   CheckCircle2,
-  Clock
 } from "lucide-react";
 
 // Types
@@ -105,8 +103,17 @@ function formatPct(value?: number, fallback = "--") {
   return `${formatted}%`;
 }
 
+function BlockError({ title }: { title: string }) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+      <p className="mb-2 text-xs uppercase tracking-widest text-[var(--text-muted)]">{title}</p>
+      <p className="text-sm text-[var(--text-muted)]">Daten nicht verfügbar</p>
+    </div>
+  );
+}
+
 function RSIBar({ value }: { value?: number }) {
-  if (!value) return <span className="text-muted">—</span>;
+  if (value === null || value === undefined) return <span className="text-muted">—</span>;
   const color = value > 70 ? "var(--accent-red)" : value < 30 ? "var(--accent-green)" : "var(--accent-blue)";
   return (
     <div className="flex items-center gap-2">
@@ -135,7 +142,8 @@ function getSectorColor(perf: number): string {
 }
 
 // Regime Ampel Component
-function RegimeAmpel({ macro, breadth }: { macro: MacroSnapshot; breadth?: MarketBreadth }) {
+function RegimeAmpel({ macro, breadth }: { macro?: MacroSnapshot | null; breadth?: MarketBreadth }) {
+  if (!macro) return <BlockError title="Regime-Ampel" />;
   const regime = macro.regime?.toUpperCase() || "MIXED";
   const isRiskOn = regime.includes("ON");
   const isRiskOff = regime.includes("OFF");
@@ -247,7 +255,7 @@ function IndexCards({ data }: { data: Record<string, IndexData> }) {
 
 // Market Breadth Component
 function MarketBreadthBlock({ data }: { data?: MarketBreadth }) {
-  if (!data || data.error) return null;
+  if (!data || data.error) return <BlockError title="Marktbreite" />;
   
   const getColor = (val: number) => {
     if (val >= 70) return "var(--accent-green)";
@@ -362,7 +370,7 @@ function SectorHeatmap({ sectors }: { sectors: Array<{ symbol: string; name: str
 
 // Cross-Asset Signals Component
 function CrossAssetSignals({ data }: { data?: IntermarketData }) {
-  if (!data?.assets) return null;
+  if (!data?.assets) return <BlockError title="Cross-Asset-Signale" />;
 
   const { assets, signals } = data;
   const displayAssets = ["GLD", "USO", "UUP", "TLT", "EEM", "HYG"];
@@ -458,7 +466,8 @@ function CrossAssetSignals({ data }: { data?: IntermarketData }) {
 }
 
 // Macro Dashboard Component
-function MacroDashboard({ macro }: { macro: MacroSnapshot }) {
+function MacroDashboard({ macro }: { macro?: MacroSnapshot | null }) {
+  if (!macro) return <BlockError title="Makro-Dashboard" />;
   const cards = [
     { 
       label: "Fed Rate", 
@@ -512,7 +521,7 @@ function MacroDashboard({ macro }: { macro: MacroSnapshot }) {
 
 // News Component
 function NewsSection({ news }: { news: NewsItem[] }) {
-  if (!news.length) return null;
+  if (!news.length) return <BlockError title="Marktnachrichten" />;
 
   return (
     <div className="card p-6">
@@ -636,7 +645,7 @@ export default function MarketsPage() {
   const [breadth, setBreadth] = useState<MarketBreadth | null>(null);
   const [intermarket, setIntermarket] = useState<IntermarketData | null>(null);
   const [macro, setMacro] = useState<MacroSnapshot | null>(null);
-  const [news, setNews] = useState<NewsItem[]>([]);
+  const [news] = useState<NewsItem[]>([]);
   const [audit, setAudit] = useState<MarketAudit | null>(null);
   const [loading, setLoading] = useState(true);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -645,26 +654,18 @@ export default function MarketsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [overviewData, breadthData, intermarketData, macroData] = await Promise.all([
+      const [overviewData, breadthData, intermarketData, macroData] = await Promise.allSettled([
         api.getMarketOverview(),
         api.getMarketBreadth(),
         api.getIntermarket(),
         api.getMacro(),
       ]);
 
-      setOverview(overviewData);
-      setBreadth(breadthData);
-      setIntermarket(intermarketData);
-      setMacro(macroData);
+      setOverview(overviewData.status === "fulfilled" ? overviewData.value : null);
+      setBreadth(breadthData.status === "fulfilled" ? breadthData.value : null);
+      setIntermarket(intermarketData.status === "fulfilled" ? intermarketData.value : null);
+      setMacro(macroData.status === "fulfilled" ? macroData.value : null);
       setLastUpdate(new Date());
-
-      // Fetch news separately (may fail)
-      try {
-        const newsData = await fetch("/api/news/general").then(r => r.ok ? r.json() : []);
-        setNews(newsData || []);
-      } catch {
-        setNews([]);
-      }
     } catch (error) {
       console.error("Markets fetch error:", error);
     } finally {
@@ -688,7 +689,7 @@ export default function MarketsPage() {
     fetchData();
   }, [fetchData]);
 
-  if (loading || !overview || !macro) {
+  if (loading || !overview) {
     return (
       <div className="p-8">
         <h1 className="text-4xl font-bold text-[var(--text-primary)] mb-8">Markets</h1>

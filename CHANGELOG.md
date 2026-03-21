@@ -2,6 +2,18 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.4.1] - 2026-03-21 - Markets Hotfix
+
+### 🐛 Bugfixes
+- **call_deepseek**: Korrekte Signatur in api_market_audit
+  (system_prompt + user_prompt statt positionaler Arg)
+- **Promise.allSettled**: Markets-Seite überlebt fehlerhafte Endpoints
+  — jeder Block zeigt "Daten nicht verfügbar" statt Seite hängt
+- **News-Fetch**: Direkter fetch() durch Fallback ersetzt — kein stiller Fehler mehr
+- **Truthy-Checks**: is not None statt falsy — 0.0-Werte
+  werden nicht mehr als "fehlend" behandelt
+- **RSIBar**: value === null statt !value
+
 ## [5.4.0] - 2026-03-21 - Markets Dashboard
 
 ### 🚀 Neue Features

@@ -2716,8 +2716,14 @@ async def api_market_audit():
         f"Regime: {getattr(macro, 'regime', '?')}"
     ) if macro else "Makro-Daten nicht verfügbar"
 
-    prompt = f"""Du bist ein erfahrener Marktanalyst. Analysiere das aktuelle Marktumfeld
-und gib dem Trader eine klare Handlungsempfehlung. Antworte auf Deutsch.
+    system_prompt = (
+        "Du bist ein erfahrener Senior-Marktanalyst bei einem Hedge Fund. "
+        "Du analysierst das aktuelle Marktregime und gibst dem Trader "
+        "eine konkrete, meinungsstarke Handlungsempfehlung auf Deutsch. "
+        "Keine Floskeln. Direkt. Maximal 25 Zeilen."
+    )
+
+    prompt = f"""Analysiere das aktuelle Marktumfeld und gib dem Trader eine klare Handlungsempfehlung. Antworte auf Deutsch.
 Maximal 25 Zeilen. Direkt, meinungsstark, kein Hedging.
 
 ABSOLUTE REGEL: Empfiehle NIEMALS breite Index-Shorts (SH, PSQ, SQQQ).
@@ -2755,7 +2761,11 @@ DEINE AUFGABE:
    - Ist jetzt ein guter Zeitpunkt für neue Positionen?"""
 
     try:
-        report = await call_deepseek(prompt, max_tokens=1500)
+        report = await call_deepseek(
+            system_prompt=system_prompt,
+            user_prompt=prompt,
+            max_tokens=1500,
+        )
         return {
             "status": "success",
             "report": report,

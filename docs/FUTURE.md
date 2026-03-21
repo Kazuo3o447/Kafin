@@ -16,6 +16,12 @@ Wird bei jeder Session gepflegt.
 - Finnhub Nachrichten-Feed
 - DeepSeek Markt-Audit auf Knopfdruck
 
+## 🟡 FUTURE: General News Endpoint
+GET /api/news/general fehlt noch.
+Backend: `get_general_market_news()` existiert in `backend/app/data/market_overview.py`.
+Endpoint in `backend/app/main.py` verdrahten und optional `api.ts` ergänzen.
+Aufwand: 30 Minuten, SWE-1.5.
+
 ## 🟡 FUTURE: Marktbreite verbessern
 Aktuell: 30 Dow-Titel als Proxy.
 Besser: S&P 500 Advance-Decline-Linie via ^SPXAD (yfinance).

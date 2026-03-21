@@ -6,6 +6,129 @@ Wird bei jeder Session gepflegt.
 
 ---
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EINTRAG: PostgreSQL Migration
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 🔴 ARCHITEKTUR: Supabase → Lokales PostgreSQL
+
+**Warum:**
+Kafin läuft lokal auf dem NUC. Supabase ist
+eine externe Cloud-Datenbank — das bedeutet:
+- 20-80ms Extra-Latenz bei JEDER DB-Query
+  (Internet-Roundtrip statt lokaler Socket)
+- Externe Abhängigkeit: Supabase-Ausfall =
+  Kafin funktioniert nicht
+- Rate-Limits auf Free-Tier
+- Sensible Trading-Daten auf fremden Servern
+- Kein "Alles-in-einem-Paket" Deployment
+
+**Ziel:**
+PostgreSQL 16 als Docker-Container im selben
+docker-compose.yml wie Backend, Frontend, n8n.
+Lokale Verbindung via Unix-Socket oder localhost.
+Keine externe Abhängigkeit mehr.
+
+**Aufwand:** ~3-4 Stunden, einmaliger Migrations-Tag.
+**Zeitpunkt:** Nach stabilem Entwicklungsstand —
+NICHT mitten in aktiver Feature-Entwicklung.
+
+**Implementierungsplan (für Windsurf ausführbar):**
+
+SCHRITT 1 — docker-compose.yml: PostgreSQL ergänzen:
+```yaml
+postgres:
+  image: postgres:16-alpine
+  container_name: kafin-postgres
+  environment:
+    POSTGRES_DB: kafin
+    POSTGRES_USER: kafin
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kafin_local}
+  volumes:
+    - ./data/postgres:/var/lib/postgresql/data
+    - ./backend/init_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+  ports:
+    - "5432:5432"
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U kafin"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+```
+
+SCHRITT 2 — backend/app/config.py: DB-URL ergänzen:
+```python
+database_url: str = "postgresql://kafin:kafin_local@postgres:5432/kafin"
+```
+
+SCHRITT 3 — backend/app/db.py: neue Verbindungsklasse:
+```python
+import psycopg2
+from backend.app.config import settings
+
+def get_db_connection():
+    return psycopg2.connect(settings.database_url)
+
+# Async-Version mit asyncpg:
+import asyncpg
+async def get_async_db():
+    return await asyncpg.connect(settings.database_url)
+```
+
+SCHRITT 4 — Alle get_supabase_client() Aufrufe
+ersetzen durch get_db_connection().
+Supabase-spezifische Syntax (.table().select().execute())
+durch Standard-SQL ersetzen.
+
+Betroffene Dateien (alle grep nach get_supabase_client):
+  - backend/app/main.py (häufig)
+  - backend/app/memory/watchlist.py
+  - backend/app/memory/short_term.py
+  - backend/app/memory/long_term.py
+  - backend/app/analysis/report_generator.py
+
+SCHRITT 5 — Datenmigration aus Supabase:
+```bash
+# In Supabase Dashboard: Settings → Database → Backups
+# oder via pg_dump gegen Supabase Connection String:
+pg_dump "postgresql://[supabase-url]" > kafin_backup.sql
+psql "postgresql://kafin:kafin_local@localhost:5432/kafin" < kafin_backup.sql
+```
+
+SCHRITT 6 — .env: SUPABASE_URL + SUPABASE_KEY entfernen.
+SCHRITT 7 — Supabase-Projekt pausieren/löschen.
+
+**Abhängigkeiten:**
+- psycopg2-binary oder asyncpg in requirements.txt
+- init_db.sql bereits vorhanden (backend/app/init_db.py
+  muss als .sql exportiert werden)
+- docker-compose.yml: backend depends_on: postgres
+
+**Erwartete Verbesserungen nach Migration:**
+- Ladezeit enriched Watchlist: −30-50ms pro Query
+- Audit-Report Generierung: −100-200ms (mehrere Queries)
+- Keine Rate-Limit-Fehler mehr
+- Offline-Betrieb vollständig möglich
+- Deployment: ein einziger docker-compose up
+
+**Risiken:**
+- Datenverlust wenn Migration nicht korrekt
+  → Backup VOR Migration Pflicht
+- SQL-Syntax-Anpassungen (Supabase-SDK vs. raw SQL)
+- asyncpg/psycopg2 Entscheidung treffen
+
+**Empfehlung:** psycopg2 für Sync-Calls (bestehender Code),
+asyncpg für neue async-Endpoints. SQLAlchemy als ORM
+ist Overkill für diesen Use-Case — raw SQL reicht.
+
+**Timing:** Erst wenn Research Dashboard P1-P3,
+Watchlist v2 und Markets Dashboard stabil laufen.
+Dann als dedizierter "Infrastructure Day".
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+---
+
 ## ✅ IMPLEMENTIERT: Markets Dashboard v2 (/markets)
 - **Granulare Refresh-Zyklen**: 9 Blöcke mit individuellen Intervallen (60s-30min)
 - **Block 1: Globale Indizes**: SPY, QQQ, DIA, IWM, DAX, Euro Stoxx 50, Nikkei 225, MSCI World

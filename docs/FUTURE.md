@@ -6,6 +6,31 @@ Wird bei jeder Session gepflegt.
 
 ---
 
+## ✅ IMPLEMENTIERT: Markets Seite (/markets)
+- Regime-Ampel (Risk-On / Mixed / Risk-Off)
+- 6 Indizes inkl. DAX + MSCI World
+- Marktbreite: % Aktien über SMA50/200 (30-Titel-Sample)
+- Sektor-Heatmap (11 ETFs, farbcodiert)
+- Cross-Asset Signale (VIX-Struktur, Risk Appetite, Credit)
+- Makro: Fed, VIX, Credit Spread, Yield Curve
+- Finnhub Nachrichten-Feed
+- DeepSeek Markt-Audit auf Knopfdruck
+
+## 🟡 FUTURE: Marktbreite verbessern
+Aktuell: 30 Dow-Titel als Proxy.
+Besser: S&P 500 Advance-Decline-Linie via ^SPXAD (yfinance).
+`yf.Ticker("^SPXAD").history(period="1mo")` — testen ob verfügbar.
+Aufwand: 30 Minuten wenn ^SPXAD korrekt liefert.
+
+## 🟡 FUTURE: Fear & Greed Score
+Berechenbar aus: VIX-Level, Put/Call Ratio, Junk Bond Demand (HYG),
+Market Momentum (SPY vs SMA125), Safe Haven Demand (TLT vs SPY),
+Stock Price Strength (new 52W highs vs lows).
+Zeigt 0-100 Score analog CNN Fear & Greed.
+Aufwand: ~3h, SWE-1.5.
+
+---
+
 ## 🟡 INTRADAY — VWAP
 
 **Was:** Volume Weighted Average Price — Fair-Value-Linie für Daytrader.

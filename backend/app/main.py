@@ -2631,6 +2631,146 @@ async def api_market_overview():
     overview = await fetch_market_overview()
     return overview
 
+@data_router.get("/market-breadth")
+async def api_market_breadth():
+    """Marktbreite: % Aktien über SMA50/200."""
+    from backend.app.data.market_overview import get_market_breadth
+    return await get_market_breadth()
+
+@data_router.get("/intermarket")
+async def api_intermarket():
+    """Cross-Asset-Signale für Regime-Erkennung."""
+    from backend.app.data.market_overview import get_intermarket_signals
+    return await get_intermarket_signals()
+
+@data_router.post("/market-audit")
+async def api_market_audit():
+    """
+    DeepSeek bewertet den Gesamtmarkt und gibt eine
+    konkrete Trading-Strategie-Empfehlung aus.
+    """
+    logger.info("API Call: market-audit")
+    import asyncio
+    from backend.app.data.market_overview import (
+        get_market_overview, get_market_breadth, get_intermarket_signals
+    )
+    from backend.app.data.fred import get_macro_snapshot
+    from backend.app.analysis.deepseek import call_deepseek
+
+    overview, breadth, intermarket, macro = await asyncio.gather(
+        get_market_overview(),
+        get_market_breadth(),
+        get_intermarket_signals(),
+        get_macro_snapshot(),
+        return_exceptions=True,
+    )
+
+    def safe(r, default={}):
+        return default if isinstance(r, Exception) else r
+
+    overview = safe(overview, {})
+    breadth = safe(breadth, {})
+    intermarket = safe(intermarket, {})
+    macro = safe(macro)
+
+    # Daten für DeepSeek aufbereiten
+    indices = overview.get("indices", {})
+    sectors = overview.get("sector_ranking_5d", [])
+    signals = intermarket.get("signals", {})
+
+    index_lines = []
+    for sym, d in indices.items():
+        if isinstance(d, dict) and not d.get("error"):
+            index_lines.append(
+                f"{d.get('name', sym)}: ${d.get('price', '?'):.2f} "
+                f"({d.get('change_1d_pct', 0):+.1f}% heute, "
+                f"{d.get('change_1m_pct', 0):+.1f}% 1M) "
+                f"RSI {d.get('rsi_14', '?')} Trend: {d.get('trend', '?')}"
+            )
+
+    sector_lines = [
+        f"{s['name']}: {s['perf_5d']:+.1f}%"
+        for s in sectors[:11]
+    ]
+
+    breadth_text = (
+        f"Marktbreite (30-Titel-Sample): "
+        f"{breadth.get('pct_above_sma50', '?')}% über SMA50, "
+        f"{breadth.get('pct_above_sma200', '?')}% über SMA200 | "
+        f"Signal: {breadth.get('breadth_signal', '?').upper()} | "
+        f"Advancing: {breadth.get('advancing', '?')}, "
+        f"Declining: {breadth.get('declining', '?')}"
+    )
+
+    signal_lines = []
+    for k, v in signals.items():
+        if not k.endswith("_note"):
+            note = signals.get(f"{k}_note", "")
+            signal_lines.append(f"{k}: {v}" + (f" — {note}" if note else ""))
+
+    macro_text = (
+        f"Fed Rate: {getattr(macro, 'fed_rate', '?')}% | "
+        f"VIX: {getattr(macro, 'vix', '?')} | "
+        f"Credit Spread (HY): {getattr(macro, 'credit_spread_bps', '?')} | "
+        f"Yield Curve (10Y-2Y): {getattr(macro, 'yield_curve_10y_2y', '?')} | "
+        f"Regime: {getattr(macro, 'regime', '?')}"
+    ) if macro else "Makro-Daten nicht verfügbar"
+
+    prompt = f"""Du bist ein erfahrener Marktanalyst. Analysiere das aktuelle Marktumfeld
+und gib dem Trader eine klare Handlungsempfehlung. Antworte auf Deutsch.
+Maximal 25 Zeilen. Direkt, meinungsstark, kein Hedging.
+
+ABSOLUTE REGEL: Empfiehle NIEMALS breite Index-Shorts (SH, PSQ, SQQQ).
+Nur: Sektor-ETF-Puts, Einzeltitel-Puts, Pair-Trades, Cash-Position erhöhen.
+
+MARKTDATEN:
+
+INDIZES:
+{chr(10).join(index_lines)}
+
+SEKTOREN (5-Tage-Performance, stärkste zuerst):
+{chr(10).join(sector_lines)}
+
+MARKTBREITE:
+{breadth_text}
+
+CROSS-ASSET SIGNALE:
+{chr(10).join(signal_lines) if signal_lines else "Keine Signale berechnet"}
+
+MAKRO:
+{macro_text}
+
+DEINE AUFGABE:
+1. REGIME: Welches Marktregime herrscht gerade? (Risk-On / Mixed / Risk-Off)
+   Begründe mit konkreten Zahlen.
+2. MARKTGESUNDHEIT: Ist die Stärke/Schwäche breit oder konzentriert?
+   Was sagt die Marktbreite?
+3. SEKTORROTATION: Wohin fließt das Geld? Was bedeutet das?
+4. DIVERGENZEN: Gibt es Widersprüche zwischen den Signalen?
+   (z.B. Aktien steigen aber Credit Spreads weiten sich)
+5. KONKRETE EMPFEHLUNG: Was bedeutet dieses Umfeld für einen
+   Earnings-Trader mit Einzelaktien-Fokus?
+   - Beta erhöhen oder reduzieren?
+   - Welche Sektoren meiden, welche bevorzugen?
+   - Ist jetzt ein guter Zeitpunkt für neue Positionen?"""
+
+    try:
+        report = await call_deepseek(prompt, max_tokens=1500)
+        return {
+            "status": "success",
+            "report": report,
+            "generated_at": datetime.utcnow().isoformat(),
+            "data_used": {
+                "indices": len(index_lines),
+                "sectors": len(sector_lines),
+                "breadth": breadth.get("breadth_signal"),
+                "regime": getattr(macro, "regime", None),
+            }
+        }
+    except Exception as e:
+        logger.error(f"Market Audit Fehler: {e}")
+        return {"status": "error", "message": str(e)}
+
 # Web Intelligence Router
 web_intel_router = APIRouter(
     prefix="/api/web-intelligence", tags=["web-intelligence"]

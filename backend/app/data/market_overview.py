@@ -11,6 +11,7 @@ API:    Yahoo Finance (via yfinance, kostenlos)
 import yfinance as yf
 import json
 import os
+import asyncio
 from datetime import datetime
 from backend.app.config import settings
 from backend.app.logger import get_logger
@@ -26,6 +27,9 @@ INDICES = {
     "QQQ": "Nasdaq 100",
     "DIA": "Dow Jones",
     "IWM": "Russell 2000",
+    "^GDAXI": "DAX",
+    "URTH": "MSCI World",
+    "^NDX": "Nasdaq 100 (Index)",
 }
 
 # Sektor-ETFs für Rotationsanalyse
@@ -307,3 +311,196 @@ async def get_yesterday_snapshot() -> dict | None:
     except Exception as e:
         logger.error(f"Fehler beim Laden des gestrigen Snapshots: {e}")
     return None
+
+
+async def get_market_breadth() -> dict:
+    """
+    Berechnet Marktbreite: Anteil S&P 500 Aktien über SMA50/SMA200.
+    Nutzt ein repräsentatives Sample der 30 größten S&P 500 Titel
+    (Dow Jones Komponenten als Proxy — alle via yfinance kostenlos).
+
+    Gibt zurück:
+    - pct_above_sma50: Prozent der Titel über SMA50
+    - pct_above_sma200: Prozent der Titel über SMA200
+    - breadth_signal: "stark" | "neutral" | "schwach"
+    - advance_decline: Steigende vs. fallende Titel heute (aus sample)
+    """
+    DOW_COMPONENTS = [
+        "AAPL","MSFT","AMZN","NVDA","GOOGL","META","TSLA","BRK-B",
+        "JPM","V","UNH","XOM","JNJ","WMT","PG","MA","HD","CVX",
+        "MRK","ABBV","KO","PEP","AVGO","TMO","COST","ACN","MCD",
+        "BAC","LLY","ORCL"
+    ]
+
+    cache_key = "market:breadth"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
+
+    def _calc_breadth():
+        above_50 = 0
+        above_200 = 0
+        advancing = 0
+        declining = 0
+        total = 0
+
+        for ticker in DOW_COMPONENTS:
+            try:
+                stock = yf.Ticker(ticker)
+                hist = stock.history(period="1y")
+                if hist.empty or len(hist) < 10:
+                    continue
+
+                close = hist["Close"]
+                current = float(close.iloc[-1])
+                prev = float(close.iloc[-2])
+
+                if len(close) >= 50:
+                    sma50 = float(close.tail(50).mean())
+                    if current > sma50:
+                        above_50 += 1
+                if len(close) >= 200:
+                    sma200 = float(close.tail(200).mean())
+                    if current > sma200:
+                        above_200 += 1
+
+                if current > prev:
+                    advancing += 1
+                else:
+                    declining += 1
+                total += 1
+            except Exception:
+                continue
+
+        if total == 0:
+            return {"error": "Keine Daten"}
+
+        pct_50 = round((above_50 / total) * 100, 1)
+        pct_200 = round((above_200 / total) * 100, 1)
+
+        signal = "neutral"
+        if pct_50 >= 70:
+            signal = "stark"
+        elif pct_50 <= 40:
+            signal = "schwach"
+
+        return {
+            "pct_above_sma50": pct_50,
+            "pct_above_sma200": pct_200,
+            "breadth_signal": signal,
+            "advancing": advancing,
+            "declining": declining,
+            "sample_size": total,
+        }
+
+    result = await asyncio.to_thread(_calc_breadth)
+    cache_set(cache_key, result, ttl_seconds=1800)  # 30 Minuten
+    return result
+
+
+async def get_intermarket_signals() -> dict:
+    """
+    Berechnet Cross-Asset-Signale für Regime-Erkennung.
+    Alle Daten kostenlos via yfinance.
+
+    Signale:
+    - risk_on_off: Aktien vs. Anleihen Verhältnis (SPY/TLT)
+    - dollar_direction: DXY-Trend (bullisch = Druck auf EM + Commodities)
+    - gold_signal: Gold-Trend (steigend = Unsicherheit / Inflation)
+    - oil_signal: Öl-Trend (Energiesektor-Proxy)
+    - vix_term_structure: VIX vs. VIX3M (Contango = Ruhe, Backwardation = Panik)
+    """
+    INTERMARKET = {
+        "SPY":  "S&P 500",
+        "TLT":  "20Y Treasuries",
+        "GLD":  "Gold",
+        "USO":  "Öl (WTI)",
+        "UUP":  "US Dollar",
+        "^VIX": "VIX",
+        "^VIX3M": "VIX 3-Monat",
+        "EEM":  "Emerging Markets",
+        "HYG":  "High Yield Bonds",
+    }
+
+    cache_key = "market:intermarket"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
+
+    def _fetch():
+        results = {}
+        for symbol, name in INTERMARKET.items():
+            try:
+                stock = yf.Ticker(symbol)
+                hist = stock.history(period="3mo")
+                if hist.empty:
+                    continue
+                close = hist["Close"]
+                current = float(close.iloc[-1])
+                prev = float(close.iloc[-2])
+                week_ago = float(close.iloc[-5]) if len(close) >= 5 else current
+                month_ago = float(close.iloc[-21]) if len(close) >= 21 else current
+                sma20 = float(close.tail(20).mean())
+
+                results[symbol] = {
+                    "name": name,
+                    "price": round(current, 2),
+                    "change_1d": round(((current - prev) / prev) * 100, 2),
+                    "change_1w": round(((current - week_ago) / week_ago) * 100, 2),
+                    "change_1m": round(((current - month_ago) / month_ago) * 100, 2),
+                    "above_sma20": current > sma20,
+                    "trend_1m": "steigend" if current > month_ago else "fallend",
+                }
+            except Exception:
+                continue
+        return results
+
+    data = await asyncio.to_thread(_fetch)
+
+    # Regime-Signale berechnen
+    spy = data.get("SPY", {})
+    tlt = data.get("TLT", {})
+    gld = data.get("GLD", {})
+    vix = data.get("^VIX", {})
+    vix3m = data.get("^VIX3M", {})
+    hyg = data.get("HYG", {})
+
+    signals = {}
+
+    # Risk-On/Off: Aktien vs. Anleihen
+    if spy.get("change_1w") and tlt.get("change_1w"):
+        if spy["change_1w"] > 0 and tlt["change_1w"] < 0:
+            signals["risk_appetite"] = "risk_on"
+        elif spy["change_1w"] < 0 and tlt["change_1w"] > 0:
+            signals["risk_appetite"] = "risk_off"
+        else:
+            signals["risk_appetite"] = "mixed"
+
+    # VIX Struktur: Backwardation = Panik, Contango = Ruhe
+    if vix.get("price") and vix3m.get("price"):
+        vix_val = vix["price"]
+        vix3m_val = vix3m["price"]
+        if vix_val > vix3m_val * 1.05:
+            signals["vix_structure"] = "backwardation"  # Panik
+            signals["vix_note"] = f"VIX {vix_val:.1f} > VIX3M {vix3m_val:.1f} — erhöhte Kurzfrist-Angst"
+        elif vix_val < vix3m_val * 0.95:
+            signals["vix_structure"] = "contango"  # Normal
+            signals["vix_note"] = f"VIX {vix_val:.1f} < VIX3M {vix3m_val:.1f} — Markt erwartet höhere Volatilität erst später"
+        else:
+            signals["vix_structure"] = "flat"
+            signals["vix_note"] = "VIX-Kurve flach"
+
+    # HYG (High Yield) als Credit-Signal
+    if hyg.get("change_1w"):
+        if hyg["change_1w"] < -1.5:
+            signals["credit_signal"] = "warnung"
+            signals["credit_note"] = "High Yield Bonds unter Druck — Kreditmarkt zeigt Stress"
+        elif hyg["change_1w"] > 0.5:
+            signals["credit_signal"] = "gesund"
+            signals["credit_note"] = "High Yield stabil — kein Kreditstress"
+        else:
+            signals["credit_signal"] = "neutral"
+
+    result = {"assets": data, "signals": signals}
+    cache_set(cache_key, result, ttl_seconds=600)
+    return result

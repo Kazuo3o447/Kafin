@@ -78,12 +78,21 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **API-Layer**: Zentraler `api.ts` mit allen Endpoints, robuste Fehlerbehandlung, Next.js ISR/SSR-Caching.
 
 ### 9. Frontend UX & Design Improvements (März 2026)
-*   **Dark Mode Overhaul**: Komplettes Design-System mit CSS-Variablen für konsistente Dunkel-Theme-Anwendung über alle 45+ Karten.
-*   **Sidebar Redesign**: Schmalere Sidebar (224px), neue Logo-Optik, aktive Navigation mit blauem Indikator, Schnellsuche mit CMD+K, Online-Status mit Animation.
-*   **Watchlist UX**: Modal für Ticker-Hinzufügen mit Validierung, Loading-States, Error-Feedback, Escape-Taste-Unterstützung.
-*   **News-Page UX**: 2-Spalten-Layout eliminiert Tab-Wechsel, alle Daten (News, Google News, Signale) gleichzeitig sichtbar.
-*   **Chart Integration**: Automatische Chart-Anzeige auf Ticker-Detailseiten, verbesserte Error-Handling bei fehlenden Daten.
-*   **Responsive Design**: Optimiert für Desktop mit festen Spaltenbreiten und flexiblen Inhaltsbereichen.
+*   ✅ **Research Dashboard** (`/research/[ticker]`): Vollständige Ticker-Analyse mit Technischen Daten, Fundamentals, Earnings-History, News, Sentiment & Scores.
+*   ✅ **Ticker Resolver**: Automatische Yahoo-Suffix-Erkennung für internationale Ticker (ASX, LSE, FSE, JPX, HKEX).
+*   ✅ **Extended Indicators**: ATR, MACD, OBV, RVOL, SMA20 für alle Ticker.
+*   ✅ **Trading Visualizations**: 52W Range Bar, Volume Profile (20-Tage), PEG Ratio Gauge.
+*   ✅ **Markets Seite** (`/markets`): Trading-grade Markt-Übersicht mit:
+    - Regime-Ampel (Risk-On/Mixed/Risk-Off) basierend auf VIX + Credit Spread + Marktbreite
+    - 6 Indizes: SPY, QQQ, DIA, DAX (^GDAXI), MSCI World (URTH), IWM
+    - Marktbreite: % Aktien über SMA50/200 (30-Titel-Proxy)
+    - Sektor-Heatmap: 11 ETFs farbcodiert nach 5T-Performance
+    - Cross-Asset Signale: VIX-Struktur (Contango/Backwardation), Risk Appetite, Credit
+    - DeepSeek Markt-Audit: Regime-Einschätzung + Strategie-Empfehlung auf Knopfdruck
+*   ✅ **Performance Revolution**: Watchlist 55x schneller (2.3s statt 127s) durch yfinance + enriched Caching.
+*   ✅ **Smart Money P/C Ratio**: Put/Call Ratio basierend auf Volumen statt OI.
+*   ✅ **Sentiment Divergenz Alerts**: Automatische Erkennung von extrem negativem Sentiment + guter Qualität.
+*   ✅ **Peer Earnings Monitor**: Cross-Signal-Tracking für Earnings-Days (Vorab-Alert + Reaktions-Alert).
 
 ### 10. Phase 4D: Bug Fixes & Frontend Stabilisierung (März 2026)
 - [x] watchlist_router korrekt registriert

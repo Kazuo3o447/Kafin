@@ -104,6 +104,13 @@ export const api = {
   removeSearchTerm: (term: string) =>
     fetchAPI(`/api/google-news/search-terms?term=${encodeURIComponent(term)}`, { method: "DELETE" }),
 
+  // Markets Dashboard
+  getMarketBreadth: () => fetchAPI("/api/data/market-breadth"),
+  getIntermarket: () => fetchAPI("/api/data/intermarket"),
+  generateMarketAudit: () => fetchAPI("/api/data/market-audit", {
+    method: "POST",
+  }),
+
   // Web Intelligence
   refreshWebIntelligence: (ticker: string) =>
     fetchAPI(`/api/web-intelligence/refresh/${ticker}`, {

@@ -2,6 +2,26 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.4.0] - 2026-03-21 - Markets Dashboard
+
+### 🚀 Neue Features
+- **/markets**: Neue dedizierte Markt-Analyse-Seite
+  — Regime-Ampel (Risk-On/Mixed/Risk-Off) basierend auf
+    VIX + Credit Spread + Marktbreite
+  — 6 Indizes: SPY, QQQ, DIA, DAX (^GDAXI), MSCI World (URTH), IWM
+    mit RSI-Balken und SMA-Status
+  — Marktbreite: % Aktien über SMA50/200 (30-Titel-Proxy)
+  — Sektor-Heatmap: 11 ETFs farbcodiert nach 5T-Performance
+  — Cross-Asset: Gold, Öl, Dollar, Anleihen, EM, HY Bonds
+  — VIX-Struktur: Contango/Backwardation als Panik-Indikator
+  — Finnhub Nachrichten-Feed
+  — DeepSeek Markt-Audit: Regime + Strategie-Empfehlung
+- **Backend**: get_market_breadth(), get_intermarket_signals()
+- **Backend**: POST /api/data/market-audit (DeepSeek)
+- **Backend**: GET /api/data/market-breadth
+- **Backend**: GET /api/data/intermarket
+- **Sidebar**: "Markets" als erstes Item hinzugefügt
+
 ## [5.3.11] - 2026-03-20 - Watchlist Data Display & Research UX
 
 ### 🐛 Bugfixes

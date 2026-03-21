@@ -15,19 +15,33 @@ logger = get_logger(__name__)
 
 _model = None
 _tokenizer = None
+_finbert_available = True
 
 
 def _load_model():
     """Lädt FinBERT einmalig in den Speicher. Lazy-Init für schnellen Container-Start."""
-    global _model, _tokenizer
+    global _model, _tokenizer, _finbert_available
     if _model is None:
-        logger.info("Lade FinBERT-Modell... (einmalig, dauert ~10 Sekunden)")
-        from transformers import AutoModelForSequenceClassification, AutoTokenizer
-        import torch
-        _tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
-        _model = AutoModelForSequenceClassification.from_pretrained("ProsusAI/finbert")
-        _model.eval()
-        logger.info("FinBERT geladen und bereit.")
+        try:
+            logger.info("Lade FinBERT-Modell... (einmalig, dauert ~10 Sekunden)")
+            from transformers import AutoModelForSequenceClassification, AutoTokenizer
+            import torch  # noqa: F401
+
+            _tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
+            _model = AutoModelForSequenceClassification.from_pretrained("ProsusAI/finbert")
+            _model.eval()
+            _finbert_available = True
+            logger.info("FinBERT geladen und bereit.")
+        except ImportError:
+            _finbert_available = False
+            _model = None
+            _tokenizer = None
+            logger.warning("FinBERT nicht verfügbar — torch oder transformers fehlt")
+        except Exception as exc:
+            _finbert_available = False
+            _model = None
+            _tokenizer = None
+            logger.warning("FinBERT konnte nicht geladen werden — neutraler Fallback aktiv: %s", exc)
 
 
 def analyze_sentiment(text: str) -> float:
@@ -47,8 +61,11 @@ def analyze_sentiment(text: str) -> float:
             return -0.6
         return 0.0
 
-    import torch
     _load_model()
+    if not _finbert_available or _model is None or _tokenizer is None:
+        return 0.0
+
+    import torch
     inputs = _tokenizer(text, return_tensors="pt", truncation=True, max_length=512, padding=True)
     with torch.no_grad():
         outputs = _model(**inputs)
@@ -64,8 +81,11 @@ def analyze_sentiment_batch(texts: list[str]) -> list[float]:
     if settings.use_mock_data:
         return [analyze_sentiment(t) for t in texts]
 
-    import torch
     _load_model()
+    if not _finbert_available or _model is None or _tokenizer is None:
+        return [0.0 for _ in texts]
+
+    import torch
     inputs = _tokenizer(texts, return_tensors="pt", truncation=True, max_length=512, padding=True)
     with torch.no_grad():
         outputs = _model(**inputs)

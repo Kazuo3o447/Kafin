@@ -2,6 +2,14 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.4.4] - 2026-03-21 - FinBERT/torch Verifikation
+
+### ✅ Verifikation
+- torch CPU-Version korrekt in requirements.txt
+- FinBERT-Modell wird bei Docker-Build vorgeladen
+- Fallback wenn torch fehlt (neutrale Scores statt Absturz)
+- Container-Test: `analyze_sentiment_batch()` funktioniert
+
 ## [5.6.0] - 2026-03-21 - Markets Dashboard v2
 
 ### 🚀 Trading-Mehrwert

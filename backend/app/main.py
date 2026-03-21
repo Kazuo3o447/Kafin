@@ -18,24 +18,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import os
-from app.config import settings
-from app.logger import get_logger, get_recent_logs, get_module_status
-from app.admin import router as admin_router
-from app.init_watchlist import ensure_watchlist_populated
-from app.init_db import (
+from backend.app.config import settings
+from backend.app.logger import get_logger, get_recent_logs, get_module_status
+from backend.app.admin import router as admin_router
+from backend.app.init_watchlist import ensure_watchlist_populated
+from backend.app.init_db import (
     ensure_daily_snapshots_table,
     log_schema_extension_sql,
     get_schema_extension_sql,
     log_custom_search_terms_sql,
 )
-from app.analysis.post_earnings_review import run_post_earnings_review
-from app.analysis.shadow_portfolio import (
+from backend.app.analysis.post_earnings_review import run_post_earnings_review
+from backend.app.analysis.shadow_portfolio import (
     get_shadow_portfolio_summary,
     get_weekly_shadow_report,
 )
-from app.memory.long_term import get_insights
-from app.db import get_supabase_client
-from app.cache import cache_get, cache_set
+from backend.app.memory.long_term import get_insights
+from backend.app.db import get_supabase_client
+from backend.app.cache import cache_get, cache_set
 from schemas.base import HealthCheckResponse
 
 logger = get_logger(__name__)

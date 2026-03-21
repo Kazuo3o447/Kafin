@@ -2,6 +2,99 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.7.3] - 2026-03-21 - Research Dashboard Hotfixes
+
+### 🐛 Bugfixes
+- **Torpedo Delta Farbe**: invertierte Farb- und Pfeillogik für die Torpedo-Änderung im Research Dashboard
+- **Chart-Analyse Laden**: Race-Condition abgesichert mit In-Flight-Guard und deaktivierten Buttons während des Ladens
+- **Relative Stärke 1T**: `rel_str` nutzt jetzt den korrekten 1-Tages-Change aus `yfinance.fast_info`
+- **News Sentiment**: Aggregation und Headline-Scoring sind jetzt float-sicher für String-Werte
+- **Chart-Analyse Cache**: erfolgreiche `analyze_chart()`-Antworten werden 10 Minuten gecacht
+- **R:R Berechnung**: Division-by-zero wird mit Epsilon-Guard verhindert
+- **Earnings-Datum**: ungültige Datumswerte werden im Frontend robust dargestellt
+
+## [5.7.2] - 2026-03-21 - Research Dashboard P3: Intelligence
+
+### 🐛 Bugfixes
+- **Unfilled Placeholders**: {{beta}}, {{quality_score}},
+  {{mismatch_score}}, {{free_cash_flow_yield}},
+  {{sentiment_score_7d}}, {{is_contrarian_setup}}
+  erschienen als Rohtext im DeepSeek-Prompt.
+  Alle jetzt befüllt oder entfernt.
+- **Sicherheitsnetz**: regex entfernt alle verbleibenden
+  {{...}} vor DeepSeek-Aufruf
+
+### 🚀 DeepSeek bekommt jetzt (zusätzlich zu vorher)
+- **Relative Stärke**: Alpha vs. SPY und Sektor-ETF
+  für 1T / 5T / 20T — titelspezifische vs. Markt-Bewegung
+- **Chart-Analyse**: Entry-Zone, Stop-Loss, Target 1+2,
+  Support/Resistance mit Stärke, R:R Verhältnis,
+  Hauptrisiko — aus chart_analyst.py
+- **News mit Sentiment-Score**: jede Schlagzeile mit
+  FinBERT-Score [+0.72 bullish] / [-0.44 bearish]
+  statt rohe Bullet-Liste
+- **Aggregiertes News-Sentiment**: "mehrheitlich bullish
+  +0.38 (8 Artikel)" als Kontext-Zeile
+
+### Vollständige DeepSeek Audit Input-Liste (nach P3)
+1. Earnings-Erwartungen + Historie (8 Quartale)
+2. Bewertung (P/E vs. Sektor + own median, PEG, PS, EV/EBITDA)
+3. Technicals (Trend, SMAs, RSI, Support/Resistance)
+4. Short Interest + Squeeze-Risiko
+5. Insider-Aktivität (90T)
+6. News mit FinBERT-Scores + Aggregat
+7. Web-Intelligence (Tavily)
+8. Langzeit-Gedächtnis (frühere Reviews)
+9. Options (PCR, IV, Expected Move, IV-Spread)
+10. Social Sentiment
+11. Opportunity/Torpedo Score + Contrarian-Metriken
+12. Relative Stärke vs. SPY + Sektor-ETF ← NEU P3
+13. Chart-Analyse (Entry/Stop/Target/Levels) ← NEU P3
+14. News-Sentiment aggregiert + pro Schlagzeile ← NEU P3
+
+## [5.7.1] - 2026-03-21 - Research Dashboard P2: Kontext-Ebene
+
+### 🚀 Trading-Mehrwert
+- **Relative Stärke Block**: Ticker vs. SPY und vs. Sektor-ETF
+  — 1T / 5T / 20T Vergleich. Zeigt ob Bewegung
+  titelspezifisch oder Markt-Rauschen ist.
+  Sektor-Mapping: 11 Sektoren → XLK/XLV/XLE etc.
+  Daten aus market_overview (gecacht, kein extra Call)
+- **Earnings-Kontext Banner**: Break-Even Level
+  (Kurs ± Expected Move), Buy-the-Rumor Warnung
+  (>+10% in 30T vor Earnings), Pre/Post-Market Label,
+  EPS + Revenue Konsens, vollständiger Datum-String
+- **Technisches Bild**: Trend-Zusammenfassung als
+  farbige Zeile mit SMA-Distanz in %, MACD als
+  "Bullish Cross" statt Zahl, OBV als "Käufer/Verkäufer",
+  ATR + 52W-Position als Kontext-Zeile
+
+### 🔧 Backend
+- api_research_dashboard: SECTOR_TO_ETF Mapping,
+  relative_strength Dict im Response,
+  market_overview parallel geladen (gecacht 300s)
+
+## [5.7.0] - 2026-03-21 - Research Dashboard Decision Core
+
+### 🚀 Trading-Mehrwert
+- **Score-Delta Anzeige**: Opportunity- und Torpedo-Scores mit Veränderung vs. gestern und letzte Woche
+- **Trade Setup Block**: Chart-Analyse mit Entry Zone, Stop-Loss, Targets, Support/Resistance, Bias und Risiko
+- **Position Sizer Block**: Risikomanagement mit Kontogröße, Risiko-%, Aktienanzahl und R:R Verhältnis
+
+### 🎯 Frontend
+- **ScoreBlock**: Delta-Indikatoren mit farbigen Pfeilen bei signifikanten Änderungen (>0.1 Punkte)
+- **TradeSetupBlock**: On-Demand Laden der Chart-Analyse, Visualisierung von Levels und Stärke
+- **PositionSizerBlock**: localStorage für Kontogröße, Echtzeit-Berechnung von Positionsgröße
+
+### 🔧 Backend
+- **API Endpunkte**: `/api/data/score-delta/{ticker}` und `/api/chart-analysis/{ticker}` genutzt
+- **Chart Analyst**: DeepSeek-basierte technische Analyse mit konkreten Preiszielen
+
+### 📊 UI/UX
+- **Performance**: Chart-Analyse erst auf Knopfdruck laden (kein initiales Performance-Problem)
+- **Visualisierung**: Farbcodierung für Bias (bullish/bearish/neutral) und Level-Stärke
+- **Interaktion**: Eingabefelder für Risikoparameter mit Validierung
+
 ## [5.6.4] - 2026-03-21 - Market-Signal Cache-Invalidierung
 
 ### 🐛 Fixes

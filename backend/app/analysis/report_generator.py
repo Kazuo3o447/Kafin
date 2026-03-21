@@ -212,6 +212,23 @@ async def generate_audit_report(ticker: str) -> str:
     except Exception as e:
         logger.warning(f"Options für {ticker}: {e}")
 
+    # ── Relative Stärke + Trade Setup Daten laden ─────────────────
+    from backend.app.data.market_overview import get_market_overview
+    from backend.app.analysis.chart_analyst import analyze_chart
+    import asyncio
+    
+    market_ov_result, chart_result = await asyncio.gather(
+        get_market_overview(),
+        analyze_chart(ticker),
+        return_exceptions=True,
+    )
+    
+    def safe_extra(r, default):
+        return default if isinstance(r, Exception) else r
+    
+    market_ov = safe_extra(market_ov_result, {})
+    chart_data = safe_extra(chart_result, {})
+
     # ── Expected Move Berechnung ──────────────────────────────
     expected_move_pct: float | None = None
     expected_move_usd: float | None = None
@@ -268,6 +285,155 @@ async def generate_audit_report(ticker: str) -> str:
         )
     except Exception as e:
         logger.debug(f"30d Price Change {ticker}: {e}")
+
+    # ── Relative Stärke berechnen ───────────────────────────────
+    SECTOR_TO_ETF = {
+        "Technology": "XLK", "Financial Services": "XLF",
+        "Financials": "XLF", "Energy": "XLE",
+        "Healthcare": "XLV", "Health Care": "XLV",
+        "Utilities": "XLU", "Industrials": "XLI",
+        "Communication Services": "XLC", "Communication": "XLC",
+        "Consumer Cyclical": "XLY",
+        "Consumer Discretionary": "XLY",
+        "Consumer Defensive": "XLP",
+        "Consumer Staples": "XLP",
+        "Basic Materials": "XLB", "Materials": "XLB",
+        "Real Estate": "XLRE",
+    }
+
+    ticker_sector = (
+        getattr(profile, "sector", None)
+        or getattr(metrics, "sector", None)
+        or (yf_fundamentals.get("sector") if yf_fundamentals else None)
+        or "Unknown"
+    )
+
+    indices_data = market_ov.get("indices", {})
+    spy = indices_data.get("SPY", {})
+    sector_etf_sym = SECTOR_TO_ETF.get(ticker_sector, None)
+    sector_etf = indices_data.get(sector_etf_sym, {}) if sector_etf_sym else {}
+
+    # price_change_30d aus technicals oder yf_fundamentals
+    ticker_1m = (
+        getattr(technicals, "price_change_30d", None)
+        if technicals else None
+    ) or (
+        yf_fundamentals.get("price_change_30d")
+        if yf_fundamentals else None
+    )
+    ticker_5d = (
+        yf_fundamentals.get("change_5d_pct")
+        if yf_fundamentals else None
+    )
+
+    ticker_1d_pct = None
+    try:
+        import yfinance as yf
+
+        def _fetch_1d_change(t: str) -> float | None:
+            stock = yf.Ticker(t)
+            fast_info = getattr(stock, "fast_info", None)
+            if not fast_info:
+                return None
+            change_pct = getattr(fast_info, "regular_market_day_change_percent", None)
+            if change_pct is None:
+                return None
+            return round(float(change_pct) * 100, 2)
+
+        ticker_1d_pct = await asyncio.to_thread(_fetch_1d_change, ticker)
+    except Exception:
+        ticker_1d_pct = None
+
+    def rs(a, b):
+        if a is None or b is None: return "N/A"
+        diff = a - b
+        sign = "+" if diff >= 0 else ""
+        return f"{sign}{diff:.1f}%"
+
+    rel_str = (
+        f"vs. S&P 500 (SPY):\n"
+        f"  1T: Ticker {f'{ticker_1d_pct:+.1f}%' if ticker_1d_pct is not None else 'N/A'} "
+        f"vs SPY {spy.get('change_1d_pct', 'N/A')}% "
+        f"→ Alpha: {rs(ticker_1d_pct, spy.get('change_1d_pct'))}\n"
+        f"  5T: Ticker {ticker_5d or 'N/A'}% "
+        f"vs SPY {spy.get('change_5d_pct', 'N/A')}% "
+        f"→ Alpha: {rs(ticker_5d, spy.get('change_5d_pct'))}\n"
+        f"  20T: Ticker {ticker_1m or 'N/A'}% "
+        f"vs SPY {spy.get('change_1m_pct', 'N/A')}% "
+        f"→ Alpha: {rs(ticker_1m, spy.get('change_1m_pct'))}\n"
+    )
+
+    if sector_etf_sym:
+        rel_str += (
+            f"\nvs. Sektor-ETF {sector_etf_sym} ({ticker_sector}):\n"
+            f"  5T: Ticker {ticker_5d or 'N/A'}% "
+            f"vs {sector_etf_sym} {sector_etf.get('change_5d_pct', 'N/A')}% "
+            f"→ Alpha: {rs(ticker_5d, sector_etf.get('change_5d_pct'))}\n"
+            f"  20T: Ticker {ticker_1m or 'N/A'}% "
+            f"vs {sector_etf_sym} {sector_etf.get('change_1m_pct', 'N/A')}% "
+            f"→ Alpha: {rs(ticker_1m, sector_etf.get('change_1m_pct'))}\n"
+        )
+
+    # ── Chart-Analyse aufbereiten ───────────────────────────────
+    if chart_data and not chart_data.get("error"):
+        entry = chart_data.get("entry_zone", {})
+        entry_low = entry.get("low")
+        entry_high = entry.get("high")
+        stop_loss = chart_data.get("stop_loss")
+        target_1 = chart_data.get("target_1")
+        target_2 = chart_data.get("target_2")
+
+        def _fmt_price(value):
+            return f"${value:.2f}" if isinstance(value, (int, float)) else "N/A"
+
+        chart_str = (
+            f"Entry-Zone: {_fmt_price(entry_low)}"
+            f" – {_fmt_price(entry_high)}\n"
+            f"Stop-Loss: {_fmt_price(stop_loss)}\n"
+            f"Target 1: {_fmt_price(target_1)}\n"
+            f"Target 2: {_fmt_price(target_2)}\n"
+            f"Bias: {chart_data.get('bias', 'N/A')}\n"
+            f"Hauptrisiko: {chart_data.get('key_risk', 'N/A')}\n"
+        )
+        supports = chart_data.get("support_levels", [])
+        if supports:
+            chart_str += "Support-Level: " + ", ".join(
+                f"${s['price']:.2f} ({s['label']}, {s['strength']})"
+                for s in supports[:3]
+            ) + "\n"
+        resistances = chart_data.get("resistance_levels", [])
+        if resistances:
+            chart_str += "Resistance-Level: " + ", ".join(
+                f"${r['price']:.2f} ({r['label']}, {r['strength']})"
+                for r in resistances[:3]
+            ) + "\n"
+        
+        # R:R berechnen
+        try:
+            entry_mid = (
+                (chart_data["entry_zone"]["low"]
+                 + chart_data["entry_zone"]["high"]) / 2
+            ) if chart_data.get("entry_zone") else None
+            denominator = (
+                entry_mid - chart_data["stop_loss"]
+                if entry_mid is not None and chart_data.get("stop_loss") is not None
+                else None
+            )
+            rr = (
+                (chart_data["target_1"] - entry_mid) / denominator
+                if entry_mid is not None
+                and chart_data.get("stop_loss") is not None
+                and chart_data.get("target_1") is not None
+                and denominator is not None
+                and abs(denominator) > 0.01
+                else None
+            )
+            if rr is not None:
+                chart_str += f"R:R Verhältnis: 1:{rr:.1f}\n"
+        except Exception:
+            pass
+    else:
+        chart_str = "Chart-Analyse nicht verfügbar."
 
     social = None  # Finnhub Social Sentiment nicht verfügbar (kein Free-Tier Endpoint)
     
@@ -484,36 +650,71 @@ async def generate_audit_report(ticker: str) -> str:
     # 3. Prompt replacement
     sys_prompt, user_tmpl = _read_prompt(AUDIT_PROMPT_PATH)
     
-    # Format news
+    # Format news with sentiment scores
     if news_memory:
-        import json
-        bullets = []
-        for nm in news_memory[:5]:
+        news_items = []
+        for nm in news_memory[:8]:
+            bullet = nm.get("bullet_points", "")
+            raw_score = nm.get("sentiment_score", 0.0)
             try:
-                # bp kann String oder JSON-String Liste sein
-                bp_data = nm.get("bullet_points")
-                if isinstance(bp_data, str):
-                    try: 
-                        parsed = json.loads(bp_data)
-                        if isinstance(parsed, list): bullets.extend(parsed)
-                        else: bullets.append(str(parsed))
-                    except:
-                        bullets.append(bp_data)
-                elif isinstance(bp_data, list):
-                    bullets.extend(bp_data)
-            except Exception as e:
-                logger.error(f"Fehler beim Parsen der Memory-Stichpunkte: {e}")
-                
-        if bullets:
-            news_str = "\n".join([f"- {b}" for b in bullets[:7]]) # max 7 Stichpunkte
-        else:
-             news_str = "Keine relevanten Nachrichten in den letzten 30 Tagen."
+                score = float(raw_score) if raw_score is not None else 0.0
+                direction = (
+                    "bullish" if score > 0.2
+                    else "bearish" if score < -0.2
+                    else "neutral"
+                )
+                score_str = f"[{score:+.2f} {direction}]"
+            except (TypeError, ValueError):
+                score = None
+                score_str = "[?]"
+
+            if isinstance(bullet, list):
+                for b in bullet[:2]:
+                    news_items.append(f"{score_str} {b}")
+            elif isinstance(bullet, str) and bullet:
+                news_items.append(f"{score_str} {bullet}")
+
+        news_str = "\n".join(news_items[:7])
+
+        # Aggregiertes Sentiment
+        scores_list = []
+        for nm in news_memory:
+            raw = nm.get("sentiment_score")
+            if raw is None:
+                continue
+            try:
+                scores_list.append(float(raw))
+            except (TypeError, ValueError):
+                continue
+        if scores_list:
+            avg_sent = sum(scores_list) / len(scores_list)
+            trend = (
+                "mehrheitlich bullish"
+                if avg_sent > 0.15
+                else "mehrheitlich bearish"
+                if avg_sent < -0.15
+                else "neutral"
+            )
+            news_str = (
+                f"Aggregiertes News-Sentiment: {avg_sent:+.2f}"
+                f" ({trend}, {len(scores_list)} Artikel)\n\n"
+                + news_str
+            )
     else:
-        news_str = "\n".join([f"- {n.headline}: {n.summary[:100]}..." for n in news_list[:5]]) if news_list else "Keine relevanten Nachrichten in den letzten 30 Tagen."
+        # Fallback: Finnhub ohne Scores
+        if news_list:
+            news_str = "\n".join([
+                f"[?] {n.headline}: {n.summary[:80]}..."
+                for n in news_list[:5]
+            ])
+        else:
+            news_str = "Keine relevanten Nachrichten."
 
     if google_news_for_ticker:
-        gn_str = "\n".join([f"- [Google News] {headline}" for headline in google_news_for_ticker[:5]])
-        news_str = f"{news_str}\n\nGoogle News (extern):\n{gn_str}"
+        gn_scored = "\n".join([
+            f"[extern] {n}" for n in google_news_for_ticker[:3]
+        ])
+        news_str += f"\n\nGoogle News (Zusatz):\n{gn_scored}"
     
     # Letzte Earnings aus History extrahieren
     last_actual = "N/A"
@@ -584,6 +785,46 @@ async def generate_audit_report(ticker: str) -> str:
     rev_consensus_str = (
         f"{rev_consensus_val / 1e9:.1f}B" if rev_consensus_val and rev_consensus_val > 1e6 else "N/A"
     )
+
+    # Get beta from yf_fundamentals or metrics
+    beta_val = None
+    if yf_fundamentals and yf_fundamentals.get("beta"):
+        beta_val = yf_fundamentals["beta"]
+    elif metrics and hasattr(metrics, "beta"):
+        beta_val = getattr(metrics, "beta", None)
+    
+    # Calculate quality_score and mismatch_score
+    quality_score_val = None
+    mismatch_score_val = None
+    if metrics and all(hasattr(metrics, attr) for attr in ["debt_to_equity", "current_ratio", "free_cash_flow_yield", "pe_ratio"]):
+        from backend.app.analysis.scoring import calculate_quality_score, calculate_mismatch_score
+        quality_score_val = calculate_quality_score(
+            debt_to_equity=getattr(metrics, "debt_to_equity", None),
+            current_ratio=getattr(metrics, "current_ratio", None),
+            free_cash_flow_yield=getattr(metrics, "free_cash_flow_yield", None),
+            pe_ratio=getattr(metrics, "pe_ratio", None)
+        )
+        # For mismatch_score we need sentiment, beta, IV - use finbert_sentiment as approximation
+        mismatch_score_val = calculate_mismatch_score(
+            sentiment_score=finbert_sentiment,
+            quality_score=quality_score_val,
+            beta=beta_val,
+            iv_atm=getattr(options, "implied_volatility_atm", None) if options else None,
+            hist_vol=getattr(options, "historical_volatility", None) if options else None
+        )
+    
+    # Get free_cash_flow_yield
+    fcf_yield_val = None
+    if metrics and hasattr(metrics, "free_cash_flow_yield"):
+        fcf_yield_val = getattr(metrics, "free_cash_flow_yield", None)
+    elif yf_fundamentals and yf_fundamentals.get("fcf_yield"):
+        fcf_yield_val = yf_fundamentals["fcf_yield"]
+    
+    # sentiment_score_7d - use finbert_sentiment as approximation
+    sentiment_7d_val = finbert_sentiment
+    
+    # is_contrarian_setup
+    is_contrarian_val = "Ja" if (finbert_sentiment < -0.3 and beta_val and beta_val > 1.2) else "Nein"
 
     user_prompt = user_tmpl \
         .replace("{{ticker}}", ticker) \
@@ -689,7 +930,21 @@ async def generate_audit_report(ticker: str) -> str:
         .replace(
             "{{divergence_warning}}",
             divergence_text if divergence_text else "Keine Divergenz erkannt"
-        )
+        ) \
+        .replace("{{beta}}", str(beta_val) if beta_val else "N/A") \
+        .replace("{{quality_score}}", f"{quality_score_val:.1f}" if quality_score_val else "N/A") \
+        .replace("{{mismatch_score}}", f"{mismatch_score_val:.0f}" if mismatch_score_val else "N/A") \
+        .replace("{{free_cash_flow_yield}}", f"{fcf_yield_val:.2f}%" if fcf_yield_val else "N/A") \
+        .replace("{{sentiment_score_7d}}", f"{sentiment_7d_val:+.2f}") \
+        .replace("{{is_contrarian_setup}}", is_contrarian_val) \
+        .replace("{{debt_to_equity}}", str(getattr(metrics, "debt_to_equity", "N/A")) if metrics else "N/A") \
+        .replace("{{current_ratio}}", str(getattr(metrics, "current_ratio", "N/A")) if metrics else "N/A") \
+        .replace("{{relative_strength}}", rel_str) \
+        .replace("{{chart_analysis}}", chart_str)
+    
+    # Sicherheitsnetz: alle verbleibenden unfilled Placeholders mit N/A ersetzen
+    import re
+    user_prompt = re.sub(r"\{\{[^}]+\}\}", "N/A", user_prompt)
         
     result = await call_deepseek(sys_prompt, user_prompt, model="deepseek-reasoner")
     if "MOCK_REPORT:" in result:

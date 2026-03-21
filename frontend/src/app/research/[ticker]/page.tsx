@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -33,6 +33,7 @@ type ResearchData = {
   price: number | null;
   change_pct: number | null;
   price_change_30d: number | null;
+  price_change_5d?: number | null;
   fifty_two_week_high: number | null;
   fifty_two_week_low: number | null;
   pe_ratio: number | null;
@@ -90,12 +91,12 @@ type ResearchData = {
   insider_sell_value: number;
   insider_assessment: string;
   earnings_date: string | null;
-  report_timing: string | null;
+  report_timing?: string | null;
   earnings_countdown: number | null;
   earnings_today: boolean;
-  eps_consensus: number | null;
-  revenue_consensus: number | null;
-  beats_of_8: number | null;
+  eps_consensus?: number | null;
+  revenue_consensus?: number | null;
+  beats_of_8?: number | null;
   avg_surprise_pct: number | null;
   last_surprise_pct: number | null;
   last_beat: boolean | null;
@@ -133,7 +134,66 @@ type ResearchData = {
     opportunity: Record<string, number>;
     torpedo: Record<string, number>;
   } | null;
+  relative_strength?: {
+    vs_spy_1d: number | null;
+    vs_spy_5d: number | null;
+    vs_spy_1m: number | null;
+    vs_sector_1d: number | null;
+    vs_sector_5d: number | null;
+    vs_sector_1m: number | null;
+    spy_1d: number | null;
+    spy_5d: number | null;
+    spy_1m: number | null;
+    sector_etf: string | null;
+    sector_1d: number | null;
+    sector_5d: number | null;
+    sector_1m: number | null;
+    label: string;
+    signal: "bullish" | "bearish" | "neutral";
+  } | null;
 };
+
+type ScoreDeltaData = {
+  yesterday: {
+    opportunity_score: number | null;
+    torpedo_score: number | null;
+  } | null;
+  last_week: {
+    opportunity_score: number | null;
+    torpedo_score: number | null;
+  } | null;
+};
+
+type ChartAnalysisData = {
+  ticker: string;
+  price: number;
+  rsi: number | null;
+  trend: string;
+  volume_trend: string;
+  sma_50: number | null;
+  sma_200: number | null;
+  support_levels: Array<{
+    price: number;
+    strength: "strong" | "moderate" | "weak";
+    label: string;
+  }>;
+  resistance_levels: Array<{
+    price: number;
+    strength: "strong" | "moderate" | "weak";
+    label: string;
+  }>;
+  entry_zone: {
+    low: number;
+    high: number;
+  };
+  stop_loss: number;
+  target_1: number;
+  target_2: number;
+  analysis_text: string;
+  bias: "bullish" | "bearish" | "neutral";
+  key_risk: string;
+  error?: boolean;
+} | null;
 
 // ── Hilfsfunktionen ──────────────────────────────────────────
 const fmt = {
@@ -186,7 +246,7 @@ function Skeleton({ className }: { className?: string }) {
   return <div className={`animate-pulse rounded bg-[var(--bg-elevated)] ${className}`} />;
 }
 
-function ScoreBlock({ data }: { data: ResearchData }) {
+function ScoreBlock({ data, delta }: { data: ResearchData; delta?: ScoreDeltaData | null }) {
   const opp = data.opportunity_score;
   const torp = data.torpedo_score;
   const rec = data.recommendation;
@@ -216,6 +276,35 @@ function ScoreBlock({ data }: { data: ResearchData }) {
     : torp >= 4 ? "text-[var(--accent-amber)]"
     : "text-[var(--accent-green)]";
 
+  // Delta-Funktionen
+  const getDeltaDisplay = (current: number, historical: number | null) => {
+    if (historical == null) return null;
+    const diff = current - historical;
+    if (Math.abs(diff) < 0.1) return null; // Keine Anzeige bei minimaler Änderung
+    return {
+      value: diff,
+      arrow: diff > 0 ? <ChevronUp size={10} className="inline" /> : <ChevronDown size={10} className="inline" />,
+      color: diff > 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"
+    };
+  };
+
+  // Torpedo ist invertiert: steigender Wert = schlechter
+  const getTorpedoDeltaDisplay = (current: number, historical: number | null) => {
+    if (historical == null) return null;
+    const diff = current - historical;
+    if (Math.abs(diff) < 0.1) return null;
+    return {
+      value: diff,
+      arrow: diff > 0 ? <ChevronUp size={10} className="inline" /> : <ChevronDown size={10} className="inline" />,
+      color: diff > 0 ? "text-[var(--accent-red)]" : "text-[var(--accent-green)]"
+    };
+  };
+
+  const oppYesterday = delta?.yesterday?.opportunity_score ? getDeltaDisplay(opp, delta.yesterday.opportunity_score) : null;
+  const oppLastWeek = delta?.last_week?.opportunity_score ? getDeltaDisplay(opp, delta.last_week.opportunity_score) : null;
+  const torpYesterday = delta?.yesterday?.torpedo_score ? getTorpedoDeltaDisplay(torp, delta.yesterday.torpedo_score) : null;
+  const torpLastWeek = delta?.last_week?.torpedo_score ? getTorpedoDeltaDisplay(torp, delta.last_week.torpedo_score) : null;
+
   return (
     <div className={`rounded-xl border-2 p-5 ${
       rec === "strong_buy" || rec === "buy_hedge"
@@ -241,6 +330,19 @@ function ScoreBlock({ data }: { data: ResearchData }) {
               {opp.toFixed(1)}
             </p>
             <p className="text-[10px] text-[var(--text-muted)]">/ 10</p>
+            {/* Delta-Anzeige */}
+            <div className="mt-1 space-y-0.5">
+              {oppYesterday && (
+                <p className={`text-[9px] font-mono ${oppYesterday.color}`}>
+                  {oppYesterday.arrow} {Math.abs(oppYesterday.value).toFixed(1)} vs gestern
+                </p>
+              )}
+              {oppLastWeek && (
+                <p className={`text-[9px] font-mono ${oppLastWeek.color}`}>
+                  {oppLastWeek.arrow} {Math.abs(oppLastWeek.value).toFixed(1)} vs Woche
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="text-2xl font-light text-[var(--text-muted)]">
@@ -256,6 +358,19 @@ function ScoreBlock({ data }: { data: ResearchData }) {
               {torp.toFixed(1)}
             </p>
             <p className="text-[10px] text-[var(--text-muted)]">/ 10</p>
+            {/* Delta-Anzeige */}
+            <div className="mt-1 space-y-0.5">
+              {torpYesterday && (
+                <p className={`text-[9px] font-mono ${torpYesterday.color}`}>
+                  {torpYesterday.arrow} {Math.abs(torpYesterday.value).toFixed(1)} vs gestern
+                </p>
+              )}
+              {torpLastWeek && (
+                <p className={`text-[9px] font-mono ${torpLastWeek.color}`}>
+                  {torpLastWeek.arrow} {Math.abs(torpLastWeek.value).toFixed(1)} vs Woche
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -357,6 +472,601 @@ function ScoreBlock({ data }: { data: ResearchData }) {
   );
 }
 
+// Trade Setup Block Component
+function TradeSetupBlock({ 
+  ticker, 
+  data, 
+  loading, 
+  onLoad 
+}: { 
+  ticker: string; 
+  data: ChartAnalysisData | null; 
+  loading: boolean; 
+  onLoad: () => void; 
+}) {
+  if (loading) {
+    return (
+      <div className="card p-4">
+        <div className="flex items-center gap-2">
+          <RefreshCw size={16} className="animate-spin text-[var(--accent-blue)]" />
+          <span className="text-sm text-[var(--text-muted)]">
+            Lade Chart-Analyse für {ticker}...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="card p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-2">
+              Trade Setup
+            </p>
+            <p className="text-sm text-[var(--text-secondary)]">
+              Chart-Analyse nicht verfügbar
+            </p>
+          </div>
+          <button
+            onClick={onLoad}
+            disabled={loading}
+            className={`rounded-lg bg-[var(--accent-blue)] px-3 py-2 text-xs text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            Analyse laden
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (data.error) {
+    return (
+      <div className="card p-4 border border-[var(--accent-red)]/40 bg-[var(--accent-red)]/5">
+        <div className="flex items-center gap-2">
+          <AlertTriangle size={16} className="text-[var(--accent-red)]" />
+          <span className="text-sm text-[var(--accent-red)]">
+            Chart-Analyse fehlerhaft
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  const biasColor = 
+    data.bias === "bullish" ? "text-[var(--accent-green)]"
+    : data.bias === "bearish" ? "text-[var(--accent-red)]"
+    : "text-[var(--text-secondary)]";
+
+  const getStrengthColor = (strength: string) =>
+    strength === "strong" ? "text-[var(--accent-green)]"
+    : strength === "moderate" ? "text-[var(--accent-amber)]"
+    : "text-[var(--text-secondary)]";
+
+  return (
+    <div className="card p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-3">
+        Trade Setup - {data.ticker}
+      </p>
+      
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Linke Seite: Levels */}
+        <div className="space-y-3">
+          {/* Entry Zone */}
+          <div className="rounded-lg bg-[var(--bg-tertiary)] p-3">
+            <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Entry Zone</p>
+            <p className="text-lg font-mono font-bold text-[var(--accent-blue)]">
+              ${data.entry_zone.low.toFixed(2)} - ${data.entry_zone.high.toFixed(2)}
+            </p>
+          </div>
+
+          {/* Stop Loss */}
+          <div className="rounded-lg bg-[var(--bg-tertiary)] p-3">
+            <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Stop Loss</p>
+            <p className="text-lg font-mono font-bold text-[var(--accent-red)]">
+              ${data.stop_loss.toFixed(2)}
+            </p>
+          </div>
+
+          {/* Targets */}
+          <div className="rounded-lg bg-[var(--bg-tertiary)] p-3">
+            <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Targets</p>
+            <div className="space-y-1">
+              <p className="text-sm font-mono text-[var(--accent-green)]">
+                T1: ${data.target_1.toFixed(2)}
+              </p>
+              <p className="text-sm font-mono text-[var(--accent-green)]">
+                T2: ${data.target_2.toFixed(2)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Rechte Seite: Support/Resistance */}
+        <div className="space-y-3">
+          {/* Support Levels */}
+          <div>
+            <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Support</p>
+            <div className="space-y-1">
+              {data.support_levels.map((level, idx) => (
+                <div key={idx} className="flex justify-between items-center">
+                  <span className="text-xs text-[var(--text-muted)]">{level.label}</span>
+                  <span className={`text-sm font-mono ${getStrengthColor(level.strength)}`}>
+                    ${level.price.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Resistance Levels */}
+          <div>
+            <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Resistance</p>
+            <div className="space-y-1">
+              {data.resistance_levels.map((level, idx) => (
+                <div key={idx} className="flex justify-between items-center">
+                  <span className="text-xs text-[var(--text-muted)]">{level.label}</span>
+                  <span className={`text-sm font-mono ${getStrengthColor(level.strength)}`}>
+                    ${level.price.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Analyse Text und Bias */}
+      <div className="mt-4 pt-4 border-t border-[var(--border)]">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold uppercase tracking-wider mb-0">
+            Bias: <span className={biasColor}>{data.bias.toUpperCase()}</span>
+          </p>
+          <div className="text-right">
+            <p className="text-xs text-[var(--text-muted)]">
+              RSI: {data.rsi?.toFixed(1) || "N/A"} | Trend: {data.trend}
+            </p>
+          </div>
+        </div>
+        
+        {data.analysis_text && (
+          <p className="text-sm text-[var(--text-secondary)] mb-2">
+            {data.analysis_text}
+          </p>
+        )}
+
+        {data.key_risk && (
+          <div className="rounded-lg bg-[var(--accent-red)]/10 border border-[var(--accent-red)]/30 p-2">
+            <p className="text-xs font-semibold text-[var(--accent-red)] mb-1">Key Risk</p>
+            <p className="text-xs text-[var(--text-secondary)]">{data.key_risk}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Position Sizer Block Component
+function PositionSizerBlock({
+  currentPrice,
+  accountSize,
+  riskPercent,
+  stopLoss,
+  onAccountSizeChange,
+  onRiskPercentChange,
+  onStopLossChange,
+}: {
+  currentPrice: number;
+  accountSize: number;
+  riskPercent: number;
+  stopLoss: number;
+  onAccountSizeChange: (value: number) => void;
+  onRiskPercentChange: (value: number) => void;
+  onStopLossChange: (value: number) => void;
+}) {
+  // Berechnungen
+  const riskAmount = (accountSize * riskPercent) / 100;
+  const stopLossPercent = stopLoss;
+  const stopLossPrice = currentPrice * (1 - stopLossPercent / 100);
+  const shares = currentPrice > 0 ? Math.floor(riskAmount / (currentPrice * stopLossPercent / 100)) : 0;
+  const maxLoss = shares * (currentPrice * stopLossPercent / 100);
+  const rrRatio = stopLossPercent > 0 ? (5 / stopLossPercent).toFixed(2) : "0"; // Annahme: 5% Ziel
+
+  return (
+    <div className="card p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-3">
+        Position Sizer
+      </p>
+      
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Eingabefelder */}
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-[var(--text-muted)]">Kontogröße ($)</label>
+            <input
+              type="number"
+              value={accountSize}
+              onChange={(e) => onAccountSizeChange(parseFloat(e.target.value) || 0)}
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-sm font-mono text-[var(--text-primary)] focus:border-[var(--accent-blue)] outline-none"
+            />
+          </div>
+          
+          <div>
+            <label className="text-xs text-[var(--text-muted)]">Risiko (%)</label>
+            <input
+              type="number"
+              value={riskPercent}
+              onChange={(e) => onRiskPercentChange(parseFloat(e.target.value) || 0)}
+              step="0.1"
+              min="0.1"
+              max="10"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-sm font-mono text-[var(--text-primary)] focus:border-[var(--accent-blue)] outline-none"
+            />
+          </div>
+          
+          <div>
+            <label className="text-xs text-[var(--text-muted)]">Stop Loss (%)</label>
+            <input
+              type="number"
+              value={stopLoss}
+              onChange={(e) => onStopLossChange(parseFloat(e.target.value) || 0)}
+              step="0.1"
+              min="0.5"
+              max="20"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-sm font-mono text-[var(--text-primary)] focus:border-[var(--accent-blue)] outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Berechnungen */}
+        <div className="space-y-3">
+          <StatCell 
+            label="Risiko-Betrag" 
+            value={`$${maxLoss.toFixed(2)}`}
+            sub={`${riskPercent}% von $${accountSize.toLocaleString()}`}
+          />
+          
+          <StatCell 
+            label="Aktienanzahl" 
+            value={shares.toLocaleString()}
+            sub={`@ $${currentPrice.toFixed(2)}`}
+          />
+          
+          <StatCell 
+            label="Max Verlust" 
+            value={`$${maxLoss.toFixed(2)}`}
+            sub={`Stop @ $${stopLossPrice.toFixed(2)}`}
+          />
+          
+          <StatCell 
+            label="R:R Verhältnis" 
+            value={`1:${rrRatio}`}
+            sub="Annahme: 5% Ziel"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Relative Strength Block Component
+function RelativeStrengthBlock({ data }: { data: ResearchData }) {
+  const rs = data.relative_strength;
+  if (!rs) return null;
+
+  const fmtRel = (val: number | null | undefined) => {
+    if (val == null) return "—";
+    const sign = val > 0 ? "+" : "";
+    return `${sign}${val.toFixed(1)}%`;
+  };
+
+  const relColor = (val: number | null | undefined) => {
+    if (val == null) return "text-[var(--text-muted)]";
+    if (val > 0.5) return "text-[var(--accent-green)]";
+    if (val < -0.5) return "text-[var(--accent-red)]";
+    return "text-[var(--text-muted)]";
+  };
+
+  const signalColor =
+    rs.signal === "bullish" ? "text-[var(--accent-green)]"
+    : rs.signal === "bearish" ? "text-[var(--accent-red)]"
+    : "text-amber-400";
+
+  return (
+    <div className="card p-4">
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-[10px] font-semibold uppercase
+                      tracking-[0.25em] text-[var(--text-muted)]">
+          Relative Stärke
+        </p>
+        <span className={`text-xs font-semibold ${signalColor}`}>
+          {rs.label}
+        </span>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+
+        {/* vs. S&P 500 */}
+        <div className="rounded-lg bg-[var(--bg-tertiary)] p-3">
+          <p className="text-[10px] text-[var(--text-muted)] mb-2">
+            vs. S&P 500 (SPY)
+          </p>
+          <div className="space-y-1.5">
+            {[
+              { label: "Heute", ticker: data.change_pct, bench: rs.spy_1d, rel: rs.vs_spy_1d },
+              { label: "5 Tage", ticker: data.price_change_5d, bench: rs.spy_5d, rel: rs.vs_spy_5d },
+              { label: "20 Tage", ticker: data.price_change_30d, bench: rs.spy_1m, rel: rs.vs_spy_1m },
+            ].map(row => (
+              <div key={row.label}
+                   className="flex items-center justify-between">
+                <span className="text-[10px] text-[var(--text-muted)]
+                                  w-12">{row.label}</span>
+                <span className="text-[10px] font-mono
+                                  text-[var(--text-secondary)]">
+                  {row.ticker != null
+                    ? `${row.ticker >= 0 ? "+" : ""}${row.ticker.toFixed(1)}%` 
+                    : "—"}
+                  {" "}vs{" "}
+                  {row.bench != null
+                    ? `${row.bench >= 0 ? "+" : ""}${row.bench.toFixed(1)}%` 
+                    : "—"}
+                </span>
+                <span className={`text-xs font-semibold font-mono
+                                   w-14 text-right ${relColor(row.rel)}`}>
+                  {fmtRel(row.rel)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* vs. Sektor */}
+        <div className="rounded-lg bg-[var(--bg-tertiary)] p-3">
+          <p className="text-[10px] text-[var(--text-muted)] mb-2">
+            vs. Sektor
+            {rs.sector_etf && (
+              <span className="ml-1 text-[var(--accent-blue)]">
+                {rs.sector_etf} · {data.sector}
+              </span>
+            )}
+          </p>
+          {rs.sector_etf ? (
+            <div className="space-y-1.5">
+              {[
+                { label: "Heute", ticker: data.change_pct, bench: rs.sector_1d, rel: rs.vs_sector_1d },
+                { label: "5 Tage", ticker: data.price_change_5d, bench: rs.sector_5d, rel: rs.vs_sector_5d },
+                { label: "20 Tage", ticker: data.price_change_30d, bench: rs.sector_1m, rel: rs.vs_sector_1m },
+              ].map(row => (
+                <div key={row.label}
+                     className="flex items-center justify-between">
+                  <span className="text-[10px] text-[var(--text-muted)]
+                                    w-12">{row.label}</span>
+                  <span className="text-[10px] font-mono
+                                    text-[var(--text-secondary)]">
+                    {row.ticker != null
+                      ? `${row.ticker >= 0 ? "+" : ""}${row.ticker.toFixed(1)}%` 
+                      : "—"}
+                    {" "}vs{" "}
+                    {row.bench != null
+                      ? `${row.bench >= 0 ? "+" : ""}${row.bench.toFixed(1)}%` 
+                      : "—"}
+                  </span>
+                  <span className={`text-xs font-semibold font-mono
+                                     w-14 text-right ${relColor(row.rel)}`}>
+                    {fmtRel(row.rel)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-[var(--text-muted)]">
+              Sektor nicht erkannt — kein ETF-Mapping verfügbar.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <p className="text-[10px] text-[var(--text-muted)] mt-3">
+        Positiver Wert = Titel outperformt den Benchmark.
+        Titelspezifische Bewegung vs. Markt-Rauschen.
+      </p>
+    </div>
+  );
+}
+
+// Earnings Context Banner Component
+function EarningsContextBanner({ data }: { data: ResearchData }) {
+  const countdown = data.earnings_countdown;
+  if (countdown == null || countdown > 30) return null;
+
+  const price = data.price;
+  const move = data.expected_move_pct;
+  const moveUsd = data.expected_move_usd;
+  const change30d = data.price_change_30d;
+
+  const breakEvenUp = price && moveUsd
+    ? (price + moveUsd).toFixed(2) : null;
+  const breakEvenDown = price && moveUsd
+    ? (price - moveUsd).toFixed(2) : null;
+
+  // Buy-the-Rumor: Kurs stark gestiegen VOR Earnings
+  const buyRumorRisk =
+    change30d != null && change30d > 10 && countdown <= 14;
+
+  return (
+    <div className={`rounded-xl p-4 border-2 ${
+      countdown <= 3
+        ? "border-[var(--accent-red)]/50 bg-[var(--accent-red)]/5"
+        : countdown <= 7
+        ? "border-amber-500/50 bg-amber-500/5"
+        : "border-[var(--border)] bg-[var(--bg-secondary)]"
+    }`}>
+
+      {/* Hauptzeile */}
+      <div className="flex items-start justify-between
+                      flex-wrap gap-3 mb-3">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`text-lg font-bold ${
+              countdown <= 3 ? "text-[var(--accent-red)]"
+              : countdown <= 7 ? "text-amber-400"
+              : "text-[var(--text-primary)]"
+            }`}>
+              {data.earnings_today
+                ? "Earnings HEUTE"
+                : `Earnings in ${countdown} Tagen`}
+            </span>
+            {data.report_timing && (
+              <span className="text-xs text-[var(--text-muted)]
+                               bg-[var(--bg-tertiary)] px-2 py-0.5 rounded">
+                {data.report_timing === "before_market"
+                  ? "Pre-Market"
+                  : data.report_timing === "after_market"
+                  ? "After-Market"
+                  : data.report_timing}
+              </span>
+            )}
+          </div>
+          {data.earnings_date && (
+            <p className="text-xs text-[var(--text-muted)]">
+              {(() => {
+                try {
+                  const d = new Date(data.earnings_date!);
+                  if (Number.isNaN(d.getTime())) return data.earnings_date || "—";
+                  return d.toLocaleDateString("de-DE", {
+                    weekday: "long",
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                  });
+                } catch {
+                  return "—";
+                }
+              })()}
+            </p>
+          )}
+        </div>
+
+        {/* Expected Move */}
+        {move != null && (
+          <div className="text-right">
+            <p className="text-[10px] text-[var(--text-muted)]">
+              Expected Move (Options)
+            </p>
+            <p className="text-xl font-bold font-mono">
+              ±{move.toFixed(1)}%
+            </p>
+            {moveUsd && (
+              <p className="text-xs text-[var(--text-muted)]">
+                ±${moveUsd.toFixed(2)} pro Aktie
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Break-Even Level */}
+      {breakEvenUp && breakEvenDown && (
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="rounded-lg bg-[var(--bg-tertiary)] p-2 text-center">
+            <p className="text-[10px] text-[var(--accent-red)]">
+              Break-Even unten
+            </p>
+            <p className="text-sm font-bold font-mono
+                           text-[var(--accent-red)]">
+              ${breakEvenDown}
+            </p>
+            <p className="text-[10px] text-[var(--text-muted)]">
+              Kurs muss drüber bleiben
+            </p>
+          </div>
+          <div className="rounded-lg bg-[var(--bg-tertiary)] p-2
+                           text-center">
+            <p className="text-[10px] text-[var(--text-muted)]">
+              Aktueller Kurs
+            </p>
+            <p className="text-sm font-bold font-mono
+                           text-[var(--text-primary)]">
+              ${price?.toFixed(2) || "—"}
+            </p>
+            <p className="text-[10px] text-[var(--text-muted)]">
+              heute
+            </p>
+          </div>
+          <div className="rounded-lg bg-[var(--bg-tertiary)] p-2
+                           text-center">
+            <p className="text-[10px] text-[var(--accent-green)]">
+              Break-Even oben
+            </p>
+            <p className="text-sm font-bold font-mono
+                           text-[var(--accent-green)]">
+              ${breakEvenUp}
+            </p>
+            <p className="text-[10px] text-[var(--text-muted)]">
+              Kurs muss drüber steigen
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Buy-the-Rumor Warnung */}
+      {buyRumorRisk && (
+        <div className="flex items-start gap-2 rounded-lg
+                         bg-[var(--accent-red)]/10
+                         border border-[var(--accent-red)]/20
+                         px-3 py-2 mt-2">
+          <AlertTriangle size={12}
+            className="text-[var(--accent-red)] shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-semibold
+                           text-[var(--accent-red)]">
+              Buy-the-Rumor Risiko — Kurs +{change30d?.toFixed(1)}%
+              in 30 Tagen vor Earnings
+            </p>
+            <p className="text-[10px] text-[var(--accent-red)]/80 mt-0.5">
+              Viel ist bereits eingepreist. Ein Beat kann trotzdem
+              zu Abverkauf führen wenn die Erwartungen zu hoch sind.
+              Enger Stop empfohlen.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Konsens */}
+      {(data.eps_consensus || data.revenue_consensus) && (
+        <div className="flex gap-4 mt-3 pt-3
+                         border-t border-[var(--border)]">
+          {data.eps_consensus && (
+            <div>
+              <p className="text-[10px] text-[var(--text-muted)]">
+                EPS Konsens
+              </p>
+              <p className="text-sm font-mono font-semibold
+                             text-[var(--text-primary)]">
+                ${data.eps_consensus.toFixed(2)}
+              </p>
+            </div>
+          )}
+          {data.revenue_consensus && (
+            <div>
+              <p className="text-[10px] text-[var(--text-muted)]">
+                Revenue Konsens
+              </p>
+              <p className="text-sm font-mono font-semibold
+                             text-[var(--text-primary)]">
+                {data.revenue_consensus >= 1e9
+                  ? `$${(data.revenue_consensus / 1e9).toFixed(1)}B` 
+                  : `$${(data.revenue_consensus / 1e6).toFixed(0)}M`}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Hauptkomponente ───────────────────────────────────────────
 export default function ResearchDashboard() {
   const { ticker } = useParams() as { ticker: string };
@@ -376,6 +1086,19 @@ export default function ResearchDashboard() {
   const [overrideTicker, setOverrideTicker] = useState("");
   const [showOverrideInput, setShowOverrideInput] = useState(false);
 
+  // Feature 1: Score Delta
+  const [scoreDelta, setScoreDelta] = useState<ScoreDeltaData | null>(null);
+
+  // Feature 2: Chart Analysis
+  const [chartAnalysis, setChartAnalysis] = useState<ChartAnalysisData | null>(null);
+  const [chartLoading, setChartLoading] = useState(false);
+  const chartLoadingRef = useRef(false);
+
+  // Feature 3: Position Sizer
+  const [accountSize, setAccountSize] = useState<number>(10000);
+  const [riskPercent, setRiskPercent] = useState<number>(1);
+  const [stopLoss, setStopLoss] = useState<number>(5);
+
   // Letzte 5 Suchen speichern
   useEffect(() => {
     if (!tickerUpper) return;
@@ -386,6 +1109,23 @@ export default function ResearchDashboard() {
       localStorage.setItem("kafin_recent_research", JSON.stringify(updated));
     } catch {}
   }, [tickerUpper]);
+
+  // Account Size aus localStorage laden
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("kafin_account_size");
+      if (saved) {
+        setAccountSize(parseFloat(saved));
+      }
+    } catch {}
+  }, []);
+
+  // Account Size speichern bei Änderung
+  useEffect(() => {
+    try {
+      localStorage.setItem("kafin_account_size", accountSize.toString());
+    } catch {}
+  }, [accountSize]);
 
   const loadData = useCallback(async (forceRefresh = false) => {
     if (forceRefresh) {
@@ -431,7 +1171,32 @@ export default function ResearchDashboard() {
     }
   }, [tickerUpper]);
 
+  const loadScoreDelta = useCallback(async () => {
+    try {
+      const delta = await api.getScoreDelta(tickerUpper);
+      setScoreDelta(delta);
+    } catch (e: any) {
+      console.warn("Score-Delta konnte nicht geladen werden:", e?.message);
+    }
+  }, [tickerUpper]);
+
+  const loadChartAnalysis = useCallback(async () => {
+    if (chartLoadingRef.current || chartLoading) return;
+    chartLoadingRef.current = true;
+    setChartLoading(true);
+    try {
+      const analysis = await api.getChartAnalysis(tickerUpper);
+      setChartAnalysis(analysis);
+    } catch (e: any) {
+      console.warn("Chart-Analyse konnte nicht geladen werden:", e?.message);
+    } finally {
+      chartLoadingRef.current = false;
+      setChartLoading(false);
+    }
+  }, [tickerUpper, chartLoading]);
+
   useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadScoreDelta(); }, [loadScoreDelta]);
 
   async function handleAuditReport() {
     setAiLoading(true);
@@ -486,25 +1251,7 @@ export default function ResearchDashboard() {
   }
 
   // ── Earnings-Banner ───────────────────────────────────────
-  const earningsBanner = data?.earnings_countdown != null && data.earnings_countdown <= 7 ? (
-    <div className={`rounded-xl px-4 py-3 flex items-center gap-3 ${
-      data.earnings_today
-        ? "bg-[var(--accent-amber)]/15 border border-[var(--accent-amber)]/40"
-        : "bg-[var(--accent-blue)]/10 border border-[var(--accent-blue)]/30"
-    }`}>
-      <Calendar size={16} className={data.earnings_today ? "text-[var(--accent-amber)]" : "text-[var(--accent-blue)]"} />
-      <span className={`text-sm font-semibold ${data.earnings_today ? "text-[var(--accent-amber)]" : "text-[var(--accent-blue)]"}`}>
-        {data.earnings_today ? "⚡ Earnings HEUTE" : `📅 Earnings in ${data.earnings_countdown} Tagen`}
-        {data.report_timing === "pre_market" ? " · Pre-Market 🌅" : data.report_timing === "after_hours" ? " · After-Hours 🌙" : ""}
-      </span>
-      {data.eps_consensus != null && (
-        <span className="ml-auto text-xs text-[var(--text-secondary)] font-mono">
-          EPS-Konsens: ${data.eps_consensus.toFixed(2)}
-          {data.revenue_consensus != null && ` · Rev: ${fmt.cap(data.revenue_consensus)}`}
-        </span>
-      )}
-    </div>
-  ) : null;
+  // (Ersetzt durch EarningsContextBanner)
 
   {/* ── Resolution-Banner ────────────────────────────────── */}
   {data?.was_resolved && data.resolution_note && (
@@ -672,10 +1419,29 @@ export default function ResearchDashboard() {
       </p>
 
       {/* Score-Block — immer zuerst sichtbar */}
-      <ScoreBlock data={data} />
+      <ScoreBlock data={data} delta={scoreDelta} />
 
-      {/* ── Earnings-Banner ───────────────────────────────── */}
-      {earningsBanner}
+      {/* Trade Setup Block */}
+      <TradeSetupBlock 
+        ticker={tickerUpper}
+        data={chartAnalysis}
+        loading={chartLoading}
+        onLoad={loadChartAnalysis}
+      />
+
+      {/* Position Sizer Block */}
+      <PositionSizerBlock
+        currentPrice={data.price || 0}
+        accountSize={accountSize}
+        riskPercent={riskPercent}
+        stopLoss={stopLoss}
+        onAccountSizeChange={setAccountSize}
+        onRiskPercentChange={setRiskPercent}
+        onStopLossChange={setStopLoss}
+      />
+
+      {/* ── Earnings-Kontext — vollständig */}
+      <EarningsContextBanner data={data} />
 
       {/* ══════════════════════════════════════════════════════
           OBERER TEIL: SOFORT-ÜBERBLICK
@@ -708,6 +1474,9 @@ export default function ResearchDashboard() {
           />
         </div>
       </div>
+
+      {/* Relative Stärke */}
+      <RelativeStrengthBlock data={data} />
 
       {/* Block 2: Bewertung */}
       <div className="card p-4">
@@ -753,59 +1522,142 @@ export default function ResearchDashboard() {
       {/* Block 3: Technisches Bild + Analyst */}
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="card p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-3">
+          <p className="text-[10px] font-semibold uppercase
+                tracking-[0.25em] text-[var(--text-muted)] mb-3">
             Technisches Bild
           </p>
-          <div className="grid grid-cols-2 gap-2">
-            <StatCell label="RSI (14)" value={
-              <span className={
-                data.rsi == null ? "text-[var(--text-muted)]" 
-                : data.rsi > 70 ? "text-[var(--accent-red)]" 
-                : data.rsi < 30 ? "text-[var(--accent-green)]" 
-                : "text-[var(--text-primary)]"
-              }>
-                {fmt.num(data.rsi)}
+
+          {/* Trend-Zusammenfassung — eine Zeile */}
+          <div className={`rounded-lg px-3 py-2 mb-3 text-sm
+                     font-medium ${
+            data.trend === "uptrend"
+              ? "bg-[var(--accent-green)]/10 text-[var(--accent-green)]"
+              : data.trend === "downtrend"
+              ? "bg-[var(--accent-red)]/10 text-[var(--accent-red)]"
+              : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
+          }`}>
+            {data.trend === "uptrend" ? "↑ Aufwärtstrend"
+             : data.trend === "downtrend" ? "↓ Abwärtstrend"
+             : "→ Seitwärts"}
+            {data.sma50_distance_pct != null && (
+              <span className="text-xs ml-2 font-normal opacity-80">
+                {data.sma50_distance_pct > 0 ? "+" : ""}
+                {data.sma50_distance_pct.toFixed(1)}% vs SMA50
+                {data.sma200_distance_pct != null && (
+                  <> · {data.sma200_distance_pct > 0 ? "+" : ""}
+                  {data.sma200_distance_pct.toFixed(1)}% vs SMA200</>
+                )}
               </span>
-            } sub={data.rsi != null ? (data.rsi > 70 ? "überkauft" : data.rsi < 30 ? "überverkauft" : "neutral") : undefined} />
-            <StatCell label="SMA 50" value={fmt.usd(data.sma_50)} sub={data.above_sma50 != null ? (data.above_sma50 ? "✓ darüber" : "✗ darunter") : undefined} />
-            <StatCell label="SMA 200" value={fmt.usd(data.sma_200)} sub={data.above_sma200 != null ? (data.above_sma200 ? "✓ darüber" : "✗ darunter") : undefined} />
-            <StatCell label="SMA 20" value={fmt.usd(data.sma_20 ?? null)}
-              sub={data.sma_20 != null && data.price != null
-                ? (data.price > data.sma_20 ? "✓ darüber" : "✗ darunter")
-                : undefined} />
-            <StatCell label="ATR (14)" value={
-              data.atr_14 != null ? `$${data.atr_14.toFixed(2)}` : "—"
-            } sub="Tagesbewegung" />
-            <StatCell label="RVOL" value={
-              <span className={
-                data.rvol == null ? "text-[var(--text-muted)]"
-                : data.rvol >= 1.5 ? "text-[var(--accent-green)]"
-                : data.rvol < 0.5 ? "text-[var(--text-muted)]"
-                : "text-[var(--text-primary)]"
-              }>
-                {data.rvol != null ? `${data.rvol.toFixed(2)}x` : "—"}
+            )}
+          </div>
+
+          {/* 2×2 Grid: die 4 wichtigsten Signale */}
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <StatCell label="RSI (14)"
+              value={
+                <span className={
+                  data.rsi == null ? "text-[var(--text-muted)]"
+                  : data.rsi > 70 ? "text-[var(--accent-red)]"
+                  : data.rsi < 30 ? "text-[var(--accent-green)]"
+                  : "text-[var(--text-primary)]"
+                }>
+                  {fmt.num(data.rsi)}
+                </span>
+              }
+              sub={
+                data.rsi != null
+                  ? data.rsi > 70 ? "überkauft"
+                  : data.rsi < 30 ? "überverkauft"
+                  : "neutral"
+                  : undefined
+              }
+            />
+            <StatCell label="MACD"
+              value={
+                <span className={
+                  data.macd_bullish == null
+                    ? "text-[var(--text-muted)]"
+                  : data.macd_bullish
+                    ? "text-[var(--accent-green)]"
+                    : "text-[var(--accent-red)]"
+                }>
+                  {data.macd_bullish == null ? "—"
+                   : data.macd_bullish
+                   ? "Bullish Cross" : "Bearish Cross"}
+                </span>
+              }
+              sub={
+                data.macd != null
+                  ? `Wert: ${data.macd.toFixed(3)}` 
+                  : undefined
+              }
+            />
+            <StatCell label="OBV Trend"
+              value={
+                <span className={
+                  data.obv_trend === "steigend"
+                    ? "text-[var(--accent-green)]"
+                  : data.obv_trend === "fallend"
+                    ? "text-[var(--accent-red)]"
+                  : "text-[var(--text-muted)]"
+                }>
+                  {data.obv_trend === "steigend" ? "↑ Käufer"
+                   : data.obv_trend === "fallend" ? "↓ Verkäufer"
+                   : "—"}
+                </span>
+              }
+              sub="5T Volumentrend"
+            />
+            <StatCell label="RVOL"
+              value={
+                <span className={
+                  data.rvol == null
+                    ? "text-[var(--text-muted)]"
+                  : data.rvol >= 1.5
+                    ? "text-[var(--accent-green)]"
+                  : data.rvol < 0.5
+                    ? "text-[var(--text-muted)]"
+                    : "text-[var(--text-primary)]"
+                }>
+                  {data.rvol != null ? `${data.rvol.toFixed(2)}×` : "—"}
+                </span>
+              }
+              sub={
+                data.rvol != null
+                  ? data.rvol >= 1.5 ? "erhöhte Aktivität"
+                  : "normales Volumen"
+                  : undefined
+              }
+            />
+          </div>
+
+          {/* ATR + Preisspanne als Kontext-Zeile */}
+          <div className="flex items-center justify-between
+                          text-xs text-[var(--text-muted)]
+                          bg-[var(--bg-tertiary)] rounded-lg px-3 py-2">
+            <span>
+              ATR (14):{" "}
+              <span className="font-mono text-[var(--text-primary)]">
+                {data.atr_14 != null
+                  ? `$${data.atr_14.toFixed(2)}` 
+                  : "—"}
               </span>
-            } sub={data.rvol != null ? (data.rvol >= 1.5 ? "erhöhte Aktivität" : "normal") : undefined} />
-            <StatCell label="MACD" value={
-              <span className={
-                data.macd_bullish == null ? "text-[var(--text-muted)]"
-                : data.macd_bullish ? "text-[var(--accent-green)]"
-                : "text-[var(--accent-red)]"
-              }>
-                {data.macd != null ? data.macd.toFixed(3) : "—"}
+              {" "}— erwartete Tagesbewegung
+            </span>
+            {data.fifty_two_week_high && data.fifty_two_week_low
+              && data.price && (
+              <span>
+                52W-Position:{" "}
+                <span className="font-mono text-[var(--text-primary)]">
+                  {(
+                    ((data.price - data.fifty_two_week_low)
+                    / (data.fifty_two_week_high - data.fifty_two_week_low))
+                    * 100
+                  ).toFixed(0)}%
+                </span>
+                {" "}der Jahresspanne
               </span>
-            } sub={data.macd_bullish != null ? (data.macd_bullish ? "bullish Cross" : "bearish Cross") : undefined} />
-            <StatCell label="OBV Trend" value={
-              <span className={
-                data.obv_trend === "steigend" ? "text-[var(--accent-green)]"
-                : data.obv_trend === "fallend" ? "text-[var(--accent-red)]"
-                : "text-[var(--text-muted)]"
-              }>
-                {data.obv_trend ? (data.obv_trend === "steigend" ? "↑ Steigend" : "↓ Fallend") : "—"}
-              </span>
-            } sub="5T Käuferdruck" />
-            <StatCell label="Support" value={fmt.usd(data.support)} />
-            <StatCell label="Resistance" value={fmt.usd(data.resistance)} />
+            )}
           </div>
         </div>
 
@@ -1013,7 +1865,7 @@ export default function ResearchDashboard() {
                   : aiReport
                   ? "border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
                   : "bg-[var(--accent-blue)] text-white hover:opacity-90"
-              }`}
+              } disabled:cursor-not-allowed`}
             >
               {aiLoading ? (
                 <>

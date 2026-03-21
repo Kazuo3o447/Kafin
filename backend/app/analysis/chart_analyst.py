@@ -17,6 +17,7 @@ import re
 
 import yfinance as yf
 
+from backend.app.cache import cache_get, cache_set
 from backend.app.logger import get_logger
 from backend.app.analysis.deepseek import call_deepseek
 
@@ -26,6 +27,11 @@ logger = get_logger(__name__)
 async def analyze_chart(ticker: str) -> Dict:
     """Erstellt eine detaillierte technische Analyse für einen Ticker."""
     try:
+        cache_key = f"chart_analysis:{ticker.upper()}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         stock = yf.Ticker(ticker)
         hist = stock.history(period="6mo")
         if hist.empty:
@@ -160,7 +166,7 @@ Alle Preise müssen realistische Werte nahe dem aktuellen Kurs sein."""
             parse_error = True
 
         if not parse_error:
-            return {
+            result = {
                 "ticker": ticker,
                 "price": round(current, 2),
                 "rsi": round(rsi, 1) if rsi is not None else None,
@@ -182,6 +188,8 @@ Alle Preise müssen realistische Werte nahe dem aktuellen Kurs sein."""
                 "analysis": ai_data.get("analysis_text", ""),
                 "error": False,
             }
+            cache_set(cache_key, result, ttl_seconds=600)
+            return result
 
         fallback_support_levels = [
             {"price": round(support_20d, 2), "strength": "moderate", "label": "20T-Tief"},

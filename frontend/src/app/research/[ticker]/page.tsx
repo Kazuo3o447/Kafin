@@ -116,6 +116,17 @@ type ResearchData = {
     source?: string;
     url?: string;
   }>;
+  finbert_sentiment?: number | null;
+  sentiment_label?: string | null;
+  sentiment_trend?: string | null;
+  sentiment_has_material?: boolean | null;
+  sentiment_count?: number | null;
+  sentiment_divergence?: boolean | null;
+  market_sentiment_avg?: number | null;
+  sentiment_vs_market?: number | null;
+  market_sentiment_detail?: Record<string,{
+    score: number; count: number; label: string
+  }> | null;
   is_watchlist: boolean;
   web_prio: number | null;
   last_audit: {
@@ -750,7 +761,182 @@ function PositionSizerBlock({
   );
 }
 
-// Relative Strength Block Component
+function SentimentBlock({ data }: { data: ResearchData }) {
+  const ticker_s = data.finbert_sentiment;
+  const market_s = data.market_sentiment_avg;
+  const vs       = data.sentiment_vs_market;
+  const count    = data.sentiment_count ?? 0;
+
+  if (ticker_s == null || count === 0) return null;
+
+  const sentColor = (v: number) =>
+    v >  0.15 ? "text-[var(--accent-green)]"
+    : v < -0.15 ? "text-[var(--accent-red)]"
+    : "text-[var(--text-muted)]";
+
+  const sentLabel = (v: number) =>
+    v >  0.3 ? "Stark bullish"
+    : v >  0.15 ? "Bullish"
+    : v < -0.3 ? "Stark bearish"
+    : v < -0.15 ? "Bearish"
+    : "Neutral";
+
+  const trendIcon =
+    data.sentiment_trend === "improving"     ? "↑" :
+    data.sentiment_trend === "deteriorating" ? "↓" : "→";
+
+  const trendColor =
+    data.sentiment_trend === "improving"     ?
+      "text-[var(--accent-green)]" :
+    data.sentiment_trend === "deteriorating" ?
+      "text-[var(--accent-red)]" :
+    "text-[var(--text-muted)]";
+
+  return (
+    <div className="card p-4">
+      <p className="text-[10px] font-semibold uppercase
+                    tracking-[0.25em] text-[var(--text-muted)] mb-3">
+        News-Sentiment ({count} Artikel)
+      </p>
+
+      <div className="grid grid-cols-3 gap-3 mb-3">
+
+        {/* Ticker Sentiment */}
+        <div className="rounded-lg bg-[var(--bg-tertiary)] p-3
+                        text-center">
+          <p className="text-[10px] text-[var(--text-muted)] mb-1">
+            {data.ticker}
+          </p>
+          <p className={`text-xl font-bold font-mono
+                         ${sentColor(ticker_s)}`}>
+            {ticker_s >= 0 ? "+" : ""}
+            {ticker_s.toFixed(2)}
+          </p>
+          <p className={`text-[10px] mt-1 ${sentColor(ticker_s)}`}>
+            {sentLabel(ticker_s)}
+          </p>
+          <p className={`text-[10px] mt-0.5 ${trendColor}`}>
+            {trendIcon} {data.sentiment_trend}
+          </p>
+        </div>
+
+        {/* S&P 500 Markt-Sentiment */}
+        {market_s != null && (
+          <div className="rounded-lg bg-[var(--bg-tertiary)] p-3
+                          text-center">
+            <p className="text-[10px] text-[var(--text-muted)] mb-1">
+              S&P 500 (Markt)
+            </p>
+            <p className={`text-xl font-bold font-mono
+                           ${sentColor(market_s)}`}>
+              {market_s >= 0 ? "+" : ""}
+              {market_s.toFixed(2)}
+            </p>
+            <p className={`text-[10px] mt-1
+                           ${sentColor(market_s)}`}>
+              {sentLabel(market_s)}
+            </p>
+          </div>
+        )}
+
+        {/* Delta: Ticker vs. Markt */}
+        {vs != null && (
+          <div className={`rounded-lg p-3 text-center ${
+            vs >  0.1
+              ? "bg-[var(--accent-green)]/10"
+            : vs < -0.1
+              ? "bg-[var(--accent-red)]/10"
+            : "bg-[var(--bg-tertiary)]"
+          }`}>
+            <p className="text-[10px] text-[var(--text-muted)] mb-1">
+              vs. Markt
+            </p>
+            <p className={`text-xl font-bold font-mono ${
+              vs >  0.1 ? "text-[var(--accent-green)]"
+            : vs < -0.1 ? "text-[var(--accent-red)]"
+            : "text-[var(--text-muted)]"
+            }`}>
+              {vs >= 0 ? "+" : ""}{vs.toFixed(2)}
+            </p>
+            <p className={`text-[10px] mt-1 ${
+              vs >  0.1 ? "text-[var(--accent-green)]"
+            : vs < -0.1 ? "text-[var(--accent-red)]"
+            : "text-[var(--text-muted)]"
+            }`}>
+              {vs >  0.1 ? "Stärker als Markt"
+             : vs < -0.1 ? "Schwächer als Markt"
+             : "Markt-neutral"}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Markt-Kontext Detail — aufklappbar */}
+      {data.market_sentiment_detail
+       && Object.keys(data.market_sentiment_detail).length > 0
+       && (
+        <div className="pt-3 border-t border-[var(--border)]">
+          <p className="text-[10px] text-[var(--text-muted)]
+                        mb-2 uppercase tracking-wider">
+            Markt-Kontext (FinBERT)
+          </p>
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+            {Object.entries(data.market_sentiment_detail)
+              .map(([cat, s]: [string, any]) => (
+              <div key={cat}
+                   className="rounded bg-[var(--bg-tertiary)]
+                              px-2 py-1.5 text-center">
+                <p className="text-[9px] text-[var(--text-muted)]
+                               capitalize mb-0.5">
+                  {cat.replace("_", " ")}
+                </p>
+                <p className={`text-xs font-mono font-semibold
+                               ${sentColor(s.score)}`}>
+                  {s.score >= 0 ? "+" : ""}
+                  {s.score.toFixed(2)}
+                </p>
+                <p className="text-[9px] text-[var(--text-muted)]">
+                  {s.count} Art.
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Warnungen */}
+      {data.sentiment_divergence && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg
+                        bg-[var(--accent-red)]/5
+                        border border-[var(--accent-red)]/20
+                        px-3 py-2">
+          <AlertTriangle size={12}
+            className="text-[var(--accent-red)] shrink-0 mt-0.5" />
+          <p className="text-xs text-[var(--accent-red)]">
+            Sentiment-Divergenz — historisch positiv,
+            aber aktueller Trend dreht bearish.
+            Mögliches Buy-the-Rumor-Muster.
+          </p>
+        </div>
+      )}
+
+      {data.sentiment_has_material && (
+        <div className="mt-2 flex items-start gap-2 rounded-lg
+                        bg-amber-500/5
+                        border border-amber-500/20
+                        px-3 py-2">
+          <AlertTriangle size={12}
+            className="text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-400">
+            Material Event in den letzten News erkannt
+            — Ad-Hoc Meldung die den Kurs bewegen kann.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RelativeStrengthBlock({ data }: { data: ResearchData }) {
   const rs = data.relative_strength;
   if (!rs) return null;
@@ -1421,6 +1607,9 @@ export default function ResearchDashboard() {
       {/* Score-Block — immer zuerst sichtbar */}
       <ScoreBlock data={data} delta={scoreDelta} />
 
+      {/* Sentiment-Block */}
+      <SentimentBlock data={data} />
+
       {/* Trade Setup Block */}
       <TradeSetupBlock 
         ticker={tickerUpper}
@@ -1811,6 +2000,28 @@ export default function ResearchDashboard() {
                 Aktuelle News
               </p>
               <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                {/* Material Events zuerst */}
+                {data.news_bullets.some(n => n.is_material) && (
+                  <div className="mb-3 rounded-lg
+                                  border border-[var(--accent-red)]/30
+                                  bg-[var(--accent-red)]/5 px-3 py-2">
+                    <p className="text-[10px] font-semibold
+                                  text-[var(--accent-red)]
+                                  uppercase tracking-wider mb-1.5">
+                      ⚡ Material Events
+                    </p>
+                    {data.news_bullets
+                      .filter(n => n.is_material)
+                      .map((n, i) => (
+                        <p key={i}
+                           className="text-xs text-[var(--accent-red)]
+                                      leading-relaxed mb-1">
+                          {n.text}
+                        </p>
+                      ))}
+                  </div>
+                )}
+
                 {data.news_bullets.slice(0, 6).map((n, i) => (
                   <div key={i} className={`rounded px-2 py-1.5 text-xs ${n.is_material ? "bg-[var(--accent-red)]/10 border-l-2 border-[var(--accent-red)]" : "bg-[var(--bg-tertiary)]"}`}>
                     <span className={`mr-1 font-semibold ${n.sentiment > 0.3 ? "text-[var(--accent-green)]" : n.sentiment < -0.3 ? "text-[var(--accent-red)]" : "text-[var(--text-muted)]"}`}>

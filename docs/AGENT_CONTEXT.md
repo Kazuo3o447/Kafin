@@ -5,7 +5,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 5.9.1 (P1b Enhanced mit Robustness)
+**Version**: 5.10.0 (Plattformweite Sentiment-Integration)
 **Stand**: 2026-03-21
 
 ---
@@ -19,6 +19,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
   - `backend/app/data/market_overview.py` - Marktübersicht + Sektoren
   - `backend/app/data/finnhub.py` - News-Daten
   - `backend/app/analysis/finbert.py` - Sentiment-Analyse
+  - `backend/app/memory/short_term.py` - News-Sentiment Storage + Batch-Funktionen
 
 ### Frontend (Next.js/React)
 - **Docker Container**: `kafin-frontend` auf Port 3000
@@ -29,6 +30,28 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 - **Marktdaten**: Yahoo Finance (yfinance)
 - **News**: Finnhub (Free Tier: 60 Calls/Min)
 - **Sentiment**: FinBERT (lokal, transformers)
+
+---
+
+## Sentiment-Integration (neu in v5.10.0)
+
+### Architektur
+- **Storage**: Supabase `short_term_memory` Tabelle mit FinBERT-Analysen
+- **Batch-Processing**: `get_bullet_points_batch()` für effiziente Queries
+- **Aggregation**: `_calc_sentiment_from_bullets()` mit avg, trend, label, count, has_material
+- **Market Context**: S&P-500 Sentiment via `get_market_news_for_sentiment()`
+
+### Frontend-Komponenten
+- **SentimentBlock**: Research Dashboard mit Ticker/Markt/Vergleich
+- **Watchlist**: Sentiment-Spalte mit Trend-Icon und Material-Event-Indicator
+- **Earnings Radar**: Pre-Earnings Sentiment für Earnings-Vorbereitung
+- **Alerts**: Material News und Sentiment Drop Benachrichtigungen
+
+### API-Integration
+- **Research**: `/api/data/research/{ticker}` - Sentiment-Felder erweitert
+- **Watchlist**: `/api/watchlist/enriched` - Batch-Sentiment-Enrichment
+- **Earnings**: `/api/data/earnings-radar` - Pre-Earnings Sentiment
+- **Background Tasks**: Sofortiger News-Scan bei neuen Ticker-Additions
 
 ---
 

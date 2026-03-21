@@ -97,6 +97,141 @@ async def get_bullet_points(ticker: str, quarter: Optional[str] = None) -> list[
         return []
 
 
+async def get_bullet_points_batch(
+    tickers: list[str],
+    limit_per_ticker: int = 10,
+) -> dict[str, list[dict]]:
+    """
+    Lädt News-Bullets für MEHRERE Ticker in EINER DB-Query.
+    Analog zu _fetch_all_scores_sync für score_history.
+
+    Returns: {ticker_upper: [row, row, ...]} sortiert nach
+    date desc, max limit_per_ticker Rows pro Ticker.
+    """
+    if not tickers:
+        return {}
+
+    if settings.use_mock_data:
+        result = {}
+        for t in tickers:
+            t_up = t.upper()
+            rows = [m for m in _mock_memory
+                    if m["ticker"] == t_up]
+            rows.sort(
+                key=lambda x: x.get("date", ""),
+                reverse=True
+            )
+            result[t_up] = rows[:limit_per_ticker]
+        return result
+
+    try:
+        db = get_supabase_client()
+        if db is None:
+            return {}
+
+        tickers_upper = [t.upper() for t in tickers]
+        # Eine Query für alle Ticker
+        res = (
+            db.table("short_term_memory")
+            .select(
+                "ticker,date,sentiment_score,"
+                "is_material,shift_type,bullet_points"
+            )
+            .in_("ticker", tickers_upper)
+            .order("date", desc=True)
+            .limit(limit_per_ticker * len(tickers_upper))
+            .execute()
+        )
+        rows = res.data if res and res.data else []
+
+        by_ticker: dict[str, list[dict]] = {}
+        for row in rows:
+            t = row.get("ticker", "").upper()
+            if t not in by_ticker:
+                by_ticker[t] = []
+            if len(by_ticker[t]) < limit_per_ticker:
+                by_ticker[t].append(row)
+
+        return by_ticker
+
+    except Exception as e:
+        logger.error(
+            f"get_bullet_points_batch error: {e}"
+        )
+        return {}
+
+
+def _calc_sentiment_from_bullets(
+    bullets: list[dict],
+) -> dict:
+    """
+    Berechnet aggregierte Sentiment-Metriken aus Bullet-Liste.
+    Wiederverwendbar überall wo Sentiment berechnet wird.
+
+    Returns dict mit:
+      avg: float — Durchschnitt aller Scores
+      trend: "improving"|"deteriorating"|"stable"
+      has_material: bool — is_material Event vorhanden
+      count: int — Anzahl analysierter Artikel
+      label: "bullish"|"bearish"|"neutral"
+    """
+    if not bullets:
+        return {
+            "avg": 0.0, "trend": "stable",
+            "has_material": False, "count": 0,
+            "label": "neutral",
+        }
+
+    scores = []
+    for b in bullets:
+        raw = b.get("sentiment_score")
+        if raw is not None:
+            try:
+                scores.append(float(raw))
+            except (ValueError, TypeError):
+                pass
+
+    if not scores:
+        return {
+            "avg": 0.0, "trend": "stable",
+            "has_material": any(
+                b.get("is_material") for b in bullets
+            ),
+            "count": 0, "label": "neutral",
+        }
+
+    avg = round(sum(scores) / len(scores), 3)
+
+    # Trend: Vergleich der letzten 3 vs älteren
+    if len(scores) >= 4:
+        recent = sum(scores[:3]) / 3
+        older  = sum(scores[3:]) / len(scores[3:])
+        if recent < older - 0.15:
+            trend = "deteriorating"
+        elif recent > older + 0.15:
+            trend = "improving"
+        else:
+            trend = "stable"
+    else:
+        trend = "stable"
+
+    label = (
+        "bullish"  if avg >  0.15 else
+        "bearish"  if avg < -0.15 else
+        "neutral"
+    )
+
+    return {
+        "avg":          avg,
+        "trend":        trend,
+        "has_material": any(
+            b.get("is_material") for b in bullets
+        ),
+        "count":        len(scores),
+        "label":        label,
+    }
+
+
 async def get_existing_urls(ticker: str) -> set[str]:
     """Gibt alle bereits gespeicherten URLs zurück (für Duplikat-Erkennung)."""
     if settings.use_mock_data:

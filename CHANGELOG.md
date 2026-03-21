@@ -2,6 +2,33 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.10.0] - 2026-03-21 - Plattformweite Sentiment-Integration
+
+### 🧠 Sentiment-Features
+- **Batch-Sentiment**: `get_bullet_points_batch()` für effizienten Abruf aller Watchlist-Ticker
+- **Sentiment-Aggregation**: `_calc_sentiment_from_bullets()` mit avg, trend, label, count, has_material
+- **Research Dashboard**: Echtzeit-Sentiment mit S&P-500 Vergleich und Divergenz-Erkennung
+- **Watchlist Enrichment**: Sentiment-Spalte mit Trend-Icon und Material-Event-Indicator
+- **Earnings Radar**: Pre-Earnings Sentiment zur besseren Earnings-Vorbereitung
+- **Background Scan**: Sofortiger News-Scan bei neuen Watchlist-Items via FastAPI BackgroundTasks
+
+### 🎨 Frontend-Updates
+- **SentimentBlock**: Neue Komponente mit Ticker/Markt/Vergleich und Warnungen
+- **Material Events**: Hervorgehobene News-Banner für kursrelevante Meldungen
+- **Alerts**: Material News und Sentiment Drop Alerts in Watchlist
+- **UI-Integration**: Sentiment-Daten in Research, Watchlist und Earnings Radar
+
+### 📊 API-Endpunkte
+- **Research**: `/api/data/research/{ticker}` - Sentiment-Felder erweitert
+- **Watchlist**: `/api/watchlist/enriched` - Batch-Sentiment-Enrichment
+- **Earnings**: `/api/data/earnings-radar` - Pre-Earnings Sentiment
+- **Add Ticker**: `/api/watchlist/` - BackgroundTasks für sofortigen Scan
+
+### ⚡ Performance
+- **Batch-Queries**: Sentiment-Daten für alle Ticker in einem Request
+- **Cache-Strategie**: Optimiertes Caching für Sentiment-Batches
+- **Async Processing**: BackgroundTasks für non-blocking News-Scans
+
 ## [5.9.1] - 2026-03-21 - P1b Enhanced mit Robustness
 
 ### 🔧 Robustness-Verbesserungen

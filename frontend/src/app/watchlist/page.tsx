@@ -33,6 +33,11 @@ type WatchlistItem = {
   rvol?: number | null;            // NEU
   iv_atm?: number | null;          // NEU
   web_prio?: number | null;
+  finbert_sentiment?: number | null;
+  sentiment_label?: string | null;
+  sentiment_trend?: string | null;
+  has_material_news?: boolean | null;
+  sentiment_count?: number | null;
 }
 
 // Sorting and filtering types
@@ -43,7 +48,8 @@ type ActiveFilter = null | "earnings_7d" | "torpedo_high" | "rvol_spike" | "sma_
 function buildAlerts(watchlist: WatchlistItem[]): {
   ticker: string;
   type: "earnings_urgent"|"earnings_soon"|"torpedo_rising"|
-        "sma_break"|"rvol_spike"|"setup_improving";
+        "sma_break"|"rvol_spike"|"setup_improving"
+      |"material_news"|"sentiment_drop";
   message: string;
   color: "red"|"amber"|"green";
 }[] {
@@ -132,6 +138,28 @@ function buildAlerts(watchlist: WatchlistItem[]): {
         message: `Opp-Score +${item.week_opp_delta.toFixed(1)}` 
           + " diese Woche — Setup verbessert",
         color: "green",
+      });
+    }
+
+    // 7. Material News erkannt
+    if (item.has_material_news === true) {
+      alerts.push({
+        ticker: t,
+        type: "material_news",
+        message: "⚡ Material Event — kursrelevant",
+        color: "red",
+      });
+    }
+
+    // 8. Sentiment-Bruch
+    if (item.sentiment_trend === "deteriorating"
+        && item.finbert_sentiment != null
+        && item.finbert_sentiment > 0.1) {
+      alerts.push({
+        ticker: t,
+        type: "sentiment_drop",
+        message: "Sentiment dreht bearish bei positivem Niveau",
+        color: "amber",
       });
     }
   }
@@ -841,6 +869,10 @@ export default function WatchlistPage() {
                 Signal
               </th>
               <th className="px-3 py-3 text-center font-semibold
+                             text-[var(--text-secondary)] w-20">
+                Sentiment
+              </th>
+              <th className="px-3 py-3 text-center font-semibold
                              text-[var(--text-secondary)] w-24">
                 Web-Prio
               </th>
@@ -1087,6 +1119,40 @@ export default function WatchlistPage() {
                     ) : (
                       <span className="text-[10px]
                                         text-[var(--text-muted)]">—</span>
+                    )}
+                  </td>
+
+                  {/* Sentiment */}
+                  <td className="px-3 py-3 text-center">
+                    {item.finbert_sentiment != null && item.sentiment_count != null && item.sentiment_count > 0 ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <div className={`text-xs font-mono font-semibold ${
+                          item.finbert_sentiment > 0.15 ? "text-[var(--accent-green)]"
+                          : item.finbert_sentiment < -0.15 ? "text-[var(--accent-red)]"
+                          : "text-[var(--text-muted)]"
+                        }`}>
+                          {item.finbert_sentiment >= 0 ? "+" : ""}{item.finbert_sentiment.toFixed(2)}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {item.has_material_news && (
+                            <AlertTriangle size={10} className="text-[var(--accent-red)]" />
+                          )}
+                          <span className={`text-[9px] ${
+                            item.sentiment_trend === "improving" ? "text-[var(--accent-green)]"
+                            : item.sentiment_trend === "deteriorating" ? "text-[var(--accent-red)]"
+                            : "text-[var(--text-muted)]"
+                          }`}>
+                            {item.sentiment_trend === "improving" ? "↑"
+                             : item.sentiment_trend === "deteriorating" ? "↓"
+                             : "→"}
+                          </span>
+                          <span className="text-[9px] text-[var(--text-muted)]">
+                            {item.sentiment_count}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-[var(--text-muted)]">—</span>
                     )}
                   </td>
 

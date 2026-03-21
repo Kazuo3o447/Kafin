@@ -13,7 +13,7 @@ import yfinance as yf
 import pandas as pd
 import asyncio
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -905,6 +905,7 @@ async def api_research_dashboard(
         get_short_interest, get_insider_transactions, get_company_news,
     )
     from backend.app.data.market_overview import get_market_overview
+    from backend.app.data.market_overview import get_market_news_for_sentiment
     from backend.app.memory.short_term import get_bullet_points
     from backend.app.memory.watchlist import get_watchlist
     from datetime import datetime, timedelta
@@ -930,6 +931,7 @@ async def api_research_dashboard(
         get_company_news(effective_ticker, month_ago, today_str),  # 12
         get_market_overview(),                           # 13 - NEW for relative strength
         get_analyst_grades(effective_ticker),           # 14 - NEW for guidance_trend
+        get_market_news_for_sentiment(),                 # 15 - NEW for market sentiment context
         return_exceptions=True,
     )
 
@@ -952,6 +954,7 @@ async def api_research_dashboard(
     news_items = safe(12) or []
     market_ov  = safe(13)
     analyst_grades = safe(14) or []
+    market_sent_data = safe(15) or {}
 
     # ── Watchlist-Status ───────────────────────────────────────
     is_watchlist = any(
@@ -1399,7 +1402,31 @@ async def api_research_dashboard(
     except Exception as e:
         logger.debug(f"Research: last audit {ticker}: {e}")
 
-    # ── Scoring ────────────────────────────────────────────────
+    # ── Sentiment-Berechnung ───────────────────────────────────────
+    from backend.app.memory.short_term import _calc_sentiment_from_bullets
+    
+    ticker_sent = _calc_sentiment_from_bullets(news_mem or [])
+    
+    # Markt-Sentiment aus category_sentiment
+    # (Ø aller Kategorien = Gesamt-Marktlage)
+    mkt_cat = market_sent_data.get("category_sentiment", {})
+    mkt_scores = [
+        v.get("score", 0.0)
+        for v in mkt_cat.values()
+        if v.get("score") is not None
+    ]
+    market_avg_sentiment = round(
+        sum(mkt_scores) / len(mkt_scores), 3
+    ) if mkt_scores else 0.0
+    
+    # Sentiment-Divergenz:
+    # Ticker historisch positiv aber aktuelle Trend neg
+    sentiment_divergence_calc = (
+        ticker_sent["avg"] > 0.1
+        and ticker_sent["trend"] == "deteriorating"
+    )
+
+    # ── Data Context für Scoring ────────────────────────────────────────────────
     from backend.app.analysis.scoring import (
         calculate_opportunity_score,
         calculate_torpedo_score,
@@ -1472,8 +1499,8 @@ async def api_research_dashboard(
             "news_memory": news_ctx,
             "options": opt_ctx,
             "web_sentiment_score": 0.0,   # Tavily nicht im Research-Endpoint
-            "finbert_sentiment": 0.0,
-            "sentiment_divergence": False,
+            "finbert_sentiment": ticker_sent["avg"],
+            "sentiment_divergence": sentiment_divergence_calc,
             # NEU: für guidance_trend + deceleration
             "analyst_grades": analyst_grades or [],
             # NEU: für sector_regime
@@ -1641,6 +1668,20 @@ async def api_research_dashboard(
                 "macro_headwind": round(torp_score_obj.macro_headwind, 1),
             } if torp_score_obj else {},
         } if opp_score_obj and torp_score_obj else None,
+        
+        # Sentiment-Felder
+        "finbert_sentiment": ticker_sent["avg"],
+        "sentiment_label": ticker_sent["label"],
+        "sentiment_trend": ticker_sent["trend"],
+        "sentiment_has_material": ticker_sent["has_material"],
+        "sentiment_count": ticker_sent["count"],
+        "sentiment_divergence": sentiment_divergence_calc,
+        # S&P-500 Vergleich
+        "market_sentiment_avg": market_avg_sentiment,
+        "market_sentiment_detail": mkt_cat,
+        "sentiment_vs_market": round(
+            ticker_sent["avg"] - market_avg_sentiment, 3
+        ) if mkt_scores else None,
     }
 
     # ── Datenvollständigkeit prüfen ────────────────────────────
@@ -1699,6 +1740,19 @@ async def api_earnings_radar(days: int = 14):
                 cross_signal_map[cs_upper] = []
             cross_signal_map[cs_upper].append(w.get("ticker", "").upper())
 
+    # Batch-Sentiment für alle Watchlist-Ticker laden
+    from backend.app.memory.short_term import (
+        get_bullet_points_batch,
+        _calc_sentiment_from_bullets,
+    )
+    all_tickers = list(wl_tickers) + [
+        cs for cs_list in cross_signal_map.values()
+        for cs in cs_list
+    ]
+    bullets_by_ticker = await get_bullet_points_batch(
+        all_tickers, limit_per_ticker=10
+    )
+
     entries = []
     today_str = now.strftime("%Y-%m-%d")
 
@@ -1720,6 +1774,19 @@ async def api_earnings_radar(days: int = 14):
         except Exception:
             days_until = None
 
+        # Pre-Earnings Sentiment berechnen
+        pre_earnings_sentiment = None
+        ticker_bullets = bullets_by_ticker.get(ticker, [])
+        if ticker_bullets:
+            sent = _calc_sentiment_from_bullets(ticker_bullets)
+            pre_earnings_sentiment = {
+                "avg": sent["avg"],
+                "label": sent["label"],
+                "trend": sent["trend"],
+                "has_material": sent["has_material"],
+                "count": sent["count"],
+            }
+
         entry = {
             "ticker": ticker,
             "report_date": date_str,
@@ -1730,6 +1797,7 @@ async def api_earnings_radar(days: int = 14):
             "cross_signal_for": cross_signal_map.get(ticker, []),
             "is_today": date_str == today_str,
             "days_until": days_until,
+            "pre_earnings_sentiment": pre_earnings_sentiment,
         }
         entries.append(entry)
 
@@ -2512,7 +2580,11 @@ def _fetch_all_scores_sync(tickers: list, db) -> dict:
         return {}
 
 
-async def _enrich_single(item: dict, scores_by_ticker: dict) -> dict:
+async def _enrich_single(
+    item: dict,
+    scores_by_ticker: dict,
+    bullets_by_ticker: dict = {},   # NEU
+) -> dict:
     """
     Enriched einen einzelnen Watchlist-Ticker mit Kursdaten + Scores.
     Wird parallel via asyncio.gather aufgerufen.
@@ -2567,6 +2639,23 @@ async def _enrich_single(item: dict, scores_by_ticker: dict) -> dict:
     except Exception as exc:
         logger.debug(f"Enrich scores {ticker}: {exc}")
 
+    # Sentiment aus vorgeladenem Batch
+    try:
+        ticker_bullets = bullets_by_ticker.get(
+            ticker.upper(), []
+        )
+        if ticker_bullets:
+            sent = _calc_sentiment_from_bullets(
+                ticker_bullets
+            )
+            entry["finbert_sentiment"]     = sent["avg"]
+            entry["sentiment_label"]       = sent["label"]
+            entry["sentiment_trend"]       = sent["trend"]
+            entry["has_material_news"]     = sent["has_material"]
+            entry["sentiment_count"]       = sent["count"]
+    except Exception as exc:
+        logger.debug(f"Sentiment enrich {ticker}: {exc}")
+
     return entry
 
 
@@ -2590,9 +2679,18 @@ async def api_watchlist_enriched():
     tickers = [item.get("ticker", "") for item in watchlist if item.get("ticker")]
     scores_by_ticker = await asyncio.to_thread(_fetch_all_scores_sync, tickers, db)
 
+    # Batch-Query für Sentiment-Bullets
+    from backend.app.memory.short_term import (
+        get_bullet_points_batch,
+        _calc_sentiment_from_bullets,
+    )
+    bullets_by_ticker = await get_bullet_points_batch(
+        tickers, limit_per_ticker=10
+    )
+
     # ALLE Ticker parallel enrichen mit vorgeladenen Scores
     results = await asyncio.gather(
-        *[_enrich_single(item, scores_by_ticker) for item in watchlist],
+        *[_enrich_single(item, scores_by_ticker, bullets_by_ticker) for item in watchlist],
         return_exceptions=True,
     )
 
@@ -2630,7 +2728,10 @@ async def api_watchlist_enriched():
     return result
 
 @watchlist_router.post("")
-async def api_add_watchlist_item(item: WatchlistItemCreate):
+async def api_add_watchlist_item(
+    item: WatchlistItemCreate,
+    background_tasks: BackgroundTasks,
+):
     logger.info(f"API Call: add-watchlist-item {item.ticker}")
     # Wenn kein Firmenname: Ticker als Name verwenden
     company_name = item.company_name or item.ticker.upper()
@@ -2639,6 +2740,10 @@ async def api_add_watchlist_item(item: WatchlistItemCreate):
     # Cache invalidieren
     from backend.app.cache import cache_invalidate
     cache_invalidate("watchlist:enriched:v2")
+    
+    # Hintergrund-Task für sofortigen News-Scan
+    from backend.app.data.news_processor import process_news_for_ticker
+    background_tasks.add_task(process_news_for_ticker, item.ticker.upper())
     
     return await add_ticker(
         item.ticker, company_name, sector,

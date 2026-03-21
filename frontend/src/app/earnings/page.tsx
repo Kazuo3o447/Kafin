@@ -15,6 +15,13 @@ type EarningsEntry = {
   cross_signal_for: string[];
   is_today: boolean;
   days_until: number | null;
+  pre_earnings_sentiment?: {
+    avg: number;
+    label: string;
+    trend: string;
+    has_material: boolean;
+    count: number;
+  } | null;
 };
 
 type RadarData = {
@@ -232,6 +239,31 @@ export default function EarningsRadarPage() {
                           }`}>
                             {entry.ticker}
                           </div>
+                          
+                          {/* Pre-Earnings Sentiment */}
+                          {entry.pre_earnings_sentiment && (
+                            <div className="flex items-center gap-1 px-2 py-1 rounded bg-[var(--bg-tertiary)]">
+                              <div className={`text-xs font-mono font-semibold ${
+                                entry.pre_earnings_sentiment.avg > 0.15 ? "text-[var(--accent-green)]"
+                                : entry.pre_earnings_sentiment.avg < -0.15 ? "text-[var(--accent-red)]"
+                                : "text-[var(--text-muted)]"
+                              }`}>
+                                {entry.pre_earnings_sentiment.avg >= 0 ? "+" : ""}{entry.pre_earnings_sentiment.avg.toFixed(2)}
+                              </div>
+                              <div className={`text-[9px] ${
+                                entry.pre_earnings_sentiment.trend === "improving" ? "text-[var(--accent-green)]"
+                                : entry.pre_earnings_sentiment.trend === "deteriorating" ? "text-[var(--accent-red)]"
+                                : "text-[var(--text-muted)]"
+                              }`}>
+                                {entry.pre_earnings_sentiment.trend === "improving" ? "↑"
+                                 : entry.pre_earnings_sentiment.trend === "deteriorating" ? "↓"
+                                 : "→"}
+                              </div>
+                              {entry.pre_earnings_sentiment.has_material && (
+                                <div className="w-2 h-2 rounded-full bg-[var(--accent-red)]" title="Material Event erkannt" />
+                              )}
+                            </div>
+                          )}
                           
                           <div className="flex items-center gap-1 text-[var(--text-muted)] tooltip-trigger" title={entry.report_timing === "pre_market" ? "Vor Börseneröffnung" : entry.report_timing === "after_hours" ? "Nach Börsenschluss" : "Unbekannt"}>
                              {renderTimingIcon(entry.report_timing)}

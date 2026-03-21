@@ -842,6 +842,27 @@ async def api_research_dashboard(
     ticker = ticker.upper().strip()
     cache_key = f"research_dashboard_{ticker}"
 
+    # Sektor-to-ETF Mapping für Relative Strength
+    SECTOR_TO_ETF = {
+        "Technology": "XLK",
+        "Financial Services": "XLF",
+        "Financials": "XLF",
+        "Energy": "XLE",
+        "Healthcare": "XLV",
+        "Health Care": "XLV",
+        "Utilities": "XLU",
+        "Industrials": "XLI",
+        "Communication Services": "XLC",
+        "Communication": "XLC",
+        "Consumer Cyclical": "XLY",
+        "Consumer Discretionary": "XLY",
+        "Consumer Defensive": "XLP",
+        "Consumer Staples": "XLP",
+        "Basic Materials": "XLB",
+        "Materials": "XLB",
+        "Real Estate": "XLRE",
+    }
+
     # ── Ticker Resolver ────────────────────────────────────────
     from backend.app.data.ticker_resolver import resolve_ticker
 
@@ -881,6 +902,7 @@ async def api_research_dashboard(
     from backend.app.data.finnhub import (
         get_short_interest, get_insider_transactions, get_company_news,
     )
+    from backend.app.data.market_overview import get_market_overview
     from backend.app.memory.short_term import get_bullet_points
     from backend.app.memory.watchlist import get_watchlist
     from datetime import datetime, timedelta
@@ -904,6 +926,7 @@ async def api_research_dashboard(
         get_watchlist(),                       # 10
         get_options_metrics(effective_ticker),           # 11
         get_company_news(effective_ticker, month_ago, today_str),  # 12
+        get_market_overview(),                           # 13 - NEW for relative strength
         return_exceptions=True,
     )
 
@@ -924,6 +947,7 @@ async def api_research_dashboard(
     watchlist  = safe(10) or []
     options    = safe(11)
     news_items = safe(12) or []
+    market_ov  = safe(13)
 
     # ── Watchlist-Status ───────────────────────────────────────
     is_watchlist = any(
@@ -1122,6 +1146,97 @@ async def api_research_dashboard(
         price_change_30d = await asyncio.to_thread(_fetch_30d)
     except Exception:
         pass
+
+    # ── Relative Stärke berechnen ───────────────────────────────
+    market_ov = market_ov or {}
+    indices_data = market_ov.get("indices", {})
+    sector_ranking = {
+        s["symbol"]: s
+        for s in market_ov.get("sector_ranking_5d", [])
+    }
+
+    spy_data = indices_data.get("SPY", {})
+
+    # Sektor-ETF für diesen Ticker
+    sector_etf_symbol = SECTOR_TO_ETF.get(sector or "", None)
+    sector_etf_data = (
+        sector_ranking.get(sector_etf_symbol, {})
+        if sector_etf_symbol else {}
+    )
+    # sector_ranking_5d hat nur perf_5d — für 1d und 1m
+    # nutze indices_data falls ETF dort vorhanden
+    sector_etf_full = indices_data.get(sector_etf_symbol, {})
+
+    def relative_strength(ticker_pct, bench_pct):
+        if ticker_pct is None or bench_pct is None:
+            return None
+        return round(ticker_pct - bench_pct, 2)
+
+    # 5-Tage Performance für den Ticker (falls vorhanden)
+    price_change_5d = None
+    try:
+        def _fetch_5d():
+            import yfinance as yf
+            hist = yf.Ticker(effective_ticker).history(period="7d")
+            if hist.empty or len(hist) < 2:
+                return None
+            p0 = float(hist["Close"].iloc[0])
+            p1 = float(hist["Close"].iloc[-1])
+            return round(((p1 - p0) / p0) * 100, 1) if p0 > 0 else None
+        price_change_5d = await asyncio.to_thread(_fetch_5d)
+    except Exception:
+        pass
+
+    rel_strength = {
+        "vs_spy_1d": relative_strength(
+            change_pct, spy_data.get("change_1d_pct")
+        ),
+        "vs_spy_5d": relative_strength(
+            price_change_5d, spy_data.get("change_5d_pct")
+        ),
+        "vs_spy_1m": relative_strength(
+            price_change_30d, spy_data.get("change_1m_pct")
+        ),
+        "vs_sector_1d": relative_strength(
+            change_pct, sector_etf_full.get("change_1d_pct")
+        ),
+        "vs_sector_5d": relative_strength(
+            price_change_5d,
+            sector_etf_full.get("change_5d_pct")
+            or sector_etf_data.get("perf_5d")
+        ),
+        "vs_sector_1m": relative_strength(
+            price_change_30d, sector_etf_full.get("change_1m_pct")
+        ),
+        "spy_1d": spy_data.get("change_1d_pct"),
+        "spy_5d": spy_data.get("change_5d_pct"),
+        "spy_1m": spy_data.get("change_1m_pct"),
+        "sector_etf": sector_etf_symbol,
+        "sector_1d": sector_etf_full.get("change_1d_pct"),
+        "sector_5d": sector_etf_full.get("change_5d_pct")
+                     or sector_etf_data.get("perf_5d"),
+        "sector_1m": sector_etf_full.get("change_1m_pct"),
+    }
+
+    # Einordnung
+    outperf_count = sum(1 for v in [
+        rel_strength["vs_spy_1d"],
+        rel_strength["vs_spy_5d"],
+        rel_strength["vs_sector_5d"],
+    ] if v is not None and v > 0)
+
+    if outperf_count >= 3:
+        rel_strength["label"] = "Stark outperformend"
+        rel_strength["signal"] = "bullish"
+    elif outperf_count >= 2:
+        rel_strength["label"] = "Leicht outperformend"
+        rel_strength["signal"] = "neutral"
+    elif outperf_count == 1:
+        rel_strength["label"] = "Leicht underperformend"
+        rel_strength["signal"] = "neutral"
+    else:
+        rel_strength["label"] = "Underperformend"
+        rel_strength["signal"] = "bearish"
 
     # ── Short Interest & Insider ───────────────────────────────
     short_interest_pct = None
@@ -1387,8 +1502,12 @@ async def api_research_dashboard(
         "price": price,
         "change_pct": change_pct,
         "price_change_30d": price_change_30d,
+        "price_change_5d": price_change_5d,
         "fifty_two_week_high": fifty_two_week_high,
         "fifty_two_week_low": fifty_two_week_low,
+
+        # Relative Stärke
+        "relative_strength": rel_strength,
 
         # Bewertung
         "pe_ratio": pe_ratio,
@@ -2228,9 +2347,102 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
     except Exception:
         pass
 
-    # Cache für 5 Minuten speichern
+    # --- 5T-Performance ---
+    try:
+        hist5 = stock.history(period="6d")
+        if len(hist5) >= 5:
+            c_now = float(hist5["Close"].iloc[-1])
+            c_5d  = float(hist5["Close"].iloc[-5])
+            if c_5d:
+                result["change_5d_pct"] = round(
+                    ((c_now - c_5d) / c_5d) * 100, 2
+                )
+    except Exception:
+        pass
+
+    # --- ATR(14) + RVOL ---
+    try:
+        hist20 = stock.history(period="25d")
+        if len(hist20) >= 14:
+            hi = hist20["High"]
+            lo = hist20["Low"]
+            cl = hist20["Close"]
+            tr = [
+                max(
+                    hi.iloc[i] - lo.iloc[i],
+                    abs(hi.iloc[i] - cl.iloc[i-1]),
+                    abs(lo.iloc[i] - cl.iloc[i-1]),
+                )
+                for i in range(1, len(hist20))
+            ]
+            result["atr_14"] = round(
+                sum(tr[-14:]) / 14, 2
+            ) if len(tr) >= 14 else None
+
+        if len(hist20) >= 20:
+            vol_today = float(hist20["Volume"].iloc[-1])
+            vol_avg20 = float(hist20["Volume"].tail(20).mean())
+            result["rvol"] = round(
+                vol_today / vol_avg20, 2
+            ) if vol_avg20 else None
+    except Exception:
+        pass
+
+    # --- above_sma50 ---
+    try:
+        hist60 = stock.history(period="60d")
+        if len(hist60) >= 50:
+            sma50 = float(hist60["Close"].tail(50).mean())
+            cur   = float(hist60["Close"].iloc[-1])
+            result["above_sma50"] = cur > sma50
+    except Exception:
+        pass
+
+    # --- IV ATM (implied volatility) ---
+    try:
+        opts = stock.options
+        if opts:
+            nearest_exp = opts[0]
+            chain = stock.option_chain(nearest_exp)
+            atm_calls = chain.calls
+            if not atm_calls.empty and result.get("price"):
+                idx = (
+                    (atm_calls["strike"] - result["price"])
+                    .abs()
+                    .idxmin()
+                )
+                iv = atm_calls.loc[idx, "impliedVolatility"]
+                if iv and float(iv) > 0:
+                    result["iv_atm"] = round(float(iv) * 100, 1)
+    except Exception:
+        pass
+
+    # --- report_timing (pre/after market) ---
+    try:
+        calendar = getattr(stock, "calendar", None)
+        if calendar is not None:
+            cal_data = calendar
+            if hasattr(calendar, "to_dict"):
+                cal_data = {
+                    k: (v.tolist() if hasattr(v, "tolist") else v)
+                    for k, v in calendar.to_dict().items()
+                }
+            if isinstance(cal_data, dict):
+                timing_raw = cal_data.get(
+                    "Earnings Call Time", ""
+                )
+                if timing_raw:
+                    t = str(timing_raw).lower()
+                    if "before" in t or "pre" in t:
+                        result["report_timing"] = "pre_market"
+                    elif "after" in t or "post" in t:
+                        result["report_timing"] = "after_market"
+    except Exception:
+        pass
+
+    # Cache für 2 Minuten speichern (RVOL soll frischer sein)
     if result:
-        cache_set(cache_key, result, ttl_seconds=300)
+        cache_set(cache_key, result, ttl_seconds=120)
 
     entry.update(result)
     return entry
@@ -2260,13 +2472,13 @@ def _fetch_all_scores_sync(tickers: list, db) -> dict:
                 by_ticker[t] = []
             by_ticker[t].append(row)
 
-        # Pro Ticker: nach Datum sortieren, nur 2 neueste behalten
+        # Pro Ticker: nach Datum sortieren, nur 7 neueste behalten (für Wochendelta)
         for t in by_ticker:
             by_ticker[t].sort(
                 key=lambda r: r.get("date") or "",
                 reverse=True
             )
-            by_ticker[t] = by_ticker[t][:2]
+            by_ticker[t] = by_ticker[t][:7]
 
         return by_ticker
     except Exception as e:
@@ -2313,6 +2525,18 @@ async def _enrich_single(item: dict, scores_by_ticker: dict) -> dict:
                 entry["torp_delta"] = round(
                     (latest.get("torpedo_score") or 0)
                     - (prev.get("torpedo_score") or 0), 1
+                )
+
+            # Wochendelta: ältester der verfügbaren Rows
+            if len(rows) >= 5:
+                week_row = rows[min(4, len(rows)-1)]
+                entry["week_opp_delta"] = round(
+                    (latest.get("opportunity_score") or 0)
+                    - (week_row.get("opportunity_score") or 0), 1
+                )
+                entry["week_torp_delta"] = round(
+                    (latest.get("torpedo_score") or 0)
+                    - (week_row.get("torpedo_score") or 0), 1
                 )
     except Exception as exc:
         logger.debug(f"Enrich scores {ticker}: {exc}")

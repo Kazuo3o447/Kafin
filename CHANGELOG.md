@@ -2,6 +2,23 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.8.0] - 2026-03-21 - Watchlist: Trading-Werkzeug
+
+### 🚀 Trading-Mehrwert
+- **Alert-Streifen**: automatisch aus Watchlist-Daten — Earnings ≤5T, Torpedo-Delta >+1.5, SMA50-Bruch, RVOL Spike, Setup verbessert. Kein Setup nötig.
+- **Überblick-Kacheln**: Earnings diese Woche, Ø Opp, Torpedo-Warnung, Ticker-Count
+- **Sortierbare Tabelle**: Opp, Torp, 1T%, 5T%, Earnings, RVOL — nach Klick auf Header
+- **Filter-Leiste**: Earnings ≤7T, Torpedo ≥6, RVOL >1.5×, SMA-Bruch, Setup verbessert
+- **Neue Spalten**: 5T%, RVOL, ATR — für Positionsgrösse
+- **Score-Wochendelta**: Opp/Torp Veränderung diese Woche — Torpedo-Delta INVERTIERT (↑=rot=schlechter)
+- **Zeilen-Hintergrund**: rot wenn Torpedo ≥7 oder SMA-Bruch, amber wenn Earnings ≤7T
+- **Sektor-Heatmap**: Balken mit Klumpenrisiko-Warnung
+
+### 🔧 Backend
+- _fetch_ticker_data_sync: +change_5d_pct, +atr_14, +rvol, +above_sma50, +iv_atm, +report_timing
+- _fetch_all_scores_sync: 7 Rows statt 2 (Wochendelta)
+- _enrich_single: +week_opp_delta, +week_torp_delta
+
 ## [5.7.3] - 2026-03-21 - Research Dashboard Hotfixes
 
 ### 🐛 Bugfixes

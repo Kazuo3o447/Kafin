@@ -5,7 +5,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 5.6.4 (Market-Signal Cache-Invalidierung)
+**Version**: 5.8.0 (Watchlist: Trading-Werkzeug)
 **Stand**: 2026-03-21
 
 ---
@@ -33,6 +33,53 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Was funktioniert gut
+
+### Watchlist v5.8.0 — Trading-Werkzeug
+- **Alert-Streifen**: automatisch aus Watchlist-Daten — Earnings ≤5T, Torpedo-Delta >+1.5, SMA50-Bruch, RVOL Spike, Setup verbessert
+- **Überblick-Kacheln**: Earnings diese Woche, Ø Opp, Torpedo-Warnung, Ticker-Count
+- **Sortierbare Tabelle**: Opp, Torp, 1T%, 5T%, Earnings, RVOL — nach Klick auf Header
+- **Filter-Leiste**: Earnings ≤7T, Torpedo ≥6, RVOL >1.5×, SMA-Bruch, Setup verbessert
+- **Neue Spalten**: 5T%, RVOL, ATR — für Positionsgrösse
+- **Score-Wochendelta**: Opp/Torp Veränderung diese Woche — Torpedo-Delta INVERTIERT (↑=rot=schlechter)
+- **Zeilen-Hintergrund**: rot wenn Torpedo ≥7 oder SMA-Bruch, amber wenn Earnings ≤7T
+- **Sektor-Heatmap**: Balken mit Klumpenrisiko-Warnung
+
+### Research Dashboard Decision Core (/research/[ticker])
+- **Score-Delta Anzeige**: Opportunity- und Torpedo-Scores mit Veränderung vs. gestern/letzte Woche
+- **Trade Setup Block**: Chart-Analyse mit Entry Zone, Stop-Loss, Targets, Support/Resistance, Bias
+- **Position Sizer Block**: Risikomanagement mit Kontogröße, Risiko-%, Aktienanzahl, R:R Verhältnis
+- **On-Demand Loading**: Chart-Analyse erst auf Knopfdruck geladen (Performance-Optimierung)
+- **localStorage Integration**: Kontogröße wird gespeichert und wiederhergestellt
+- **Relative Stärke**: Ticker vs. SPY und Sektor-ETF (1T/5T/20T), zeigt titelspezifische Bewegung
+- **Earnings Context**: Break-Even Levels, Buy-the-Rumor Warnung, EPS/Revenue Konsens
+- **Technisches Bild**: Trend-Zusammenfassung, MACD Cross, OBV Käufer/Verkäufer, ATR + 52W-Position
+
+### Research Dashboard — vollständig (nach P1-P3)
+Blöcke von oben nach unten:
+1. Header (Ticker, Preis, 1T/5T, Sektor, Mitarbeiter)
+2. Entscheidungs-Kern (Opp/Torp Score + Delta)
+3. Trade Setup (chart_analyst on demand)
+4. Positionsgrössen-Rechner (localStorage)
+5. Relative Stärke (vs SPY + Sektor-ETF)
+6. Earnings-Kontext (Break-Even, Buy-Rumor Warning)
+7. Preis & Performance
+8. Bewertung
+9. Technisches Bild (aufgeräumt)
+10. Volumen & Marktstruktur
+11. Analyst & Options
+12. Earnings-Historie Tabelle
+13. Insider + News-Bullets
+14. KI-Analyse (DeepSeek, on demand)
+
+### DeepSeek Audit — Input (14 Datenquellen)
+Siehe CHANGELOG.md [5.7.2] für vollständige Liste.
+Kritische Verbesserung P3: chart_analyst Levels +
+relative_strength + FinBERT-Scores pro Schlagzeile.
+
+### report_generator.py — Sicherheitsnetz
+Alle unfilled {{...}} Placeholders werden vor
+DeepSeek-Aufruf via regex auf "N/A" gesetzt.
+Kein roher Placeholder-Text mehr im Prompt.
 
 ### Markets Dashboard v2 (/markets)
 - **Granulare Refresh-Zyklen**: 9 Blöcke mit individuellen Intervallen

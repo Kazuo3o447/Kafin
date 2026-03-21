@@ -1429,17 +1429,6 @@ export default function ResearchDashboard() {
         onLoad={loadChartAnalysis}
       />
 
-      {/* Position Sizer Block */}
-      <PositionSizerBlock
-        currentPrice={data.price || 0}
-        accountSize={accountSize}
-        riskPercent={riskPercent}
-        stopLoss={stopLoss}
-        onAccountSizeChange={setAccountSize}
-        onRiskPercentChange={setRiskPercent}
-        onStopLossChange={setStopLoss}
-      />
-
       {/* ── Earnings-Kontext — vollständig */}
       <EarningsContextBanner data={data} />
 
@@ -1835,6 +1824,17 @@ export default function ResearchDashboard() {
           )}
         </div>
       </div>
+
+      {/* Position Sizer Block */}
+      <PositionSizerBlock
+        currentPrice={data.price || 0}
+        accountSize={accountSize}
+        riskPercent={riskPercent}
+        stopLoss={stopLoss}
+        onAccountSizeChange={setAccountSize}
+        onRiskPercentChange={setRiskPercent}
+        onStopLossChange={setStopLoss}
+      />
 
       {/* ══════════════════════════════════════════════════════
           UNTERER TEIL: KI-ANALYSE

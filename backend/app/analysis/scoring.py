@@ -80,6 +80,8 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
                 whisper_delta = 5.0
             elif qb <= 2 or avg_s < 0:
                 whisper_delta = 2.0
+            elif qb == 0:
+                whisper_delta = 0.0  # 0/8 Beats = sehr schwach
             else:
                 whisper_delta = 4.0
     except Exception:
@@ -112,38 +114,66 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     try:
         grades = data.get("analyst_grades", [])
         if grades and len(grades) > 0:
-            upgrades = sum(
-                1 for g in grades
-                if str(g.get("newGrade", "")).lower()
-                in ["strong buy", "buy", "outperform",
-                    "overweight", "accumulate"]
-                and str(g.get("previousGrade", "")).lower()
-                not in ["strong buy", "buy", "outperform",
-                        "overweight", "accumulate"]
-            )
-            downgrades = sum(
-                1 for g in grades
-                if str(g.get("newGrade", "")).lower()
-                in ["sell", "underperform", "underweight",
-                    "reduce", "strong sell"]
-                and str(g.get("previousGrade", "")).lower()
-                not in ["sell", "underperform", "underweight",
-                        "reduce", "strong sell"]
-            )
-            holds = len(grades) - upgrades - downgrades
-
-            if upgrades >= 3:
-                guidance_trend = 9.0
-            elif upgrades >= 2 and downgrades == 0:
-                guidance_trend = 8.0
-            elif upgrades > downgrades:
-                guidance_trend = 7.0
-            elif downgrades > upgrades:
-                guidance_trend = 3.0
-            elif downgrades >= 2:
-                guidance_trend = 1.5
+            # Mindest-Sample-Gate: erst ab 3 Grades ein Signal
+            if len(grades) < 3:
+                guidance_trend = 5.0  # neutral bei zu kleinem Sample
             else:
-                guidance_trend = 5.0  # neutral
+                # Robuste Key-Normalisierung (camelCase + lowercase)
+                def normalize_grade(grade_str):
+                    if not grade_str:
+                        return ""
+                    return str(grade_str).strip().lower()
+                
+                upgrades = sum(
+                    1 for g in grades
+                    if normalize_grade(g.get("newGrade")) in ["strong buy", "buy", "outperform",
+                        "overweight", "accumulate"]
+                    and normalize_grade(g.get("previousGrade")) not in ["strong buy", "buy", "outperform",
+                            "overweight", "accumulate"]
+                )
+                downgrades = sum(
+                    1 for g in grades
+                    if normalize_grade(g.get("newGrade")) in ["sell", "underperform", "underweight",
+                        "reduce", "strong sell"]
+                    and normalize_grade(g.get("previousGrade")) not in ["sell", "underperform", "underweight",
+                            "reduce", "strong sell"]
+                )
+                holds = len(grades) - upgrades - downgrades
+
+                # Recency-Weighting: neuere Grades zählen mehr
+                # (vereinfacht: bei 5 Grades, die letzten 3 zählen doppelt)
+                recent_grades = grades[:3] if len(grades) >= 3 else grades
+                recent_upgrades = sum(
+                    1 for g in recent_grades
+                    if normalize_grade(g.get("newGrade")) in ["strong buy", "buy", "outperform",
+                        "overweight", "accumulate"]
+                    and normalize_grade(g.get("previousGrade")) not in ["strong buy", "buy", "outperform",
+                            "overweight", "accumulate"]
+                )
+                recent_downgrades = sum(
+                    1 for g in recent_grades
+                    if normalize_grade(g.get("newGrade")) in ["sell", "underperform", "underweight",
+                        "reduce", "strong sell"]
+                    and normalize_grade(g.get("previousGrade")) not in ["sell", "underperform", "underweight",
+                            "reduce", "strong sell"]
+                )
+
+                # Weighted score: recent = 2x, older = 1x
+                weighted_upgrades = upgrades + recent_upgrades
+                weighted_downgrades = downgrades + recent_downgrades
+
+                if weighted_upgrades >= 4:
+                    guidance_trend = 9.0
+                elif weighted_upgrades >= 3 and weighted_downgrades == 0:
+                    guidance_trend = 8.0
+                elif weighted_upgrades > weighted_downgrades:
+                    guidance_trend = 7.0
+                elif weighted_downgrades > weighted_upgrades:
+                    guidance_trend = 3.0
+                elif weighted_downgrades >= 3:
+                    guidance_trend = 1.5
+                else:
+                    guidance_trend = 5.0  # neutral
     except Exception:
         guidance_trend = 5.0
 
@@ -334,38 +364,65 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
     try:
         grades = data.get("analyst_grades", [])
         if grades and len(grades) > 0:
-            upgrades_t = sum(
-                1 for g in grades
-                if str(g.get("newGrade", "")).lower()
-                in ["strong buy", "buy", "outperform",
-                    "overweight", "accumulate"]
-                and str(g.get("previousGrade", "")).lower()
-                not in ["strong buy", "buy", "outperform",
-                        "overweight", "accumulate"]
-            )
-            downgrades_t = sum(
-                1 for g in grades
-                if str(g.get("newGrade", "")).lower()
-                in ["sell", "underperform", "underweight",
-                    "reduce", "strong sell"]
-                and str(g.get("previousGrade", "")).lower()
-                not in ["sell", "underperform", "underweight",
-                        "reduce", "strong sell"]
-            )
-
-            # Torpedo: Downgrades erhöhen den Score
-            if downgrades_t >= 3:
-                guidance_deceleration = 9.0
-            elif downgrades_t >= 2 and upgrades_t == 0:
-                guidance_deceleration = 8.0
-            elif downgrades_t > upgrades_t:
-                guidance_deceleration = 7.0
-            elif upgrades_t > downgrades_t:
-                guidance_deceleration = 2.0
-            elif upgrades_t >= 2:
-                guidance_deceleration = 1.0
+            # Mindest-Sample-Gate: erst ab 3 Grades ein Signal
+            if len(grades) < 3:
+                guidance_deceleration = 5.0  # neutral bei zu kleinem Sample
             else:
-                guidance_deceleration = 5.0
+                # Robuste Key-Normalisierung (camelCase + lowercase)
+                def normalize_grade(grade_str):
+                    if not grade_str:
+                        return ""
+                    return str(grade_str).strip().lower()
+                
+                upgrades_t = sum(
+                    1 for g in grades
+                    if normalize_grade(g.get("newGrade")) in ["strong buy", "buy", "outperform",
+                        "overweight", "accumulate"]
+                    and normalize_grade(g.get("previousGrade")) not in ["strong buy", "buy", "outperform",
+                            "overweight", "accumulate"]
+                )
+                downgrades_t = sum(
+                    1 for g in grades
+                    if normalize_grade(g.get("newGrade")) in ["sell", "underperform", "underweight",
+                        "reduce", "strong sell"]
+                    and normalize_grade(g.get("previousGrade")) not in ["sell", "underperform", "underweight",
+                            "reduce", "strong sell"]
+                )
+
+                # Recency-Weighting: neuere Grades zählen mehr
+                recent_grades = grades[:3] if len(grades) >= 3 else grades
+                recent_upgrades_t = sum(
+                    1 for g in recent_grades
+                    if normalize_grade(g.get("newGrade")) in ["strong buy", "buy", "outperform",
+                        "overweight", "accumulate"]
+                    and normalize_grade(g.get("previousGrade")) not in ["strong buy", "buy", "outperform",
+                            "overweight", "accumulate"]
+                )
+                recent_downgrades_t = sum(
+                    1 for g in recent_grades
+                    if normalize_grade(g.get("newGrade")) in ["sell", "underperform", "underweight",
+                        "reduce", "strong sell"]
+                    and normalize_grade(g.get("previousGrade")) not in ["sell", "underperform", "underweight",
+                            "reduce", "strong sell"]
+                )
+
+                # Weighted score: recent = 2x, older = 1x
+                weighted_upgrades_t = upgrades_t + recent_upgrades_t
+                weighted_downgrades_t = downgrades_t + recent_downgrades_t
+
+                # Torpedo: Downgrades erhöhen den Score
+                if weighted_downgrades_t >= 4:
+                    guidance_deceleration = 9.0
+                elif weighted_downgrades_t >= 3 and weighted_upgrades_t == 0:
+                    guidance_deceleration = 8.0
+                elif weighted_downgrades_t > weighted_upgrades_t:
+                    guidance_deceleration = 7.0
+                elif weighted_upgrades_t > weighted_downgrades_t:
+                    guidance_deceleration = 2.0
+                elif weighted_upgrades_t >= 3:
+                    guidance_deceleration = 1.0
+                else:
+                    guidance_deceleration = 5.0
     except Exception:
         guidance_deceleration = 5.0
 
@@ -380,9 +437,23 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
         news_memory = data.get("news_memory", [])
         management_events = []
 
+        # Freshness-Check: nur Events der letzten 30 Tage
+        from datetime import datetime, timedelta
+        cutoff_date = datetime.now() - timedelta(days=30)
+        
         for nm in news_memory:
             st = nm.get("shift_type", "")
             is_shift = nm.get("is_narrative_shift", False)
+            
+            # Freshness-Filter
+            event_date_str = nm.get("date", "")
+            try:
+                if event_date_str:
+                    event_date = datetime.fromisoformat(event_date_str.replace('Z', '+00:00'))
+                    if event_date < cutoff_date:
+                        continue  # Event zu alt
+            except Exception:
+                pass  # Wenn Datum nicht parsebar, behalten wir es
 
             # Direkter Management-Shift aus news_processor
             if st == "management" and is_shift:
@@ -409,26 +480,33 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
             if any(kw in text for kw in MGMT_KW):
                 management_events.append(nm)
 
-        # Schweregrad anhand Anzahl und Sentiment
-        if len(management_events) >= 3:
-            leadership_instability = 9.0
-        elif len(management_events) == 2:
-            leadership_instability = 7.0
-        elif len(management_events) == 1:
-            # Sentiment des Events: negativ = schwerer
-            ev = management_events[0]
-            sent = ev.get("sentiment_score", 0.0)
-            if isinstance(sent, str):
-                try: sent = float(sent)
-                except: sent = 0.0
-            if sent < -0.4:
-                leadership_instability = 8.0
-            elif sent < -0.1:
-                leadership_instability = 6.0
-            else:
-                leadership_instability = 4.0  # neutral
+        # Unknown-State: keine News in den letzten 30 Tagen
+        if not news_memory:
+            leadership_instability = 0.0  # explizit "keine Daten"
+        elif not management_events and len(news_memory) > 0:
+            # News vorhanden, aber keine Management-Events
+            leadership_instability = 0.0  # sauber
         else:
-            leadership_instability = 0.0
+            # Schweregrad anhand Anzahl und Sentiment
+            if len(management_events) >= 3:
+                leadership_instability = 9.0
+            elif len(management_events) == 2:
+                leadership_instability = 7.0
+            elif len(management_events) == 1:
+                # Sentiment des Events: negativ = schwerer
+                ev = management_events[0]
+                sent = ev.get("sentiment_score", 0.0)
+                if isinstance(sent, str):
+                    try: sent = float(sent)
+                    except: sent = 0.0
+                if sent < -0.4:
+                    leadership_instability = 8.0
+                elif sent < -0.1:
+                    leadership_instability = 6.0
+                else:
+                    leadership_instability = 4.0  # neutral
+            else:
+                leadership_instability = 0.0
     except Exception:
         leadership_instability = 0.0
 

@@ -31,9 +31,15 @@ Kurs: ${{current_price}} | Trend: {{trend}}
 RSI: {{rsi}} | Support: ${{support}} | Resistance: ${{resistance}}
 52W-Hoch-Nähe: {{distance_52w_high}}%
 
+RELATIVE STÄRKE (Ticker vs. Markt):
+{{relative_strength}}
+
 SHORT INTEREST:
 SI: {{short_interest}}% des Floats | Days-to-Cover: {{days_to_cover}}
 Trend: {{si_trend}} | Squeeze-Risiko: {{squeeze_risk}}
+
+CHART-ANALYSE (DeepSeek-basiert):
+{{chart_analysis}}
 
 INSIDER-AKTIVITÄT (90 Tage):
 Käufe: {{insider_buys}} Transaktionen (${{insider_buy_value}})
@@ -106,12 +112,19 @@ Erstelle den Report auf Deutsch mit diesen Abschnitten:
    - Wenn Expected Move vorhanden: Nenne konkret die Break-Even-
      Levels (Preis + Expected Move oben, Preis - Expected Move
      unten). Empfehle ob Aktie oder Optionen besser geeignet sind.
-
-3. **PFLICHT: CONTRARIAN-ANALYSE** (NUR wenn Mismatch-Score > 50):
+4. **PFLICHT: CONTRARIAN-ANALYSE** (NUR wenn Mismatch-Score > 50):
    - **VALUE TRAP vs. ÜBERTREIBUNG?** Analysiere: Ist die Verschuldung tragbar? Ist der FCF stabil oder sinkend? Gibt es strukturelle Probleme (Downsizing, Leadership-Wechsel)? → Dein Urteil: Berechtigte Krise oder temporäre Marktübertreibung?
    - **OPTIONS-TIMING: IV ZU TEUER?** Prüfe das IV Spread. Ist die IV deutlich höher als die historische Vola? Besteht Gefahr eines IV Crush vor Earnings? → Dein Urteil: Sind Aktien oder Optionen das bessere Instrument?
-4. EMPFEHLUNG mit Begründung (Strong Buy / Buy / Hold / Short / Strong Short)
-5. OPTIONEN-VORSCHLAG (Wenn die Empfehlung Long oder Short ist: Konkreten Spread vorschlagen. Bei Contrarian-Setups: Berücksichtige IV Spread für Timing)
+5. **RELATIVE STÄRKE**: Ist die Bewegung titelspezifisch
+   oder Markt-Beta? Wenn Titel stark outperformt:
+   ist das nachhaltiges institutionelles Interesse
+   oder kurzfristiger Momentum-Trade?
+6. **TRADE-SETUP BEWERTUNG**: Ist das Entry/Stop/Target
+   aus der Chart-Analyse realistisch im aktuellen
+   Marktregime? Gibt es bessere Levels basierend
+   auf deiner Gesamtanalyse?
+7. EMPFEHLUNG mit Begründung (Strong Buy / Buy / Hold / Short / Strong Short)
+8. OPTIONEN-VORSCHLAG (Wenn die Empfehlung Long oder Short ist: Konkreten Spread vorschlagen. Bei Contrarian-Setups: Berücksichtige IV Spread für Timing)
 
 EXPECTED_OUTPUT:
 Strukturierter deutscher Report-Text, ca. 300-500 Wörter.

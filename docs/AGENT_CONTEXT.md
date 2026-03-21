@@ -5,7 +5,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 5.9.0 (P1b: Scoring komplett)
+**Version**: 5.9.1 (P1b Enhanced mit Robustness)
 **Stand**: 2026-03-21
 
 ---
@@ -54,6 +54,26 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 - `leadership_instability`: news_memory "management" shifts
 - `technical_downtrend`: yfinance Trend/RSI/SMA
 - `macro_headwind`: VIX-Level
+
+---
+
+## Scoring-Robustness & Einschränkungen
+
+### Quality Gates (neu in v5.9.1)
+- **Analyst-Grades**: Mindest-Sample von 3 Grades erforderlich
+- **Leadership-Instability**: 30-Tage Freshness-Filter
+- **Key-Normalisierung**: camelCase + lowercase Robustheit
+
+### Bekannte Einschränkungen
+- **Watchlist-Scores**: Nutzen gecachte `score_history`, nicht Live-Scoring
+  - Backfill erforderlich nach P1b-Deploy: `POST /api/admin/scores/backfill`
+- **FMP Grade-Keys**: Abhängig von exakter API-Response-Struktur
+- **News-Freshness**: `leadership_instability` nur bei aktuellen Events aussagekräftig
+
+### Admin-Tools (neu in v5.9.1)
+- **Score Backfill**: `/api/admin/scores/backfill?tickers=AAPL,MSFT&days=7`
+- **Live-Scoring**: Research Dashboard nutzt immer Live-Daten
+- **Debug-Logging**: Score-Breakdown in Backend-Logs (debug-level)
 
 ---
 

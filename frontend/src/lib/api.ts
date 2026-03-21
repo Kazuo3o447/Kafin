@@ -120,4 +120,7 @@ export const api = {
     }),
   runWebIntelligenceBatch: () =>
     fetchAPI("/api/web-intelligence/batch", { method: "POST" }),
+
+  // Score Delta
+  getScoreDelta: (ticker: string) => fetchAPI(`/api/data/score-delta/${ticker}`),
 };

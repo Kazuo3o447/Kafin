@@ -2,6 +2,24 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.9.1] - 2026-03-21 - P1b Enhanced mit Robustness
+
+### 🔧 Robustness-Verbesserungen
+- **FMP Grade-Keys**: Normalisierung (camelCase + lowercase) für API-Toleranz
+- **Sample Gates**: Mindest-Sample von 3 Grades für guidance_trend/deceleration
+- **Recency-Weighting**: Neuere Analyst-Grades zählen doppelt (last 3 of 5)
+- **Freshness-Filter**: leadership_instability nur Events der letzten 30 Tage
+- **whisper_delta**: qb=0 edge case → 0.0 statt 2.0 (sehr schwach)
+
+### 🛠️ Admin-Tools
+- **Score Backfill**: `/api/admin/scores/backfill` für Watchlist-Score-History
+- **Watchlist Fix**: Backfill erforderlich nach P1b-Deploy für neue Faktoren
+- **Debug-Logging**: Score-Breakdown mit allen 5 neuen Faktoren
+
+### 🐛 Bugfixes
+- **Key-Robustness**: FMP API Response-Variationen abgefangen
+- **Unknown-State**: leadership_instability bei fehlenden News klar markiert
+
 ## [5.9.0] - 2026-03-21 - P1b: Scoring komplett
 
 ### 🚀 Kern-Verbesserung

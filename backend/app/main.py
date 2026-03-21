@@ -21,6 +21,7 @@ import os
 from backend.app.config import settings
 from backend.app.logger import get_logger, get_recent_logs, get_module_status
 from backend.app.admin import router as admin_router
+from backend.app.admin.score_backfill import router as score_backfill_router
 from backend.app.init_watchlist import ensure_watchlist_populated
 from backend.app.init_db import (
     ensure_daily_snapshots_table,
@@ -66,6 +67,7 @@ async def startup_event():
     log_schema_extension_sql()
 
 app.include_router(admin_router)
+app.include_router(score_backfill_router, prefix="/api/admin/scores", tags=["scores"])
 
 @app.get("/health", response_model=HealthCheckResponse)
 async def health_check():

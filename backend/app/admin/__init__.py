@@ -19,8 +19,14 @@ from typing import Dict, Any
 from backend.app.config import settings, YAML_PATH, ENV_PATH
 from backend.app.logger import get_recent_logs, get_logger
 
+# Include score backfill router
+from .score_backfill import router as score_backfill_router
+
 logger = get_logger(__name__)
 router = APIRouter()
+
+# Register the score backfill router
+router.include_router(score_backfill_router, prefix="/scores", tags=["scores"])
 
 # ---------------------------------------------------------------------------
 # HTML TEMPLATE

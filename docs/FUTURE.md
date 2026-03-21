@@ -1,7 +1,23 @@
-# KAFIN — Future Features & Technische Schulden
+# KAFIN — Zukunftsvisionen & Technical Debt
 
-Dieses Dokument sammelt alle Ideen, geplanten Features und
-technischen Schulden die bekannt aber noch nicht implementiert sind.
+*Erstellt: 21. März 2026*
+*Prinzip: Trading-First statt Data-First*
+
+---
+
+## Kürzlich abgeschlossen (v5.9.1)
+
+### ✅ P1b Enhanced mit Robustness
+- **FMP Grade-Keys**: Robuste Normalisierung und Sample Gates
+- **Recency-Weighting**: Neuere Analyst-Grades stärker gewichtet
+- **Freshness-Filter**: Management-Events nur 30 Tage relevant
+- **Admin-Tools**: Score Backfill für Watchlist-History
+- **Einschränkungen dokumentiert**: Watchlist vs Live-Scoring
+
+---
+
+## Phase 1 — Signal-First UX
+Ideen, geplante Features und technische Schulden die bekannt aber noch nicht implementiert sind.
 Wird bei jeder Session gepflegt.
 
 ---

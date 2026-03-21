@@ -41,6 +41,19 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 - **api.ts**: getMarketNewsSentiment(), getEconomicCalendar() hinzugefügt
 - **Error Handling**: Alle fetch-Funktionen setzen undefined bei Fehlern
 
+## [5.5.1] - 2026-03-21 - P1b: Markets Dashboard v2 UI-Vervollständigung
+### UI-Fehlerbehebung & Info-Block
+- **Dashboard-Info Block** hinzugefügt (10. Block mit Refresh-Legende)
+- **Block-Header-Badges** für alle 9 Datenblöcke implementiert
+- **News-Block Empty-State** verbessert: bleibt sichtbar statt zu verschwinden
+- **API-Proxy** korrigiert: `localhost:8000` statt `8001`
+- **Frontend-Rendering** jetzt vollständig gemäß Dashboard-Spezifikation
+
+### Backend-Verifikation
+- **FinBERT/torch** Installation verifiziert und stabilisiert
+- **Fallback-Handling** für fehlende Dependencies implementiert
+- **Import-Pfade** für Container-Kompatibilität korrigiert
+
 ## [5.5.0] - 2026-03-21 - P1a: Scores im Research Dashboard
 
 ### 🚀 Trading-Mehrwert

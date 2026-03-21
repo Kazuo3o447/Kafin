@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   Clock,
   Timer,
+  Info,
 } from "lucide-react";
 
 // Types
@@ -190,6 +191,68 @@ function isStale(timestamp: string, maxMinutes: number): boolean {
   return deltaMins > maxMinutes;
 }
 
+function DashboardInfoBlock() {
+  const refreshLegend = [
+    { label: "60s", value: "Indizes / Sektoren / Makro-Proxys" },
+    { label: "5m", value: "Marktbreite" },
+    { label: "10m", value: "Cross-Asset / News" },
+    { label: "30m", value: "Makro / Kalender" },
+  ];
+
+  return (
+    <div className="card p-6 border border-[var(--border)] bg-[var(--bg-secondary)]">
+      <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-2">
+          <Info size={18} className="text-[var(--accent-blue)]" />
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">Dashboard-Info</h3>
+        </div>
+        <span className="rounded-full border border-[var(--border)] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+          10. Block
+        </span>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+        <div className="space-y-3 text-sm text-[var(--text-secondary)]">
+          <p>
+            Diese Seite zeigt Marktregime, Breite, Sektoren, Cross-Asset-Signale,
+            News-Sentiment, den Wirtschaftskalender und den KI-Markt-Audit in einem
+            gemeinsamen Layout.
+          </p>
+          <p>
+            <span className="font-semibold text-[var(--text-primary)]">News + FinBERT</span>
+            analysiert relevante Markt-Headlines. Wenn keine Headlines verfügbar sind,
+            bleibt die Karte sichtbar und zeigt den Status statt einfach zu verschwinden.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {refreshLegend.map((item) => (
+            <div key={item.label} className="rounded-lg bg-[var(--bg-tertiary)] p-3">
+              <div className="text-xs font-bold uppercase tracking-widest text-[var(--accent-blue)]">
+                {item.label}
+              </div>
+              <div className="mt-1 text-xs text-[var(--text-secondary)]">{item.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BlockHeaderBadge({ block, cadence }: { block: string; cadence: string }) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <span className="rounded-full bg-[var(--bg-tertiary)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+        {block}
+      </span>
+      <span className="text-[11px] uppercase tracking-[0.18em] text-[var(--accent-blue)]">
+        {cadence}
+      </span>
+    </div>
+  );
+}
+
 // Block 1: Global Indices
 function GlobalIndicesBlock({ data, timestamp }: { data?: MarketOverview; timestamp?: string }) {
   if (!data?.indices) return <BlockError title="Globale Indizes" />;
@@ -200,6 +263,7 @@ function GlobalIndicesBlock({ data, timestamp }: { data?: MarketOverview; timest
   
   return (
     <div className="card p-6">
+      <BlockHeaderBadge block="Block 1" cadence="60s Refresh" />
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
           <Globe size={18} />
@@ -256,6 +320,7 @@ function SectorRotationBlock({ data, timestamp }: { data?: MarketOverview; times
   
   return (
     <div className="card p-6">
+      <BlockHeaderBadge block="Block 2" cadence="60s Refresh" />
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
           <BarChart3 size={18} />
@@ -305,6 +370,7 @@ function MarketBreadthBlock({ data, timestamp }: { data?: MarketBreadth; timesta
   
   return (
     <div className="card p-6">
+      <BlockHeaderBadge block="Block 3" cadence="5min Refresh" />
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
           <Activity size={18} />
@@ -419,6 +485,7 @@ function MacroDashboardBlock({ data, timestamp }: { data?: MacroSnapshot; timest
   
   return (
     <div className="card p-6">
+      <BlockHeaderBadge block="Block 4" cadence="30min Refresh" />
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
           <Activity size={18} />
@@ -470,6 +537,7 @@ function CrossAssetBlock({ data, timestamp }: { data?: IntermarketData; timestam
   
   return (
     <div className="card p-6">
+      <BlockHeaderBadge block="Block 5" cadence="10min Refresh" />
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
           <Globe size={18} />
@@ -554,7 +622,7 @@ function CrossAssetBlock({ data, timestamp }: { data?: IntermarketData; timestam
 
 // Block 6: Market News + FinBERT Sentiment
 function NewsSentimentBlock({ data, timestamp }: { data?: NewsSentimentData; timestamp?: string }) {
-  if (!data?.headlines) return <BlockError title="Marktnachrichten + Sentiment" />;
+  if (!data) return <BlockError title="Marktnachrichten + Sentiment" />;
   
   const getSentimentColor = (score: number) => {
     if (score > 0.15) return "text-green-500";
@@ -570,6 +638,7 @@ function NewsSentimentBlock({ data, timestamp }: { data?: NewsSentimentData; tim
   
   return (
     <div className="card p-6">
+      <BlockHeaderBadge block="Block 6" cadence="10min Refresh" />
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
           <Newspaper size={18} />
@@ -587,7 +656,7 @@ function NewsSentimentBlock({ data, timestamp }: { data?: NewsSentimentData; tim
       </div>
       
       {/* Category Sentiment Summary */}
-      {Object.keys(data.category_sentiment).length > 0 && (
+      {Object.keys(data.category_sentiment || {}).length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
           {Object.entries(data.category_sentiment).map(([category, sentiment]) => (
             <div key={category} className="p-2 rounded bg-[var(--bg-tertiary)] text-center">
@@ -604,32 +673,38 @@ function NewsSentimentBlock({ data, timestamp }: { data?: NewsSentimentData; tim
       )}
       
       {/* Headlines with Sentiment */}
-      <div className="space-y-2 max-h-80 overflow-y-auto">
-        {data.headlines.slice(0, 10).map((item, idx) => (
-          <div key={idx} className="p-3 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] transition-colors">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1">
-                <h4 className="text-sm font-medium text-[var(--text-primary)] line-clamp-2 mb-1">
-                  {item.headline}
-                </h4>
-                <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-                  <span>{item.source}</span>
-                  <span>•</span>
-                  <span className="capitalize">{item.category.replace('_', ' ')}</span>
+      {Array.isArray(data.headlines) && data.headlines.length > 0 ? (
+        <div className="space-y-2 max-h-80 overflow-y-auto">
+          {data.headlines.slice(0, 10).map((item, idx) => (
+            <div key={idx} className="p-3 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] transition-colors">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1">
+                  <h4 className="text-sm font-medium text-[var(--text-primary)] line-clamp-2 mb-1">
+                    {item.headline}
+                  </h4>
+                  <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                    <span>{item.source}</span>
+                    <span>•</span>
+                    <span className="capitalize">{item.category.replace('_', ' ')}</span>
+                  </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <div className={`text-xs font-bold ${getSentimentColor(item.sentiment_score)}`}>
-                  {getSentimentLabel(item.sentiment_score)}
-                </div>
-                <div className="text-xs text-[var(--text-muted)]">
-                  {item.sentiment_score.toFixed(2)}
+                <div className="text-right">
+                  <div className={`text-xs font-bold ${getSentimentColor(item.sentiment_score)}`}>
+                    {getSentimentLabel(item.sentiment_score)}
+                  </div>
+                  <div className="text-xs text-[var(--text-muted)]">
+                    {item.sentiment_score.toFixed(2)}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-tertiary)] p-4 text-sm text-[var(--text-muted)]">
+          Keine Headlines von Finnhub verfügbar. Der News-Block bleibt sichtbar, damit klar ist, dass die Datenquelle aktuell leer ist.
+        </div>
+      )}
       
       <div className="mt-4 text-xs text-[var(--text-muted)] text-center">
         {data.total_analyzed} Headlines analysiert
@@ -652,6 +727,7 @@ function EconomicCalendarBlock({ data, timestamp }: { data?: EconomicCalendar; t
   
   return (
     <div className="card p-6">
+      <BlockHeaderBadge block="Block 7" cadence="30min Refresh" />
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
           <Timer size={18} />
@@ -718,6 +794,7 @@ function MarketAuditBlock({ audit, onGenerate, loading }: {
   
   return (
     <div className="card p-6">
+      <BlockHeaderBadge block="Block 8" cadence="Manual / On-demand" />
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
           <Zap size={18} />
@@ -787,6 +864,7 @@ function MacroProxiesBlock({ data, timestamp }: { data?: MarketOverview; timesta
   
   return (
     <div className="card p-6">
+      <BlockHeaderBadge block="Block 9" cadence="60s Refresh" />
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
           <Activity size={18} />
@@ -1074,8 +1152,10 @@ export default function MarketsPage() {
           </button>
         </div>
       </div>
+
+      <DashboardInfoBlock />
       
-      {/* 9 Blocks Grid */}
+      {/* 9 Data Blocks Grid */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Block 1: Global Indices */}
         <GlobalIndicesBlock 

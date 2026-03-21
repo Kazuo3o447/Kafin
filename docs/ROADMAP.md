@@ -26,11 +26,12 @@ Lösung:
 
 ### P1b — Markets Dashboard v2
 **Status: ✅ ERLEDIGT (21.03.2026)**
-Marktsseite zeigt nur 6 Indizes, keine granularen Refreshes,
-keine News-Sentiment, keine Wirtschaftskalender.
-
-Lösung:
-- **9 Blöcke mit granularen Refresh-Zyklen** (60s-30min)
+Granulare Echtzeit-Marktanalyse mit individuellen Refresh-Zyklen:
+- 9 Datenblöcke mit separaten Refresh-Intervallen (60s/5m/10m/30m)
+- Dashboard-Info Block mit Refresh-Legende (10. Block)
+- Block-Header-Badges für klare Orientierung
+- News + FinBERT Sentiment mit robustem Empty-State
+- API-Proxy korrigiert für stabile Datenverbindung
 - **Globale Indizes**: SPY, QQQ, DIA, IWM, DAX, Euro Stoxx 50, Nikkei 225, MSCI World
 - **Marktbreite**: S&P 500 Top 50 statt Dow 30
 - **News + FinBERT**: Kategorisierte Nachrichten mit Sentiment-Scores

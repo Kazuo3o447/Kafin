@@ -1280,6 +1280,96 @@ async def api_research_dashboard(
     except Exception as e:
         logger.debug(f"Research: last audit {ticker}: {e}")
 
+    # ── Scoring ────────────────────────────────────────────────
+    from backend.app.analysis.scoring import (
+        calculate_opportunity_score,
+        calculate_torpedo_score,
+        get_recommendation,
+    )
+    from backend.app.data.fred import get_macro_snapshot
+
+    opp_score_obj = None
+    torp_score_obj = None
+    recommendation_obj = None
+
+    try:
+        # Makro für Torpedo (VIX, Credit Spread)
+        macro_snap = await get_macro_snapshot()
+
+        # Valuation-Context — identisch wie in report_generator.py
+        if metrics:
+            valuation_ctx = metrics.dict() if hasattr(metrics, "dict") else {}
+        elif profile:
+            valuation_ctx = profile.dict() if hasattr(profile, "dict") else {}
+        elif yf_fund:
+            valuation_ctx = {
+                "ticker": effective_ticker,
+                "pe_ratio": yf_fund.get("pe_ratio"),
+                "ps_ratio": yf_fund.get("ps_ratio"),
+                "market_cap": yf_fund.get("market_cap"),
+                "sector": yf_fund.get("sector"),
+            }
+        else:
+            valuation_ctx = {}
+
+        # Technicals-Context
+        tech_ctx = {}
+        if tech:
+            tech_ctx = tech.dict() if hasattr(tech, "dict") else {}
+
+        # Short Interest — research hat Finnhub-Objekt oder yfinance-dict
+        si_ctx = {}
+        if short_int:
+            si_ctx = short_int.dict() if hasattr(short_int, "dict") else {}
+
+        # Insider Activity
+        ia_ctx = {}
+        if insiders:
+            ia_ctx = insiders.dict() if hasattr(insiders, "dict") else {}
+
+        # Options
+        opt_ctx = {}
+        if options:
+            opt_ctx = options.dict() if hasattr(options, "dict") else {}
+            # Scoring erwartet put_call_ratio_oi — stelle sicher dass es da ist
+            if "put_call_ratio_oi" not in opt_ctx and "put_call_ratio" in opt_ctx:
+                opt_ctx["put_call_ratio_oi"] = opt_ctx["put_call_ratio"]
+
+        # News Memory (FinBERT Bullets)
+        news_ctx = news_mem or []
+
+        # History — scoring erwartet quarters_beat, avg_surprise_percent
+        hist_ctx = {}
+        if history:
+            hist_ctx = history.dict() if hasattr(history, "dict") else {}
+
+        data_ctx = {
+            "earnings_history": hist_ctx,
+            "valuation": valuation_ctx,
+            "short_interest": si_ctx,
+            "insider_activity": ia_ctx,
+            "macro": macro_snap.dict() if hasattr(macro_snap, "dict") else {},
+            "technicals": tech_ctx,
+            "news_memory": news_ctx,
+            "options": opt_ctx,
+            "web_sentiment_score": 0.0,   # Tavily nicht im Research-Endpoint
+            "finbert_sentiment": 0.0,
+            "sentiment_divergence": False,
+        }
+
+        opp_score_obj = await calculate_opportunity_score(
+            effective_ticker, data_ctx
+        )
+        torp_score_obj = await calculate_torpedo_score(
+            effective_ticker, data_ctx
+        )
+        recommendation_obj = await get_recommendation(
+            opp_score_obj, torp_score_obj
+        )
+
+    except Exception as e:
+        logger.warning(f"Research Scoring {effective_ticker}: {e}")
+
     # ── Response zusammenbauen ─────────────────────────────────
     response = {
         "ticker": ticker,
@@ -1388,6 +1478,36 @@ async def api_research_dashboard(
 
         # Letzter Audit
         "last_audit": last_audit,
+
+        # Scores
+        "opportunity_score": round(opp_score_obj.total_score, 1)
+            if opp_score_obj else None,
+        "torpedo_score": round(torp_score_obj.total_score, 1)
+            if torp_score_obj else None,
+        "recommendation": recommendation_obj.recommendation
+            if recommendation_obj else None,
+        "recommendation_label": recommendation_obj.recommendation_label
+            if recommendation_obj else None,
+        "recommendation_reason": recommendation_obj.reasoning
+            if recommendation_obj else None,
+        # Score-Breakdown für aufklappbares Detail
+        "score_breakdown": {
+            "opportunity": {
+                "earnings_momentum": round(opp_score_obj.earnings_momentum, 1),
+                "valuation_regime": round(opp_score_obj.valuation_regime, 1),
+                "technical_setup": round(opp_score_obj.technical_setup, 1),
+                "short_squeeze": round(opp_score_obj.short_squeeze_potential, 1),
+                "insider_activity": round(opp_score_obj.insider_activity, 1),
+                "options_flow": round(opp_score_obj.options_flow, 1),
+            } if opp_score_obj else {},
+            "torpedo": {
+                "valuation_downside": round(torp_score_obj.valuation_downside, 1),
+                "expectation_gap": round(torp_score_obj.expectation_gap, 1),
+                "insider_selling": round(torp_score_obj.insider_selling, 1),
+                "technical_downtrend": round(torp_score_obj.technical_downtrend, 1),
+                "macro_headwind": round(torp_score_obj.macro_headwind, 1),
+            } if torp_score_obj else {},
+        } if opp_score_obj and torp_score_obj else None,
     }
 
     # ── Datenvollständigkeit prüfen ────────────────────────────

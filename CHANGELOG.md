@@ -2,6 +2,19 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.5.0] - 2026-03-21 - P1a: Scores im Research Dashboard
+
+### 🚀 Trading-Mehrwert
+- **Score-Block** ganz oben auf /research/[ticker]
+  — Opportunity-Score + Torpedo-Score + Empfehlung
+  — Farbcodiert: grün/amber/rot je nach Niveau
+  — Aufklappbarer Score-Breakdown (welcher Faktor zieht)
+  — Ampel-Rahmen: grün bei Buy, rot bei Short, amber bei Watch
+- **data_ctx** aus Research-Variablen für Scoring gebaut
+  — Kein Doppel-Fetching: nutzt bereits geladene Daten
+  — Graceful Fallback: Scores None wenn Berechnung fehlschlägt
+- **⚠️ Hinweis im Breakdown**: P1b Placeholders noch offen
+
 ## [5.4.1] - 2026-03-21 - Markets Hotfix
 
 ### 🐛 Bugfixes

@@ -11,8 +11,8 @@ besser: Signal zuerst → Begründung → Rohdaten auf Wunsch.
 ## Phase 1 — Signal-First UX
 **Priorität: HOCH | SWE-1.5 | ~1 Woche**
 
-### P1a — Scores im Research Dashboard ← ALS NÄCHSTES
-**Status: OFFEN**
+### P1a — Scores im Research Dashboard
+**Status: ✅ ERLEDIGT (21.03.2026)**
 Opportunity- und Torpedo-Score fehlen im Research-Dashboard
 komplett. Nur in der Watchlist sichtbar, nur nach Audit.
 

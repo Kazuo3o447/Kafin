@@ -124,6 +124,15 @@ type ResearchData = {
     torpedo_score: number;
     report_text: string;
   } | null;
+  opportunity_score?: number | null;
+  torpedo_score?: number | null;
+  recommendation?: string | null;
+  recommendation_label?: string | null;
+  recommendation_reason?: string | null;
+  score_breakdown?: {
+    opportunity: Record<string, number>;
+    torpedo: Record<string, number>;
+  } | null;
 };
 
 // ── Hilfsfunktionen ──────────────────────────────────────────
@@ -175,6 +184,177 @@ function StatCell({ label, value, sub }: { label: string; value: React.ReactNode
 
 function Skeleton({ className }: { className?: string }) {
   return <div className={`animate-pulse rounded bg-[var(--bg-elevated)] ${className}`} />;
+}
+
+function ScoreBlock({ data }: { data: ResearchData }) {
+  const opp = data.opportunity_score;
+  const torp = data.torpedo_score;
+  const rec = data.recommendation;
+  const label = data.recommendation_label;
+  const reason = data.recommendation_reason;
+  const [expanded, setExpanded] = useState(false);
+
+  if (opp == null || torp == null) return null;
+
+  // Ampel-Farben für Empfehlung
+  const recColor =
+    rec === "strong_buy" || rec === "buy_hedge"
+      ? "text-[var(--accent-green)]"
+      : rec === "strong_short" || rec === "potential_short"
+      ? "text-[var(--accent-red)]"
+      : rec === "watch"
+      ? "text-[var(--accent-amber)]"
+      : "text-[var(--text-secondary)]";
+
+  const oppColor =
+    opp >= 7 ? "text-[var(--accent-green)]"
+    : opp >= 4 ? "text-[var(--accent-amber)]"
+    : "text-[var(--accent-red)]";
+
+  const torpColor =
+    torp >= 7 ? "text-[var(--accent-red)]"
+    : torp >= 4 ? "text-[var(--accent-amber)]"
+    : "text-[var(--accent-green)]";
+
+  return (
+    <div className={`rounded-xl border-2 p-5 ${
+      rec === "strong_buy" || rec === "buy_hedge"
+        ? "border-[var(--accent-green)]/40 bg-[var(--accent-green)]/5"
+        : rec === "strong_short" || rec === "potential_short"
+        ? "border-[var(--accent-red)]/40 bg-[var(--accent-red)]/5"
+        : rec === "watch"
+        ? "border-[var(--accent-amber)]/40 bg-[var(--accent-amber)]/5"
+        : "border-[var(--border)] bg-[var(--bg-secondary)]"
+    }`}>
+
+      {/* Hauptzeile */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+
+        {/* Scores */}
+        <div className="flex items-center gap-6">
+          <div className="text-center">
+            <p className="text-[10px] uppercase tracking-widest
+                          text-[var(--text-muted)] mb-1">
+              Opportunity
+            </p>
+            <p className={`text-4xl font-bold font-mono ${oppColor}`}>
+              {opp.toFixed(1)}
+            </p>
+            <p className="text-[10px] text-[var(--text-muted)]">/ 10</p>
+          </div>
+
+          <div className="text-2xl font-light text-[var(--text-muted)]">
+            vs
+          </div>
+
+          <div className="text-center">
+            <p className="text-[10px] uppercase tracking-widest
+                          text-[var(--text-muted)] mb-1">
+              Torpedo
+            </p>
+            <p className={`text-4xl font-bold font-mono ${torpColor}`}>
+              {torp.toFixed(1)}
+            </p>
+            <p className="text-[10px] text-[var(--text-muted)]">/ 10</p>
+          </div>
+        </div>
+
+        {/* Empfehlung */}
+        <div className="flex-1 min-w-48">
+          <p className={`text-2xl font-bold ${recColor}`}>
+            {label || "—"}
+          </p>
+          {reason && (
+            <p className="text-sm text-[var(--text-secondary)] mt-1">
+              {reason}
+            </p>
+          )}
+        </div>
+
+        {/* Breakdown-Toggle */}
+        {data.score_breakdown && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-xs text-[var(--accent-blue)]
+                       hover:underline shrink-0"
+          >
+            {expanded ? "Details ausblenden ▲" : "Score-Details ▼"}
+          </button>
+        )}
+      </div>
+
+      {/* Score-Breakdown (aufklappbar) */}
+      {expanded && data.score_breakdown && (
+        <div className="mt-4 pt-4 border-t border-[var(--border)]
+                        grid grid-cols-2 gap-4">
+
+          <div>
+            <p className="text-xs font-semibold text-[var(--accent-green)]
+                          uppercase tracking-wider mb-2">
+              Opportunity-Faktoren
+            </p>
+            <div className="space-y-1">
+              {Object.entries(data.score_breakdown.opportunity).map(
+                ([key, val]) => (
+                  <div key={key}
+                       className="flex justify-between text-xs">
+                    <span className="text-[var(--text-muted)]
+                                     capitalize">
+                      {key.replace(/_/g, " ")}
+                    </span>
+                    <span className={`font-mono font-semibold ${
+                      (val as number) >= 7
+                        ? "text-[var(--accent-green)]"
+                        : (val as number) <= 3
+                        ? "text-[var(--accent-red)]"
+                        : "text-[var(--text-secondary)]"
+                    }`}>
+                      {(val as number).toFixed(1)}
+                    </span>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-[var(--accent-red)]
+                          uppercase tracking-wider mb-2">
+              Torpedo-Faktoren
+            </p>
+            <div className="space-y-1">
+              {Object.entries(data.score_breakdown.torpedo).map(
+                ([key, val]) => (
+                  <div key={key}
+                       className="flex justify-between text-xs">
+                    <span className="text-[var(--text-muted)]
+                                     capitalize">
+                      {key.replace(/_/g, " ")}
+                    </span>
+                    <span className={`font-mono font-semibold ${
+                      (val as number) >= 7
+                        ? "text-[var(--accent-red)]"
+                        : (val as number) <= 3
+                        ? "text-[var(--accent-green)]"
+                        : "text-[var(--text-secondary)]"
+                    }`}>
+                      {(val as number).toFixed(1)}
+                    </span>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+
+          <p className="col-span-2 text-[10px] text-[var(--text-muted)]
+                        pt-2 border-t border-[var(--border)]">
+            ⚠️ whisper_delta, guidance_trend, sector_regime sind
+            aktuell noch nicht berechnet (Roadmap P1b).
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Hauptkomponente ───────────────────────────────────────────
@@ -490,6 +670,9 @@ export default function ResearchDashboard() {
         <Clock size={10} className="inline mr-1" />
         Stand: {fmt.date(data.fetched_at)} {new Date(data.fetched_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
       </p>
+
+      {/* Score-Block — immer zuerst sichtbar */}
+      <ScoreBlock data={data} />
 
       {/* ── Earnings-Banner ───────────────────────────────── */}
       {earningsBanner}

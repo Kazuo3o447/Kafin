@@ -141,6 +141,14 @@ async def generate_audit_report(ticker: str) -> str:
     except Exception as e:
         logger.warning(f"Analyst estimates für {ticker}: {e}")
 
+    # Analyst Grades für guidance_trend/deceleration
+    audit_grades = None
+    try:
+        from backend.app.data.fmp import get_analyst_grades
+        audit_grades = await get_analyst_grades(ticker)
+    except Exception as e:
+        logger.warning(f"Analyst grades für {ticker}: {e}")
+
     history = None
     try:
         history = await get_earnings_history(ticker)
@@ -628,6 +636,15 @@ async def generate_audit_report(ticker: str) -> str:
         "web_sentiment_score": web_sentiment_score,
         "finbert_sentiment": finbert_sentiment,
         "sentiment_divergence": sentiment_divergence,
+        # NEU: für guidance_trend + deceleration
+        "analyst_grades": audit_grades or [],
+        # NEU: für sector_regime
+        "sector_ranking": market_ov.get("sector_ranking_5d", []) if market_ov else [],
+        "ticker_sector": (
+            getattr(profile, "sector", None)
+            or (yf_fundamentals.get("sector") if yf_fundamentals else None)
+            or "Unknown"
+        ),
     }
     
     # 2. Scores

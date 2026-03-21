@@ -2,6 +2,31 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.9.0] - 2026-03-21 - P1b: Scoring komplett
+
+### 🚀 Kern-Verbesserung
+Alle 5 hardcodierten Dummy-Werte ersetzt.
+Scoring-Qualität: von ~60% auf 100% der Faktoren live.
+
+- **whisper_delta** (15% Opp): Proxy via
+  avg_surprise_percent + quarters_beat.
+  Beat-Konsistenz als impliziter Whisper.
+- **guidance_trend** (15% Opp): FMP analyst_grades
+  — Upgrades überwiegen = positiver Trend.
+- **sector_regime** (10% Opp): Sektor-ETF 5T-Performance
+  aus market_overview (gecacht, kein extra Call).
+  XLK für Tech, XLV für Healthcare etc.
+- **guidance_deceleration** (15% Torp): Spiegelseite
+  — Downgrades als Torpedo-Signal.
+- **leadership_instability** (10% Torp): news_memory
+  shift_type="management" + CEO/CFO-Keyword-Scan.
+  Einer der stärksten Torpedo-Signale.
+
+### Auswirkung
+Opp-Score und Torp-Score sind jetzt vollständig
+datengetrieben. Scores werden sich für die meisten
+Ticker merklich verändern — das ist korrekt.
+
 ## [5.8.1] - 2026-03-21 - Watchlist Hotfix
 
 ### 🐛 Bugfixes (Review-Findings)

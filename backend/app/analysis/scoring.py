@@ -7,6 +7,27 @@ from backend.app.config import settings
 
 logger = get_logger(__name__)
 
+# Sektor zu ETF Mapping für sector_regime
+_SECTOR_TO_ETF = {
+    "Technology": "XLK",
+    "Financial Services": "XLF",
+    "Financials": "XLF",
+    "Energy": "XLE",
+    "Healthcare": "XLV",
+    "Health Care": "XLV",
+    "Utilities": "XLU",
+    "Industrials": "XLI",
+    "Communication Services": "XLC",
+    "Communication": "XLC",
+    "Consumer Cyclical": "XLY",
+    "Consumer Discretionary": "XLY",
+    "Consumer Defensive": "XLP",
+    "Consumer Staples": "XLP",
+    "Basic Materials": "XLB",
+    "Materials": "XLB",
+    "Real Estate": "XLRE",
+}
+
 def _load_scoring_config() -> dict:
     return settings.scoring
 
@@ -29,8 +50,40 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     else:
         em = (quarters_beat / 8.0) * 10.0
 
-    # whisper_delta
-    whisper_delta = 5.0 
+    # whisper_delta: Proxy über historische Beat-Konsistenz
+    # Je mehr Quartale beaten + je höher avg_surprise,
+    # desto höher der implizite Whisper über Konsens.
+    whisper_delta = 5.0  # Neutral-Start
+    try:
+        history = data.get("earnings_history")
+        qb = (
+            getattr(history, "quarters_beat", None)
+            if not isinstance(history, dict)
+            else history.get("quarters_beat")
+        ) if history else None
+        avg_s = (
+            getattr(history, "avg_surprise_percent", None)
+            if not isinstance(history, dict)
+            else history.get("avg_surprise_percent")
+        ) if history else None
+
+        if qb is not None and avg_s is not None:
+            # 8/8 Beats mit hohem Surprise = Whisper
+            # deutlich über Konsens = starkes Signal
+            if qb >= 7 and avg_s >= 10.0:
+                whisper_delta = 9.0
+            elif qb >= 6 and avg_s >= 5.0:
+                whisper_delta = 7.5
+            elif qb >= 5 and avg_s >= 2.0:
+                whisper_delta = 6.0
+            elif qb >= 4:
+                whisper_delta = 5.0
+            elif qb <= 2 or avg_s < 0:
+                whisper_delta = 2.0
+            else:
+                whisper_delta = 4.0
+    except Exception:
+        whisper_delta = 5.0 
 
     # valuation_regime
     vr = 5.0
@@ -52,8 +105,47 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
                 logger.debug(f"[{ticker}] Positive Narrative Shift erkannt ({shift_type}). Valuation Regime +2.0 auf {vr}")
                 break
 
-    # guidance_trend
+    # guidance_trend: Analyst-Upgrade/Downgrade Trend
+    # Mehr Upgrades = Analysten erhöhen Erwartungen
+    # = Management liefert positive Signale
     guidance_trend = 5.0
+    try:
+        grades = data.get("analyst_grades", [])
+        if grades and len(grades) > 0:
+            upgrades = sum(
+                1 for g in grades
+                if str(g.get("newGrade", "")).lower()
+                in ["strong buy", "buy", "outperform",
+                    "overweight", "accumulate"]
+                and str(g.get("previousGrade", "")).lower()
+                not in ["strong buy", "buy", "outperform",
+                        "overweight", "accumulate"]
+            )
+            downgrades = sum(
+                1 for g in grades
+                if str(g.get("newGrade", "")).lower()
+                in ["sell", "underperform", "underweight",
+                    "reduce", "strong sell"]
+                and str(g.get("previousGrade", "")).lower()
+                not in ["sell", "underperform", "underweight",
+                        "reduce", "strong sell"]
+            )
+            holds = len(grades) - upgrades - downgrades
+
+            if upgrades >= 3:
+                guidance_trend = 9.0
+            elif upgrades >= 2 and downgrades == 0:
+                guidance_trend = 8.0
+            elif upgrades > downgrades:
+                guidance_trend = 7.0
+            elif downgrades > upgrades:
+                guidance_trend = 3.0
+            elif downgrades >= 2:
+                guidance_trend = 1.5
+            else:
+                guidance_trend = 5.0  # neutral
+    except Exception:
+        guidance_trend = 5.0
 
     # technical_setup — aus echten yfinance-Daten
     technical_setup = 5.0
@@ -87,8 +179,40 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
         if dist_52w is not None and dist_52w > -5.0:
             technical_setup = min(10.0, technical_setup + 1.0)  # Nahe am Hoch = Momentum
 
-    # sector_regime
+    # sector_regime: Sektor-ETF 5T-Performance
+    # als Rücken- oder Gegenwind für den Ticker
     sector_regime = 5.0
+    try:
+        sector_ranking = data.get("sector_ranking", [])
+        ticker_sector = data.get("ticker_sector", "")
+        sector_etf = _SECTOR_TO_ETF.get(ticker_sector)
+
+        if sector_etf and sector_ranking:
+            # Suche den Sektor-ETF in der Ranking-Liste
+            sector_entry = next(
+                (s for s in sector_ranking
+                 if s.get("symbol") == sector_etf),
+                None
+            )
+            if sector_entry:
+                perf_5d = sector_entry.get("perf_5d", 0.0)
+                # Sektor-Performance → Rückenwind/Gegenwind
+                if perf_5d >= 3.0:
+                    sector_regime = 9.0   # starker Rückenwind
+                elif perf_5d >= 1.5:
+                    sector_regime = 7.5   # Rückenwind
+                elif perf_5d >= 0.5:
+                    sector_regime = 6.5   # leichter Rückenwind
+                elif perf_5d >= -0.5:
+                    sector_regime = 5.0   # neutral
+                elif perf_5d >= -1.5:
+                    sector_regime = 3.5   # leichter Gegenwind
+                elif perf_5d >= -3.0:
+                    sector_regime = 2.0   # Gegenwind
+                else:
+                    sector_regime = 1.0   # starker Gegenwind
+    except Exception:
+        sector_regime = 5.0
 
     # short_squeeze_potential
     ss = 0.0
@@ -125,6 +249,14 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
         ss * weights.get("short_squeeze_potential", 0) +
         ia_score * weights.get("insider_activity", 0) +
         of_score * weights.get("options_flow", 0)
+    )
+
+    logger.debug(
+        f"[{ticker}] Opp-Score {total_score:.2f} | "
+        f"whisper={whisper_delta:.1f} "
+        f"guidance={guidance_trend:.1f} "
+        f"sector={sector_regime:.1f} "
+        f"em={em:.1f} tech={technical_setup:.1f}"
     )
     
     return OpportunityScore(
@@ -195,11 +327,110 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
     assessment = getattr(ia, "assessment", "") if not isinstance(ia, dict) else ia.get("assessment", "") if ia else ""
     if assessment == "bearish": isa_score = 10.0
 
-    # guidance_deceleration
+    # guidance_deceleration: Analyst-Downgrade Druck
+    # Downgrades = Analysten sehen Risiken die der
+    # Markt noch nicht eingepreist hat
     guidance_deceleration = 5.0
+    try:
+        grades = data.get("analyst_grades", [])
+        if grades and len(grades) > 0:
+            upgrades_t = sum(
+                1 for g in grades
+                if str(g.get("newGrade", "")).lower()
+                in ["strong buy", "buy", "outperform",
+                    "overweight", "accumulate"]
+                and str(g.get("previousGrade", "")).lower()
+                not in ["strong buy", "buy", "outperform",
+                        "overweight", "accumulate"]
+            )
+            downgrades_t = sum(
+                1 for g in grades
+                if str(g.get("newGrade", "")).lower()
+                in ["sell", "underperform", "underweight",
+                    "reduce", "strong sell"]
+                and str(g.get("previousGrade", "")).lower()
+                not in ["sell", "underperform", "underweight",
+                        "reduce", "strong sell"]
+            )
 
-    # leadership_instability
+            # Torpedo: Downgrades erhöhen den Score
+            if downgrades_t >= 3:
+                guidance_deceleration = 9.0
+            elif downgrades_t >= 2 and upgrades_t == 0:
+                guidance_deceleration = 8.0
+            elif downgrades_t > upgrades_t:
+                guidance_deceleration = 7.0
+            elif upgrades_t > downgrades_t:
+                guidance_deceleration = 2.0
+            elif upgrades_t >= 2:
+                guidance_deceleration = 1.0
+            else:
+                guidance_deceleration = 5.0
+    except Exception:
+        guidance_deceleration = 5.0
+
+    # leadership_instability: Management-Unruhe
+    # news_processor.py erkennt bereits CEO/CFO-Keywords
+    # und setzt shift_type = "management".
+    # Diese Einträge liegen in news_memory.
+    # Einer der stärksten Torpedo-Signale überhaupt —
+    # CEO-Wechsel vor Earnings = massives Risiko.
     leadership_instability = 0.0
+    try:
+        news_memory = data.get("news_memory", [])
+        management_events = []
+
+        for nm in news_memory:
+            st = nm.get("shift_type", "")
+            is_shift = nm.get("is_narrative_shift", False)
+
+            # Direkter Management-Shift aus news_processor
+            if st == "management" and is_shift:
+                management_events.append(nm)
+                continue
+
+            # Zusätzlicher Text-Scan der Bullet Points
+            # falls shift_type nicht gesetzt
+            bullets = nm.get("bullet_points", [])
+            if isinstance(bullets, list):
+                text = " ".join(bullets).lower()
+            elif isinstance(bullets, str):
+                text = bullets.lower()
+            else:
+                text = ""
+
+            MGMT_KW = [
+                "ceo", "cfo", "chief executive",
+                "chief financial", "resigned", "resign",
+                "appointed", "departure", "steps down",
+                "terminated", "fired", "ousted",
+                "management change", "executive change",
+            ]
+            if any(kw in text for kw in MGMT_KW):
+                management_events.append(nm)
+
+        # Schweregrad anhand Anzahl und Sentiment
+        if len(management_events) >= 3:
+            leadership_instability = 9.0
+        elif len(management_events) == 2:
+            leadership_instability = 7.0
+        elif len(management_events) == 1:
+            # Sentiment des Events: negativ = schwerer
+            ev = management_events[0]
+            sent = ev.get("sentiment_score", 0.0)
+            if isinstance(sent, str):
+                try: sent = float(sent)
+                except: sent = 0.0
+            if sent < -0.4:
+                leadership_instability = 8.0
+            elif sent < -0.1:
+                leadership_instability = 6.0
+            else:
+                leadership_instability = 4.0  # neutral
+        else:
+            leadership_instability = 0.0
+    except Exception:
+        leadership_instability = 0.0
 
     # technical_downtrend — aus echten yfinance-Daten
     technical_downtrend = 5.0
@@ -254,6 +485,13 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
         leadership_instability * weights.get("leadership_instability", 0) +
         technical_downtrend * weights.get("technical_downtrend", 0) +
         mh * weights.get("macro_headwind", 0)
+    )
+
+    logger.debug(
+        f"[{ticker}] Torp-Score {total_score:.2f} | "
+        f"guidance_dec={guidance_deceleration:.1f} "
+        f"leadership={leadership_instability:.1f} "
+        f"vd={vd:.1f} tech={technical_downtrend:.1f}"
     )
     
     return TorpedoScore(

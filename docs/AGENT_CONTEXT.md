@@ -5,7 +5,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 5.8.0 (Watchlist: Trading-Werkzeug)
+**Version**: 5.9.0 (P1b: Scoring komplett)
 **Stand**: 2026-03-21
 
 ---
@@ -29,6 +29,31 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 - **Marktdaten**: Yahoo Finance (yfinance)
 - **News**: Finnhub (Free Tier: 60 Calls/Min)
 - **Sentiment**: FinBERT (lokal, transformers)
+
+---
+
+## Core Concepts / Scoring
+
+### Scoring — alle Faktoren live (nach P1b)
+**Opportunity-Score (9 Faktoren):**
+- `earnings_momentum`: aus EarningsHistory (beats/surprise)
+- `whisper_delta`: Proxy via avg_surprise_percent + quarters_beat
+- `valuation_regime`: P/E vs. Sektor-Median
+- `guidance_trend`: FMP analyst_grades Upgrades
+- `technical_setup`: yfinance Trend/RSI/SMA
+- `sector_regime`: Sektor-ETF 5T-Performance
+- `short_squeeze_potential`: Short Interest %
+- `insider_activity`: Finnhub Insider Assessment
+- `options_flow`: Put/Call Ratio (konträr)
+
+**Torpedo-Score (7 Faktoren):**
+- `valuation_downside`: P/S vs. Sektor-Median
+- `expectation_gap`: IV + Sentiment-Divergenz
+- `insider_selling`: Insider Assessment bearish
+- `guidance_deceleration`: FMP analyst_grades Downgrades
+- `leadership_instability`: news_memory "management" shifts
+- `technical_downtrend`: yfinance Trend/RSI/SMA
+- `macro_headwind`: VIX-Level
 
 ---
 

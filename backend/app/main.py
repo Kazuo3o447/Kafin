@@ -897,7 +897,7 @@ async def api_research_dashboard(
     from backend.app.data.fmp import (
         get_company_profile, get_key_metrics,
         get_analyst_estimates, get_earnings_history,
-        get_price_target_consensus,
+        get_price_target_consensus, get_analyst_grades,
     )
     from backend.app.data.finnhub import (
         get_short_interest, get_insider_transactions, get_company_news,
@@ -927,6 +927,7 @@ async def api_research_dashboard(
         get_options_metrics(effective_ticker),           # 11
         get_company_news(effective_ticker, month_ago, today_str),  # 12
         get_market_overview(),                           # 13 - NEW for relative strength
+        get_analyst_grades(effective_ticker),           # 14 - NEW for guidance_trend
         return_exceptions=True,
     )
 
@@ -948,6 +949,7 @@ async def api_research_dashboard(
     options    = safe(11)
     news_items = safe(12) or []
     market_ov  = safe(13)
+    analyst_grades = safe(14) or []
 
     # ── Watchlist-Status ───────────────────────────────────────
     is_watchlist = any(
@@ -1470,6 +1472,11 @@ async def api_research_dashboard(
             "web_sentiment_score": 0.0,   # Tavily nicht im Research-Endpoint
             "finbert_sentiment": 0.0,
             "sentiment_divergence": False,
+            # NEU: für guidance_trend + deceleration
+            "analyst_grades": analyst_grades or [],
+            # NEU: für sector_regime
+            "sector_ranking": market_ov.get("sector_ranking_5d", []) if market_ov else [],
+            "ticker_sector": sector or "Unknown",
         }
 
         opp_score_obj = await calculate_opportunity_score(
@@ -1613,8 +1620,11 @@ async def api_research_dashboard(
         "score_breakdown": {
             "opportunity": {
                 "earnings_momentum": round(opp_score_obj.earnings_momentum, 1),
+                "whisper_delta": round(opp_score_obj.whisper_delta, 1),
                 "valuation_regime": round(opp_score_obj.valuation_regime, 1),
+                "guidance_trend": round(opp_score_obj.guidance_trend, 1),
                 "technical_setup": round(opp_score_obj.technical_setup, 1),
+                "sector_regime": round(opp_score_obj.sector_regime, 1),
                 "short_squeeze": round(opp_score_obj.short_squeeze_potential, 1),
                 "insider_activity": round(opp_score_obj.insider_activity, 1),
                 "options_flow": round(opp_score_obj.options_flow, 1),
@@ -1623,6 +1633,8 @@ async def api_research_dashboard(
                 "valuation_downside": round(torp_score_obj.valuation_downside, 1),
                 "expectation_gap": round(torp_score_obj.expectation_gap, 1),
                 "insider_selling": round(torp_score_obj.insider_selling, 1),
+                "guidance_deceleration": round(torp_score_obj.guidance_deceleration, 1),
+                "leadership_instability": round(torp_score_obj.leadership_instability, 1),
                 "technical_downtrend": round(torp_score_obj.technical_downtrend, 1),
                 "macro_headwind": round(torp_score_obj.macro_headwind, 1),
             } if torp_score_obj else {},

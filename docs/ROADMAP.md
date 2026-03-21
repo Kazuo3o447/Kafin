@@ -24,6 +24,9 @@ Lösung:
 - Score-Breakdown als aufklappbares Detail (welcher Faktor wie?)
 - Scores werden gecacht (600s) zusammen mit research data
 
+✅ **Research Dashboard komplett überarbeitet (P1-P3)**
+   v5.7.0 / v5.7.1 / v5.7.2
+
 ### P1b — Markets Dashboard v2
 **Status: ✅ ERLEDIGT (21.03.2026)**
 Granulare Echtzeit-Marktanalyse mit individuellen Refresh-Zyklen:
@@ -41,7 +44,7 @@ Granulare Echtzeit-Marktanalyse mit individuellen Refresh-Zyklen:
 - **BlockError**: Fallback-Komponente für API-Fehler
 
 ### P1b — Hardcoded Placeholders füllen
-**Status: OFFEN** (nach P1a)
+**Status: ✅ ERLEDIGT (21.03.2026)**
 40% der Score-Gewichtung immer auf 5.0 (neutral).
 
 Felder und echte Datenquellen:

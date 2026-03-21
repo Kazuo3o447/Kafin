@@ -1,133 +1,106 @@
 # KAFIN — Umbau-Roadmap
 *Erstellt: 21. März 2026*
-*Ziel: Trading-First Architektur statt Data-First*
+*Prinzip: Trading-First statt Data-First*
 
----
-
-## Das Problem in einem Satz
-
-Kafin zeigt dir 40 Kennzahlen und erwartet dass du das
-Setup erkennst. Ein Trading-Tool sollte umgekehrt denken:
-erst das Signal, dann die Begründung, dann die Rohdaten.
+Das Problem in einem Satz: Kafin zeigt 40 Kennzahlen und
+erwartet dass der Trader das Setup erkennt. Umgekehrt wäre
+besser: Signal zuerst → Begründung → Rohdaten auf Wunsch.
 
 ---
 
 ## Phase 1 — Signal-First UX
-**Priorität: HOCH | Aufwand: ~1 Woche | Modell: SWE-1.5**
-*Höchster Trader-Mehrwert, keine Architektur-Änderungen nötig*
+**Priorität: HOCH | SWE-1.5 | ~1 Woche**
 
-### P1a — Scores im Research Dashboard
+### P1a — Scores im Research Dashboard ← ALS NÄCHSTES
 **Status: OFFEN**
-**Problem:** Opportunity- und Torpedo-Score existieren nur
-in der Watchlist, nach einem Audit-Report, für Watchlist-Ticker.
-Im Research-Dashboard — der wichtigsten Seite — gibt es keine Scores.
-**Lösung:** `api_research_dashboard` ruft `calculate_opportunity_score()` 
-und `calculate_torpedo_score()` auf. Score-Block erscheint
-ganz oben im Dashboard, VOR allen Kennzahlen.
-**Format:** Großes Ampel-Element: Opp 7.2 / Torp 3.1 / Empfehlung: SETUP
+Opportunity- und Torpedo-Score fehlen im Research-Dashboard
+komplett. Nur in der Watchlist sichtbar, nur nach Audit.
+
+Lösung:
+- `api_research_dashboard` ruft `calculate_opportunity_score()` 
+  und `calculate_torpedo_score()` auf
+- Score-Block ganz oben im Dashboard vor allen Kennzahlen
+- Format: Ampel — Opp 7.2 / Torp 3.1 / SETUP PRÜFEN
+- Score-Breakdown als aufklappbares Detail (welcher Faktor wie?)
+- Scores werden gecacht (600s) zusammen mit research data
 
 ### P1b — Hardcoded Placeholders füllen
-**Status: OFFEN**
-**Problem:** 40% der Score-Gewichtung immer neutral hardcoded.
-Betroffene Felder und Lösung:
-- `sector_regime` (10%): Aus `market_overview.py` — Sektor-Performance
-  bereits vorhanden, fließt nur nicht in Score
-- `guidance_trend` (15%): Aus FMP `/stable/analyst-estimates` —
-  EPS-Revisions-Trend der letzten 3 Monate (rauf/runter/stabil)
-- `whisper_delta` (15%): Approximation aus EPS-Konsens-Veränderung
-  zwischen letzten beiden Quartalen als Proxy
-- `leadership_instability` (10%): Aus Finnhub News-Scan auf
-  Keywords "CEO", "CFO", "resignation", "fired" in letzten 90 Tagen
+**Status: OFFEN** (nach P1a)
+40% der Score-Gewichtung immer auf 5.0 (neutral).
 
-### P1c — Unternehmenshintergrund (FMP Free)
-**Status: OFFEN**
-**Problem:** DeepSeek kennt bei einem Audit-Report nur Ticker
-und Company Name — kein Geschäftsmodell, kein CEO, keine Historie.
-**Lösung:** FMP `/stable/profile` liefert kostenlos:
-  CEO, Mitarbeiterzahl, Gründungsjahr, Land, Beschreibung (150 Wörter),
-  Website, Börse, IPO-Datum, Peers-Liste
-Diese Daten fließen in:
-  1. Research Dashboard (neuer "Unternehmen" Block)
-  2. Audit-Report Prompt (DeepSeek bekommt Kontext)
-  3. Morning Briefing (CEO-Erwähnung bei Events)
+Felder und echte Datenquellen:
+- `sector_regime` (10%): market_overview.py liefert bereits
+  11 Sektor-ETF-Performances — Sektor des Tickers vergleichen
+- `guidance_trend` (15%): FMP /stable/analyst-estimates →
+  EPS-Revision-Trend: rauf/runter/stabil letzte 3 Monate
+- `whisper_delta` (15%): Differenz EPS-Konsens aktuell vs.
+  vor 90 Tagen als Proxy (FMP estimates history)
+- `leadership_instability` (10%): Finnhub News-Keywords
+  "CEO" + "resign|fired|departure" letzte 90 Tage
+
+### P1c — Firmenhintergrund integrieren
+**Status: OFFEN** (nach P1b)
+DeepSeek kennt nur Ticker + Company Name — kein Kontext.
+FMP /stable/profile liefert kostenlos:
+  CEO, Mitarbeiter, Gründung, Land, Beschreibung, Peers
+
+Wo integrieren:
+  1. Research Dashboard — neuer "Unternehmen" Block
+  2. audit_report.md Prompt — Kontext-Sektion für DeepSeek
+  3. Morning Briefing — CEO bei relevanten Events
 
 ---
 
 ## Phase 2 — Datenfundament stärken
-**Priorität: MITTEL | Aufwand: ~1 Woche | Modell: SWE-1.5**
+**Priorität: MITTEL | SWE-1.5 | ~1 Woche** (nach Phase 1)
 
-### P2a — Gemeinsames Datenkontext-Objekt
-**Status: OFFEN**
-**Problem:** `report_generator.py`, `api_research_dashboard` 
-und `calculate_opportunity_score` holen teilweise dieselben
-Daten unabhängig voneinander. Abweichungen möglich.
-**Lösung:** `TickerContext` Dataclass — wird einmal befüllt,
-an alle Module übergeben. Kein doppeltes yfinance-fetching.
+### P2a — TickerContext Dataclass
+report_generator.py, api_research_dashboard und scoring.py
+holen teils dieselben Daten unabhängig. Gemeinsames Objekt
+einmal befüllen, überall übergeben. Kein Doppel-fetching.
 
 ### P2b — Earnings-Historie Fallback
-**Status: OFFEN**
-**Problem:** FMP liefert Surprise-Historie für Mid-Caps oft nicht.
-yfinance `ticker.earnings_history` ist verfügbar aber ungenutzt.
-**Lösung:** Fallback-Kette: FMP → yfinance earnings_history
+FMP Mid-Cap Lücken → yfinance `ticker.earnings_history` 
+als Fallback implementieren.
 
-### P2c — FinBERT Optimierung
-**Status: OFFEN**
-**Problem:** FinBERT läuft nur für Watchlist-Ticker, sequenziell,
-ohne Sektor-Kontext. Batch-Processing würde 5x beschleunigen.
-**Details:** Siehe FUTURE.md → FinBERT Optimization
+### P2c — FinBERT Batch-Optimierung
+Aktuell: sequenziell, nur Watchlist.
+Ziel: asyncio.gather in Chunks, 5x schneller.
+Details: docs/FUTURE.md
 
 ---
 
 ## Phase 3 — Architektur bereinigen
-**Priorität: NIEDRIG (kein Trader-Mehrwert) | Aufwand: 2 Tage**
-*Erst nach Phase 1+2 angehen*
+**Priorität: NIEDRIG | kein Trader-Mehrwert** (nach Phase 1+2)
 
-### P3a — main.py aufteilen
-**Status: OFFEN**
-**Problem:** 3.124 Zeilen, 68 Endpoints in einer Datei.
-**Lösung:** Router-Dateien:
-  - `routers/data.py` → Marktdaten-Endpoints
-  - `routers/research.py` → Research-Dashboard Endpoint
-  - `routers/reports.py` → Reports, Morning, Sunday
-  - `routers/watchlist.py` → Watchlist CRUD
-  - `routers/intelligence.py` → Web, Peer, Sentiment
-  - `routers/admin.py` → Admin, Diagnostics, Logs
-**Wichtig:** Funktionalität bleibt 100% identisch.
-Nur Dateiorganisation ändert sich.
+### P3a — main.py Router-Split
+3124 Zeilen → 6 Router-Dateien:
+  routers/data.py, research.py, reports.py,
+  watchlist.py, intelligence.py, admin.py
+Reine Reorganisation, keine Logikänderung.
 
 ---
 
-## Nicht-Ziele (bewusst ausgeschlossen)
+## Nicht-Ziele
 
-- ❌ Kompletter Neubau — zu viel Aufwand, gleiche Ergebnisse
-- ❌ Multi-User-System — Hobby-Projekt, ein Nutzer
-- ❌ Level II Orderbook — keine kostenlose API verfügbar
-- ❌ Intraday-Trading-Modus — Kafin ist für Swing-Trades/Earnings
-- ❌ Eigene Backtesting-Engine — zu komplex für den Mehrwert
-
----
-
-## Bekannte Grenzen (API-Plan bedingt)
-
-- FMP Free: 250 Calls/Tag → Batch-Processing muss sparsam sein
-- Finnhub Free: Kein Short Interest (nur yfinance Fallback)
-- yfinance: PEG Ratio seit Juni 2025 kaputt (FMP als Primärquelle)
-- Europäische Ticker: Deutlich weniger Daten als US-Ticker
+- ❌ Neubau — Umbau liefert gleichwertiges Ergebnis
+- ❌ Multi-User — Hobby-Projekt, ein Nutzer
+- ❌ Level II Orderbook — keine kostenlose API
+- ❌ Intraday-Modus — Kafka ist Swing-Trade/Earnings-Tool
+- ❌ Eigene Backtesting-Engine
 
 ---
 
-## Abgeschlossene Meilensteine
+## Abgeschlossene Meilensteine (v5.x)
 
-- ✅ Research Dashboard /research/[ticker] (März 2026)
-- ✅ Ticker Resolver für internationale Titel (März 2026)
-- ✅ ATR, MACD, OBV, RVOL, SMA20 Indikatoren (März 2026)
-- ✅ 52W Range Bar, Volume Profile, PEG Gauge (März 2026)
-- ✅ Sentiment Divergenz Alerts (März 2026)
-- ✅ Peer Earnings Monitor (März 2026)
-- ✅ Smart Money: Put/Call Ratio Volumen (März 2026)
-- ✅ Watchlist Performance: 127s → 2.3s (März 2026)
+Vollständige Liste: STATUS.md und CHANGELOG.md
 
----
+Highlights:
+- ✅ Research Dashboard (5.3.0-5.3.2)
+- ✅ Ticker Resolver (5.3.3)
+- ✅ Extended Indicators ATR/MACD/OBV/RVOL (5.3.4-5.3.5)
+- ✅ Trading Visualizations (5.3.6)
+- ✅ Smart Money P/C + Yield Curve (5.3.9)
+- ✅ Watchlist 55x Performance (5.3.10)
 
 *Nächste Review: Nach Abschluss Phase 1*
-*Verantwortlich: Ruben (Projektinhaber)*

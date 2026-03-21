@@ -556,6 +556,54 @@ async def get_intermarket_signals() -> dict:
         else:
             signals["credit_signal"] = "neutral"
 
+    # ── Energie-Stress-Signal ────────────────────────────────
+    # USO = Oil ETF (WTI Proxy). Starker Anstieg = Inflationsdruck
+    # Historisch: Öl +>20% in einem Monat → negativ für breite Märkte
+    uso = data.get("USO", {})
+    uso_1m = uso.get("change_1m")
+    uso_1w = uso.get("change_1w")
+
+    if uso_1m is not None:
+        if uso_1m > 20:
+            signals["energy_stress"] = "schock"
+            signals["energy_note"] = (
+                f"USO +{uso_1m:.1f}% (1M) — Energie-Schock. "
+                f"Historisch negativ für breite Märkte. "
+                f"Inflationsdruck erhöht. Fed kann nicht senken."
+            )
+        elif uso_1m > 10:
+            signals["energy_stress"] = "erhöht"
+            signals["energy_note"] = (
+                f"USO +{uso_1m:.1f}% (1M) — Energie erhöht. "
+                f"Marginaler Inflationsdruck."
+            )
+        elif uso_1m < -10:
+            signals["energy_stress"] = "entspannt"
+            signals["energy_note"] = (
+                f"USO {uso_1m:.1f}% (1M) — Energie fällt. "
+                f"Disinflationär, positiv für Margen."
+            )
+        else:
+            signals["energy_stress"] = "neutral"
+            signals["energy_note"] = f"USO {uso_1m:.1f}% (1M) — Energie neutral."
+
+    # Stagflations-Warnung: Energie steigt + Markt fällt
+    spy = data.get("SPY", {})
+    if (
+        uso_1m is not None
+        and spy.get("change_1m") is not None
+        and uso_1m > 15
+        and spy["change_1m"] < -3
+    ):
+        signals["stagflation_warning"] = True
+        signals["stagflation_note"] = (
+            f"STAGFLATIONS-MUSTER: Öl +{uso_1m:.1f}% aber "
+            f"S&P {spy['change_1m']:.1f}% (1M). "
+            f"Erhöhtes Risiko für anhaltenden Abschwung."
+        )
+    else:
+        signals["stagflation_warning"] = False
+
     result = {"assets": data, "signals": signals}
     cache_set(cache_key, result, ttl_seconds=600)
     return result

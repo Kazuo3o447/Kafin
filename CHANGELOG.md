@@ -41,6 +41,27 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 - **api.ts**: getMarketNewsSentiment(), getEconomicCalendar() hinzugefügt
 - **Error Handling**: Alle fetch-Funktionen setzen undefined bei Fehlern
 
+## [5.6.3] - 2026-03-21 - Energie-Signal + DeepSeek Kontext-Anreicherung
+
+### 🚀 Trading-Mehrwert
+- **Energie-Stress-Signal**: USO 1M-Performance → neutral / erhöht / schock / entspannt mit Erklärungstext
+- **Stagflations-Warnung**: wenn Öl stark steigt UND S&P fällt gleichzeitig — explizite Warnung mit Konsequenz
+- **Energie-Block in Signale**: sichtbar im Cross-Asset Block neben Risk-Appetite, VIX, Credit
+- **DeepSeek erhält jetzt**:
+  - Energie-Kontext mit Transmission-Kette
+  - FinBERT News-Sentiment kategorisiert (Fed, Makro, Geo)
+  - Top-5 Schlagzeilen mit Sentiment-Score
+  - Rotations-Story (Defensiv vs. Offensiv Gap)
+  - Stagflations-Warnung wenn aktiv
+
+### 🔧 Backend
+- market_overview.py: energy_stress + stagflation_warning in get_intermarket_signals()
+- main.py: api_market_audit lädt News-Sentiment parallel, baut energie_block + news_lines für DeepSeek-Prompt
+
+### 💡 Trading-Logik
+- Energie-Schock (USO >+20% 1M) historisch negativ für breite Märkte — Inflationsdruck verhindert Fed-Pivot
+- Stagflations-Muster: Öl stark steigt + S&P fällt = doppelter Druck auf Wachstumstitel
+
 ## [5.6.2] - 2026-03-21 - Economic Calendar auf manuelles Refresh umgestellt
 
 ### 🔧 Änderungen

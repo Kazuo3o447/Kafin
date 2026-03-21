@@ -68,7 +68,17 @@ type IntermarketAsset = {
 
 type IntermarketData = {
   assets: Record<string, IntermarketAsset>;
-  signals: Record<string, string>;
+  signals: {
+    risk_appetite?: string;
+    vix_structure?: string;
+    vix_note?: string;
+    credit_signal?: string;
+    credit_note?: string;
+    energy_stress?: string;
+    energy_note?: string;
+    stagflation_warning?: boolean;
+    stagflation_note?: string;
+  };
 };
 
 type MacroSnapshot = {
@@ -758,6 +768,46 @@ function CrossAssetBlock({ data, timestamp }: { data?: IntermarketData; timestam
                   <span className="font-semibold text-[var(--text-primary)] text-sm">
                     VIX: {signals.vix_structure.toUpperCase()}
                   </span>
+                </div>
+              </div>
+            )}
+            
+            {/* Energie-Signal */}
+            {signals.energy_stress && (
+              <div className={`rounded-lg px-3 py-2 border ${
+                signals.energy_stress === "schock"
+                  ? "bg-red-900/30 border-red-700/50"
+                  : signals.energy_stress === "erhöht"
+                  ? "bg-amber-900/30 border-amber-700/50"
+                  : signals.energy_stress === "entspannt"
+                  ? "bg-green-900/30 border-green-700/50"
+                  : "bg-[var(--bg-tertiary)] border-[var(--border)]"
+              }`}>
+                <div className={`text-xs font-semibold mb-0.5 ${
+                  signals.energy_stress === "schock" ? "text-red-400" :
+                  signals.energy_stress === "erhöht" ? "text-amber-400" :
+                  signals.energy_stress === "entspannt" ? "text-green-400" :
+                  "text-[var(--text-muted)]"
+                }`}>
+                  Energie: {signals.energy_stress.toUpperCase()}
+                </div>
+                {signals.energy_note && (
+                  <div className="text-[10px] text-[var(--text-secondary)]">
+                    {signals.energy_note}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Stagflations-Warnung — nur wenn aktiv */}
+            {signals.stagflation_warning && (
+              <div className="rounded-lg px-3 py-2 border
+                              bg-red-900/40 border-red-600/60 mt-2">
+                <div className="text-xs font-bold text-red-400 mb-0.5">
+                  ⚡ Stagflations-Warnung
+                </div>
+                <div className="text-[10px] text-red-300">
+                  {signals.stagflation_note}
                 </div>
               </div>
             )}

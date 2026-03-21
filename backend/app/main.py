@@ -2826,16 +2826,17 @@ async def api_market_audit():
     logger.info("API Call: market-audit")
     import asyncio
     from backend.app.data.market_overview import (
-        get_market_overview, get_market_breadth, get_intermarket_signals
+        get_market_overview, get_market_breadth, get_intermarket_signals, get_market_news_for_sentiment
     )
     from backend.app.data.fred import get_macro_snapshot
     from backend.app.analysis.deepseek import call_deepseek
 
-    overview, breadth, intermarket, macro = await asyncio.gather(
+    overview, breadth, intermarket, macro, news_sentiment = await asyncio.gather(
         get_market_overview(),
         get_market_breadth(),
         get_intermarket_signals(),
         get_macro_snapshot(),
+        get_market_news_for_sentiment(),
         return_exceptions=True,
     )
 
@@ -2846,6 +2847,7 @@ async def api_market_audit():
     breadth = safe(breadth, {})
     intermarket = safe(intermarket, {})
     macro = safe(macro)
+    news_sentiment = safe(news_sentiment, {})
 
     # Daten für DeepSeek aufbereiten
     indices = overview.get("indices", {})
@@ -2881,6 +2883,50 @@ async def api_market_audit():
         if not k.endswith("_note"):
             note = signals.get(f"{k}_note", "")
             signal_lines.append(f"{k}: {v}" + (f" — {note}" if note else ""))
+
+    # Energie-Kontext explizit
+    energy_stress = signals.get("energy_stress", "neutral")
+    energy_note = signals.get("energy_note", "")
+    stagflation = signals.get("stagflation_warning", False)
+    stagflation_note = signals.get("stagflation_note", "")
+
+    energy_block = f"""ENERGIE-SIGNAL: {energy_stress.upper()}
+{energy_note}"""
+
+    if stagflation:
+        energy_block += f"""
+
+⚡ STAGFLATIONS-WARNUNG AKTIV:
+{stagflation_note}
+Konsequenz: Fed kann trotz Schwäche nicht senken.
+Wachstumstitel unter doppeltem Druck (Bewertung + Zinsen)."""
+
+    # News-Sentiment für DeepSeek
+    cat_sent = news_sentiment.get("category_sentiment", {})
+    news_lines = []
+    for cat, sent in cat_sent.items():
+        label = sent.get("label", "neutral")
+        score = sent.get("score", 0.0)
+        count = sent.get("count", 0)
+        cat_label = {
+            "fed_rates": "Fed/Zinsen",
+            "macro_data": "Makro-Daten",
+            "geopolitics": "Geopolitik",
+            "market_general": "Allgemein",
+        }.get(cat, cat)
+        news_lines.append(
+            f"{cat_label}: {label} ({score:+.2f}, {count} Artikel)"
+        )
+
+    # Top-Schlagzeilen mit stärkstem Sentiment
+    top_headlines = news_sentiment.get("headlines", [])[:5]
+    headline_lines = []
+    for h in top_headlines:
+        score = h.get("sentiment_score", 0.0)
+        headline_lines.append(
+            f"  [{score:+.2f}] {h.get('headline', '')} "
+            f"({h.get('source', '')})"
+        )
 
     macro_text = (
         f"Fed Rate: {getattr(macro, 'fed_rate', '?')}% | "
@@ -2920,6 +2966,20 @@ CROSS-ASSET SIGNALE:
 MAKRO:
 {macro_text}
 
+ENERGIE & ROHSTOFFE:
+{energy_block}
+
+ROTATIONS-MUSTER:
+{overview.get('rotation_story', 'Kein klares Rotationsmuster')}
+Defensiv (XLU/XLV/XLP) Ø {overview.get('defensive_avg_5d', 0):+.1f}%
+vs. Offensiv (XLK/XLC/XLY) Ø {overview.get('offensive_avg_5d', 0):+.1f}%
+
+NEWS-SENTIMENT (FinBERT, letzte 24h):
+{chr(10).join(news_lines) if news_lines else "Keine News-Daten"}
+
+TOP SCHLAGZEILEN (stärkstes Sentiment):
+{chr(10).join(headline_lines) if headline_lines else "Keine Headlines"}
+
 DEINE AUFGABE:
 1. REGIME: Welches Marktregime herrscht gerade? (Risk-On / Mixed / Risk-Off)
    Begründe mit konkreten Zahlen.
@@ -2932,7 +2992,13 @@ DEINE AUFGABE:
    Earnings-Trader mit Einzelaktien-Fokus?
    - Beta erhöhen oder reduzieren?
    - Welche Sektoren meiden, welche bevorzugen?
-   - Ist jetzt ein guter Zeitpunkt für neue Positionen?"""
+   - Ist jetzt ein guter Zeitpunkt für neue Positionen?
+6. ENERGIE & GEOPOLITIK: Wenn Energie-Schock aktiv:
+   Erkläre die Transmission (Öl → Inflation → Fed →
+   Zinsen → Markt). Welche Sektoren leiden,
+   welche profitieren? Was bedeutet das für
+   einen Earnings-Trader der nächste Woche
+   Quartalszahlen erwartet?"""
 
     try:
         report = await call_deepseek(

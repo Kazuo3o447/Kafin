@@ -41,6 +41,13 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 - **api.ts**: getMarketNewsSentiment(), getEconomicCalendar() hinzugefügt
 - **Error Handling**: Alle fetch-Funktionen setzen undefined bei Fehlern
 
+## [5.6.2] - 2026-03-21 - Economic Calendar auf manuelles Refresh umgestellt
+
+### 🔧 Änderungen
+- **Wirtschaftskalender**: Jetzt manuelles Refresh statt 30min Auto-Refresh
+- Refresh-Button im Block-Header für On-Demand-Aktualisierung
+- Reduziert unnötige API-Calls (Events ändern sich nicht häufig)
+
 ## [5.6.1] - 2026-03-21 - Markets Dashboard Lücken geschlossen
 
 ### 🐛 Fixes & Verbesserungen

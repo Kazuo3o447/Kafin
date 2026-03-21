@@ -873,7 +873,7 @@ function NewsSentimentBlock({ data, timestamp }: { data?: NewsSentimentData; tim
 }
 
 // Block 7: Economic Calendar
-function EconomicCalendarBlock({ data, timestamp }: { data?: EconomicCalendar; timestamp?: string }) {
+function EconomicCalendarBlock({ data, timestamp, onRefresh, loading }: { data?: EconomicCalendar; timestamp?: string; onRefresh?: () => void; loading?: boolean }) {
   if (!data?.events) return <BlockError title="Wirtschaftskalender" />;
   
   const getImpactColor = (impact: string) => {
@@ -886,21 +886,31 @@ function EconomicCalendarBlock({ data, timestamp }: { data?: EconomicCalendar; t
   
   return (
     <div className="card p-6">
-      <BlockHeaderBadge block="Block 7" cadence="30min Refresh" />
+      <BlockHeaderBadge block="Block 7" cadence="Manual / On-demand" />
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
           <Timer size={18} />
           Wirtschaftskalender (48h)
         </h3>
-        {timestamp && (
-          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-            <Clock size={12} />
-            <span>{getTimeDelta(timestamp)}</span>
-            {isStale(timestamp, 1800) && (
-              <span className="text-amber-500">⚠️ Stale</span>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {timestamp && (
+            <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+              <Clock size={12} />
+              <span>{getTimeDelta(timestamp)}</span>
+            </div>
+          )}
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={loading}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+              title="Kalender aktualisieren"
+            >
+              <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
+              {loading ? "Lade..." : "Aktualisieren"}
+            </button>
+          )}
+        </div>
       </div>
       
       {data.events.length === 0 ? (
@@ -1193,7 +1203,7 @@ export default function MarketsPage() {
     }
   }, []);
   
-  // Initial fetch with Promise.allSettled
+  // Initial fetch with Promise.allSettled - Economic Calendar only on initial load
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -1242,11 +1252,10 @@ export default function MarketsPage() {
     // 5min: Market Breadth
     const interval300 = setInterval(fetchMarketBreadth, 300000);
     
-    // 30min: Macro Dashboard, Economic Calendar
+    // 30min: Macro Dashboard only (Economic Calendar now manual)
     const interval1800 = setInterval(() => {
       Promise.allSettled([
         fetchMacroDashboard(),
-        fetchEconomicCalendar(),
       ]);
     }, 1800000);
     
@@ -1363,7 +1372,9 @@ export default function MarketsPage() {
         {/* Block 7: Economic Calendar */}
         <EconomicCalendarBlock 
           data={economicCalendar} 
-          timestamp={economicCalendar ? new Date().toISOString() : undefined} 
+          timestamp={economicCalendar ? new Date().toISOString() : undefined}
+          onRefresh={fetchEconomicCalendar}
+          loading={loading}
         />
         
         {/* Block 8: Market Audit */}

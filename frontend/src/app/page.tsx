@@ -357,11 +357,11 @@ function WatchlistHeatmap({ items, sparklines, concentrationWarning }: {
         </div>
       )}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {items.slice(0, 9).map((item) => {
+        {items.slice(0, 9).map((item, idx) => {
           const sparklineData = sparklines[item.ticker] || [];
           return (
             <div
-              key={item.ticker}
+              key={`${item.ticker}-${idx}`}
               className={`min-h-0 overflow-hidden rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg ${heatmapCardBackground(item)}`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -471,8 +471,8 @@ function OpportunitiesSection({ opportunities, onAdd }: { opportunities: Opportu
         </div>
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        {opportunities.slice(0, 5).map((item) => (
-          <div key={item.ticker} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-tertiary)] p-4">
+        {opportunities.slice(0, 5).map((item, idx) => (
+          <div key={`${item.ticker}-${idx}`} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-tertiary)] p-4">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">{item.sector || "Unknown"}</p>

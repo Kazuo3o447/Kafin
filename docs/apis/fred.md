@@ -7,7 +7,13 @@ Docs: https://fred.stlouisfed.org/docs/api/fred/
 Kostenlos, API-Key erforderlich: https://fred.stlouisfed.org/docs/api/api_key.html
 
 ## Konfiguration
-- FRED_API_KEY: b1ebff9d70c86afe6611df19acb06484
+- FRED_API_KEY: aus `.env` oder den Container-Umgebungsvariablen laden
+
+## Fehlerverhalten
+
+- Bei temporären FRED-5xx-Fehlern versucht das Backend den Request bis zu 3x erneut.
+- Log-Ausgaben redigieren den `api_key`-Parameter, damit keine Secrets im Log landen.
+- Wenn FRED danach weiterhin fehlschlägt, liefert der Macro-Snapshot `None`-Werte für die betroffene Serie und das System läuft weiter.
 
 ## Genutzter Endpoint
 

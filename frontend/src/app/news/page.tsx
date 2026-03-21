@@ -235,8 +235,8 @@ export default function NewsPage() {
                          text-[var(--text-primary)] outline-none"
             >
               <option value="">Alle</option>
-              {watchlist.map((w: any) => (
-                <option key={w.ticker} value={w.ticker}>{w.ticker}</option>
+              {watchlist.map((w: any, idx: number) => (
+                <option key={`${w.ticker}-${idx}`} value={w.ticker}>{w.ticker}</option>
               ))}
             </select>
           </div>

@@ -880,7 +880,7 @@ export default function WatchlistPage() {
             </tr>
           </thead>
           <tbody>
-            {processedList.map((item) => {
+            {processedList.map((item, idx) => {
               // Zeilen-Hintergrund
               const rowBg =
                 (item.torpedo_score != null && item.torpedo_score >= 7)
@@ -910,7 +910,7 @@ export default function WatchlistPage() {
                 : "#639922";
 
               return (
-                <tr key={item.ticker}
+                <tr key={`${item.ticker}-${idx}`}
                     className={`border-b border-[var(--border)] ${rowBg}`}>
 
                   {/* Ticker */}

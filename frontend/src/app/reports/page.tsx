@@ -217,8 +217,8 @@ export default function ReportsPage() {
                 className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none shadow-sm"
               >
                 <option value="">Ticker wählen...</option>
-                {watchlist.map((item) => (
-                  <option key={item.ticker} value={item.ticker}>
+                {watchlist.map((item, idx) => (
+                  <option key={`${item.ticker}-${idx}`} value={item.ticker}>
                     {item.ticker}
                   </option>
                 ))}

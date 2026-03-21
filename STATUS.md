@@ -2,6 +2,38 @@
 
 Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Web-Dashboard).
 
+## 🧭 Agenten-Schnellübersicht
+- **Frontend**: Next.js 16, App Router, Tailwind v4, globale UI-Komponenten im Root-Layout
+- **Backend**: FastAPI + structlog, Datei-Logging nach `logs/kafin.log` und In-Memory-Buffer für Live-Logs
+- **Docker**: `kafin-frontend`, `kafin-backend`, `kafin-redis`, `kafin-n8n` auf `kafin-net`
+- **Diagnostics**: `/api/diagnostics/full` und `/api/diagnostics/db` laufen jetzt über eigene Next.js-Route-Handler
+- **Report Routes**: `/api/reports/generate/[ticker]`, `/api/reports/generate-morning`, `/api/reports/generate-sunday` haben eigene Frontend-Handler mit Timeout/Fallback
+- **Log Viewer**: `Ignore`-Filter zeigt erwartete yfinance-404s separat an
+- **FRED**: 5xx-Retries, API-Key-Redaktion und graceful degradation sind implementiert
+
+## 🔑 Wichtige Einstiegspunkte für Agents
+- `frontend/src/app/layout.tsx`: globaler `LogViewer` und App-Shell
+- `frontend/src/app/status/page.tsx`: Live-Statusseite für Systemdiagnosen
+- `frontend/src/app/settings/page.tsx`: Systemcheck, DB-Status, Telegram/n8n und Diagnose-Auswertung
+- `frontend/src/app/api/diagnostics/full/route.ts`: Frontend-Proxy für die vollständigen Systemdiagnosen
+- `frontend/src/app/api/diagnostics/db/route.ts`: Frontend-Proxy für DB-Diagnosen
+- `frontend/src/app/api/reports/generate/[ticker]/route.ts`: Report-Generierung mit Timeout-Handling
+- `frontend/src/app/api/reports/generate-morning/route.ts`: Morning-Briefing-Proxy mit Timeout-Handling
+- `frontend/src/app/api/reports/generate-sunday/route.ts`: Sunday-Report-Proxy mit Timeout-Handling
+- `frontend/src/components/LogViewer.tsx`: Log-Filter, Suche, Export und Ignore-Kategorie
+- `backend/app/main.py`: API-Router, Log-Endpunkte, Diagnostics und System-Integrationen
+- `backend/app/logger.py`: zentrale Log-Konfiguration, Datei-Logging und Ignore-Klassifizierung
+- `backend/app/data/fred.py`: FRED-Fetching mit Retry, Redaction und Fallbacks
+
+## 📌 Hinweis zur Struktur
+- Die folgenden Meilensteine sind thematisch sortiert; die aktuellsten Ergänzungen stehen oben.
+
+## 🔄 Letzte Ergänzungen (21. März 2026)
+- **FRED-Härtung**: 5xx-Retries + API-Key-Redaktion im Backend
+- **Diagnostics-Fix**: `/api/diagnostics/full` und `/api/diagnostics/db` laufen über eigene Next.js-Route-Handler statt Rewrite-Proxy
+- **Log Viewer**: `Ignore`-Filter ist im Frontend sichtbar und zeigt erwartete yfinance-404s separat
+- **Status-Seite**: Diagnose-Responses sind wieder stabil und produzieren keine Proxy-Fehler mehr im Frontend-Container
+
 ## ✅ Abgeschlossene Meilensteine
 
 ### 1. Supabase & Datenbank
@@ -258,6 +290,30 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 **Lösung:** Nicht erforderlich - dies ist normales Systemverhalten
 **Monitoring:** Fehler sind normal und erfordern keine Aktion
 
+### FRED 5xx Errors (Transient / Now Härtung im Backend)
+**Symptom:** Temporäre `500 Internal Server Error`-Antworten von `api.stlouisfed.org` beim Abruf von Makro-Serien (z.B. `BAMLH0A0HYM2`).
+
+**Ursache:** Upstream-Instabilität bei FRED oder ein kurzfristig fehlerhafter Request. Das ist kein Frontend-Problem.
+
+**System Verhalten:**
+- ✅ Backend versucht FRED-Requests jetzt bis zu 3x erneut
+- ✅ `api_key` wird in FRED-Logs redigiert
+- ✅ Wenn FRED weiter fehlschlägt, läuft der Macro-Snapshot mit `None`-Werten für die betroffene Serie weiter
+
+**Monitoring:** Falls die Fehler gehäuft auftreten, FRED-Status/Rate-Limit prüfen; ansonsten ist das ein transienter Upstream-Fehler
+
+### Diagnostics Proxy Errors (Frontend)
+**Symptom:** Next.js-Container loggt `Failed to proxy http://kafin-backend:8000/api/diagnostics/full` sowie `ENOTFOUND` / `ECONNREFUSED`.
+
+**Ursache:** Die Status-/Settings-Seiten riefen `GET /api/diagnostics/full` und `GET /api/diagnostics/db` direkt über den Rewrite-Pfad auf. Bei instabiler Backend-Erreichbarkeit erzeugte das unnötige Proxy-Fehler im Frontend-Log.
+
+**System Verhalten:**
+- ✅ Frontend besitzt jetzt eigene Route-Handler für `/api/diagnostics/full` und `/api/diagnostics/db`
+- ✅ Der Handler ruft das Backend direkt auf und liefert zusätzlich ein `details`-Alias für die Settings-Seite
+- ✅ Browser-Fehler werden in einen sauberen 502/504-Response übersetzt statt Proxy-Noise im Container-Log zu erzeugen
+
+**Monitoring:** Status-/Settings-Diagnosen sollten jetzt ohne Proxy-Fehler im `kafin-frontend`-Log laufen
+
 ### Watchlist Performance Optimizations + UX Enhancement
 - **Reloads eliminiert**: Keine API-Calls mehr bei Watchlist-CRUD-Operationen
   - **Ticker hinzufügen/entfernen**: Sofort im State sichtbar (Optimistic Updates)
@@ -273,6 +329,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
   - **Slide-Up Overlay**: 40vh Höhe, reißt nicht aus dem Workflow
   - **Auto-Polling**: Nur wenn geöffnet, spart CPU/Ressourcen
   - **Features**: Suchen, Filtern (Error/Warning/Info), Export, Clear
+- **Ignore-Filter**: Erwartbare yfinance-404s sind im LogViewer über den Level-Filter `Ignore` separat sichtbar
 - **Backend**: Clear-Log Bug fix mit safe file truncate
 - **Code**: `/terminal` Route entfernt, TypeScript sauber kompiliert
 - **UX**: Dezent statt aufdringlich — bleibt im Hintergrund verfügbar

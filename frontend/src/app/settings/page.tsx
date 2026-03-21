@@ -90,7 +90,7 @@ export default function SettingsPage() {
       const latency = endTime - startTime;
       
       // Füge Latenz zu jedem Service hinzu
-      const resultsWithLatency = { ...result.details };
+      const resultsWithLatency = { ...(result.details || result.services || {}) };
       Object.keys(resultsWithLatency).forEach(key => {
         if (resultsWithLatency[key]) {
           resultsWithLatency[key] = {

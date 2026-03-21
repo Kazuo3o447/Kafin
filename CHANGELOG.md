@@ -2,6 +2,27 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.10.4] - 2026-03-21 - Diagnostics Proxy Fix for Frontend
+
+### 🐛 Fixes
+- **Status Page**: `GET /api/diagnostics/full` läuft jetzt über eigene Next.js-Route statt Rewrite-Proxy
+- **Settings Page**: `GET /api/diagnostics/db` läuft ebenfalls über eine eigene Route
+- **Log Noise**: `Failed to proxy` / `ENOTFOUND` / `ECONNREFUSED` im `kafin-frontend`-Log für Diagnostics sollten damit verschwinden
+
+### 🔧 Frontend
+- **Route Handlers**: Diagnostics-Requests werden mit Timeout und sauberem 502/504-Fallback behandelt
+- **Compatibility**: `details`-Alias ergänzt, damit die Settings-Seite die Diagnose-Daten weiterverarbeiten kann
+
+## [5.10.3] - 2026-03-21 - FRED Robustness & Secret Redaction
+
+### 🐛 Fixes
+- **FRED Retry**: Temporäre `5xx`-Antworten von FRED werden bis zu 3x mit Backoff erneut versucht
+- **Log-Sicherheit**: `api_key`-Parameter wird aus FRED-Request-Logs redigiert
+- **Graceful Degradation**: Wenn FRED weiter fehlschlägt, läuft der Macro-Snapshot mit `None`-Werten weiter
+
+### 📝 Doku
+- **FRED API Docs**: Hartkodierten API-Key entfernt und Fehlerverhalten dokumentiert
+
 ## [5.10.2] - 2026-03-21 - Ignore-Filter für erwartbare yfinance-404s
 
 ### 🐛 Fixes

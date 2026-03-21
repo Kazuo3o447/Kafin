@@ -197,6 +197,43 @@ async def get_market_overview() -> dict:
         for s, d in sorted_sectors
     ]
 
+    # Rotations-Story automatisch berechnen
+    DEFENSIVE_SECTORS = {"XLU", "XLV", "XLP"}
+    OFFENSIVE_SECTORS = {"XLK", "XLC", "XLY"}
+
+    defensive_avg = 0.0
+    offensive_avg = 0.0
+    def_count = off_count = 0
+
+    for item in result["sector_ranking_5d"]:
+        sym = item["symbol"]
+        perf = item.get("perf_5d", 0)
+        if sym in DEFENSIVE_SECTORS:
+            defensive_avg += perf
+            def_count += 1
+        elif sym in OFFENSIVE_SECTORS:
+            offensive_avg += perf
+            off_count += 1
+
+    if def_count: defensive_avg /= def_count
+    if off_count: offensive_avg /= off_count
+
+    gap = defensive_avg - offensive_avg
+    if gap > 2.0:
+        story = "Defensive Rotation — Geld fließt von Growth nach Defensiv (Risk-Off)"
+        story_signal = "risk_off"
+    elif gap < -2.0:
+        story = "Offensive Rotation — Growth und Zykliker führen (Risk-On)"
+        story_signal = "risk_on"
+    else:
+        story = "Neutrale Rotation — kein klares Muster"
+        story_signal = "neutral"
+
+    result["rotation_story"] = story
+    result["rotation_signal"] = story_signal
+    result["defensive_avg_5d"] = round(defensive_avg, 2)
+    result["offensive_avg_5d"] = round(offensive_avg, 2)
+
     # Makro-Proxys
     for symbol, name in MACRO_TICKERS.items():
         data = _analyze_ticker(symbol)

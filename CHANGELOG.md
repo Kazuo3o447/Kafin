@@ -41,6 +41,20 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 - **api.ts**: getMarketNewsSentiment(), getEconomicCalendar() hinzugefügt
 - **Error Handling**: Alle fetch-Funktionen setzen undefined bei Fehlern
 
+## [5.6.1] - 2026-03-21 - Markets Dashboard Lücken geschlossen
+
+### 🐛 Fixes & Verbesserungen
+- **Indizes**: 5T% und 20T% Performance jetzt sichtbar
+- **VIX Detail Block**: Term Structure (Contango/Backwardation), VIX3M, 1W-Änderung, Einordnung (Panik/Stress/Normal/Euphorie)
+- **Sektoren**: ETF-Name unter Symbol (XLK "Technology"), automatische Rotations-Story ("Defensive Rotation — Risk-Off")
+- **Marktbreite**: 5T-Delta vorbereitet (zeigt wenn History verfügbar)
+- **News Fallback**: Informativer Text mit Erklärung + Tipp
+- **Cross-Asset**: 1W% Spalte ergänzt
+
+### 🔧 Backend
+- market_overview.py: rotation_story + rotation_signal berechnet
+- Defensive vs. Offensive Sektor-Gap als Signal
+
 ## [5.5.2] - 2026-03-21 - P1b: Markets Dashboard Info-Seite & Container-Fix
 ### UI-Verbesserungen
 - **Info-Unterseite** erstellt: `/markets/info` mit vollständiger Dashboard-Dokumentation

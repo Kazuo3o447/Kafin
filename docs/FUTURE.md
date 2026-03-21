@@ -21,6 +21,13 @@ Wird bei jeder Session gepflegt.
 - **Timestamp-Delta**: "vor 5 min" Anzeige mit Stale-Warnungen
 - **BlockError**: Fallback-Komponente für fehlgeschlagene API-Calls
 
+## 🟡 MARKETS: Marktbreite 5T/20T Verlauf
+Aktuell: pct_above_sma50_5d_ago = None (Placeholder).
+Lösung: Täglichen Breadth-Wert in Supabase speichern.
+Neue Tabelle: market_breadth_history (date, pct_sma50, pct_sma200).
+n8n: täglich um 22:00 speichern.
+Aufwand: ~2h, SWE-1.5.
+
 ## 🟡 FUTURE: General News Endpoint
 GET /api/news/general fehlt noch.
 Backend: `get_general_market_news()` existiert in `backend/app/data/market_overview.py`.

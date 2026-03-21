@@ -27,6 +27,7 @@ type IndexData = {
   name: string;
   price?: number;
   change_1d_pct?: number;
+  change_5d_pct?: number;
   change_1m_pct?: number;
   rsi_14?: number;
   trend?: string;
@@ -252,6 +253,28 @@ function GlobalIndicesBlock({ data, timestamp }: { data?: MarketOverview; timest
               }`}>
                 {formatPct(item.change_1d_pct)}
               </div>
+              {/* 5T + 20T Performance */}
+              <div className="flex gap-2 mt-1.5">
+                <span className={`text-[10px] font-mono ${
+                  (item.change_5d_pct ?? 0) >= 0
+                    ? "text-[var(--accent-green)]"
+                    : "text-[var(--accent-red)]"
+                }`}>
+                  5T: {item.change_5d_pct != null
+                    ? `${item.change_5d_pct >= 0 ? "+" : ""}${item.change_5d_pct.toFixed(1)}%` 
+                    : "—"}
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)]">·</span>
+                <span className={`text-[10px] font-mono ${
+                  (item.change_1m_pct ?? 0) >= 0
+                    ? "text-[var(--accent-green)]"
+                    : "text-[var(--accent-red)]"
+                }`}>
+                  20T: {item.change_1m_pct != null
+                    ? `${item.change_1m_pct >= 0 ? "+" : ""}${item.change_1m_pct.toFixed(1)}%` 
+                    : "—"}
+                </span>
+              </div>
               <div className="text-xs text-[var(--text-muted)] mt-1">
                 {item.name}
               </div>
@@ -259,6 +282,104 @@ function GlobalIndicesBlock({ data, timestamp }: { data?: MarketOverview; timest
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function VIXDetailBlock({
+  intermarket,
+  macro,
+}: {
+  intermarket?: IntermarketData;
+  macro?: MacroSnapshot;
+}) {
+  if (!macro?.vix) return null;
+
+  const vixAsset = intermarket?.assets?.["^VIX"];
+  const vix3mAsset = intermarket?.assets?.["^VIX3M"];
+  const vixStructure = intermarket?.signals?.vix_structure;
+  const vixNote = intermarket?.signals?.vix_note;
+
+  const vixVal = macro.vix;
+  const vix3mVal = vix3mAsset?.price;
+
+  // VIX-Einordnung
+  const vixLabel =
+    vixVal > 35 ? "Panik" :
+    vixVal > 25 ? "Stress" :
+    vixVal > 15 ? "Normal" :
+    "Euphorie";
+  const vixColor =
+    vixVal > 35 ? "text-[var(--accent-red)]" :
+    vixVal > 25 ? "text-amber-400" :
+    vixVal > 15 ? "text-[var(--accent-green)]" :
+    "text-[var(--accent-green)]";
+
+  // Term Structure Badge
+  const structureBadge =
+    vixStructure === "backwardation"
+      ? { label: "Backwardation — Kurzfrist-Panik", color: "bg-red-900/30 text-red-400" }
+      : vixStructure === "contango"
+      ? { label: "Contango — Markt ruhig", color: "bg-green-900/30 text-green-400" }
+      : { label: "VIX-Kurve flach", color: "bg-[var(--bg-tertiary)] text-[var(--text-muted)]" };
+
+  return (
+    <div className="card p-4 mt-4">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-semibold text-[var(--text-primary)]">
+          VIX Detail
+        </h4>
+        <span className={`text-xs px-2 py-0.5 rounded-full ${structureBadge.color}`}>
+          {structureBadge.label}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] text-center">
+          <div className="text-[10px] text-[var(--text-muted)] mb-1">VIX (30T)</div>
+          <div className={`text-xl font-bold font-mono ${vixColor}`}>
+            {vixVal.toFixed(1)}
+          </div>
+          <div className="text-[10px] text-[var(--text-muted)] mt-1">{vixLabel}</div>
+        </div>
+
+        <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] text-center">
+          <div className="text-[10px] text-[var(--text-muted)] mb-1">VIX3M (90T)</div>
+          <div className="text-xl font-bold font-mono text-[var(--text-primary)]">
+            {vix3mVal != null ? vix3mVal.toFixed(1) : "—"}
+          </div>
+          <div className="text-[10px] text-[var(--text-muted)] mt-1">90-Tage</div>
+        </div>
+
+        <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] text-center">
+          <div className="text-[10px] text-[var(--text-muted)] mb-1">1W Änderung</div>
+          <div className={`text-xl font-bold font-mono ${
+            (vixAsset?.change_1w ?? 0) > 0
+              ? "text-[var(--accent-red)]"
+              : "text-[var(--accent-green)]"
+          }`}>
+            {vixAsset?.change_1w != null
+              ? `${vixAsset.change_1w >= 0 ? "+" : ""}${vixAsset.change_1w.toFixed(1)}%` 
+              : "—"}
+          </div>
+          <div className="text-[10px] text-[var(--text-muted)] mt-1">
+            {(vixAsset?.change_1w ?? 0) > 10
+              ? "stark steigend"
+              : (vixAsset?.change_1w ?? 0) > 0
+              ? "leicht steigend"
+              : (vixAsset?.change_1w ?? 0) < -10
+              ? "stark fallend"
+              : "leicht fallend"}
+          </div>
+        </div>
+      </div>
+
+      {vixNote && (
+        <p className="text-xs text-[var(--text-secondary)] bg-[var(--bg-tertiary)]
+                      rounded px-3 py-2">
+          {vixNote}
+        </p>
+      )}
     </div>
   );
 }
@@ -296,8 +417,19 @@ function SectorRotationBlock({ data, timestamp }: { data?: MarketOverview; times
             key={sector.symbol}
             className={`p-2 rounded-lg text-center ${getSectorColor(sector.perf_5d)}`}
           >
-            <div className="text-xs font-bold">{sector.symbol}</div>
-            <div className="text-xs mt-1">{sector.perf_5d.toFixed(1)}%</div>
+            <div className="text-[10px] font-bold leading-tight">
+              {sector.symbol}
+            </div>
+            <div className="text-[9px] text-[var(--text-muted)] leading-tight">
+              {sector.name}
+            </div>
+            <div className={`text-xs font-bold mt-1 ${
+              sector.perf_5d >= 0
+                ? "text-[var(--accent-green)]"
+                : "text-[var(--accent-red)]"
+            }`}>
+              {sector.perf_5d >= 0 ? "+" : ""}{sector.perf_5d.toFixed(1)}%
+            </div>
           </div>
         ))}
       </div>
@@ -307,6 +439,17 @@ function SectorRotationBlock({ data, timestamp }: { data?: MarketOverview; times
         <span className="mx-2">|</span>
         <span className="text-[var(--accent-red)]">Bottom: {bottom3.map(s => s.symbol).join(", ")}</span>
       </div>
+      {(data as any).rotation_story && (
+        <div className={`mt-3 text-xs px-3 py-2 rounded-lg ${
+          (data as any).rotation_signal === "risk_off"
+            ? "bg-red-900/20 text-red-400"
+            : (data as any).rotation_signal === "risk_on"
+            ? "bg-green-900/20 text-green-400"
+            : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
+        }`}>
+          {(data as any).rotation_story}
+        </div>
+      )}
     </div>
   );
 }
@@ -398,6 +541,30 @@ function MarketBreadthBlock({ data, timestamp }: { data?: MarketBreadth; timesta
           }`}>{data.breadth_signal.toUpperCase()}</span>
         </div>
       </div>
+      
+      {/* Trend-Delta wenn verfügbar */}
+      {data.pct_above_sma50_5d_ago != null && (
+        <div className="mt-2 text-xs text-center">
+          <span className="text-[var(--text-muted)]">vor 5T: </span>
+          <span className={`font-semibold ${
+            data.pct_above_sma50 > data.pct_above_sma50_5d_ago
+              ? "text-[var(--accent-green)]"
+              : "text-[var(--accent-red)]"
+          }`}>
+            {data.pct_above_sma50_5d_ago}%
+            {data.pct_above_sma50 > data.pct_above_sma50_5d_ago
+              ? " ↑ verbessert"
+              : " ↓ verschlechtert"}
+          </span>
+        </div>
+      )}
+
+      {/* Wenn kein Delta: Hinweis */}
+      {data.pct_above_sma50_5d_ago == null && (
+        <div className="mt-2 text-[10px] text-center text-[var(--text-muted)]">
+          Verlauf in Kürze verfügbar
+        </div>
+      )}
     </div>
   );
 }
@@ -510,27 +677,55 @@ function CrossAssetBlock({ data, timestamp }: { data?: IntermarketData; timestam
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
           <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Assets</h4>
-          <div className="space-y-2">
-            {displayAssets.map((symbol) => {
-              const asset = assets[symbol];
-              if (!asset) return null;
-              return (
-                <div key={symbol} className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]">
-                  <div className="flex items-center gap-2">
-                    <TrendIcon value={asset.change_1d} />
-                    <span className="text-sm font-medium">{symbol}</span>
-                  </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-medium ${
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[var(--text-muted)]">
+                <th className="pb-2">Asset</th>
+                <th className="pb-2 text-right">1T%</th>
+                <th className="pb-2 text-right">1W%</th>
+                <th className="pb-2 text-right">1M%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayAssets.map((symbol) => {
+                const asset = assets[symbol];
+                if (!asset) return null;
+                return (
+                  <tr key={symbol} className="border-t border-[var(--border)]">
+                    <td className="py-2">
+                      <div className="flex items-center gap-2">
+                        <TrendIcon value={asset.change_1d} />
+                        <span className="font-medium">{symbol}</span>
+                      </div>
+                    </td>
+                    <td className={`py-2 text-right font-medium ${
                       asset.change_1d >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"
                     }`}>
                       {formatPct(asset.change_1d)}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                    </td>
+                    <td className={`py-2 text-right font-medium ${
+                      (asset.change_1w ?? 0) >= 0
+                        ? "text-[var(--accent-green)]"
+                        : "text-[var(--accent-red)]"
+                    }`}>
+                      {asset.change_1w != null
+                        ? `${asset.change_1w >= 0 ? "+" : ""}${asset.change_1w.toFixed(1)}%` 
+                        : "—"}
+                    </td>
+                    <td className={`py-2 text-right font-medium ${
+                      (asset.change_1m ?? 0) >= 0
+                        ? "text-[var(--accent-green)]"
+                        : "text-[var(--accent-red)]"
+                    }`}>
+                      {asset.change_1m != null
+                        ? `${asset.change_1m >= 0 ? "+" : ""}${asset.change_1m.toFixed(1)}%` 
+                        : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
         
         <div>
@@ -654,8 +849,19 @@ function NewsSentimentBlock({ data, timestamp }: { data?: NewsSentimentData; tim
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-tertiary)] p-4 text-sm text-[var(--text-muted)]">
-          Keine Headlines von Finnhub verfügbar. Der News-Block bleibt sichtbar, damit klar ist, dass die Datenquelle aktuell leer ist.
+        <div className="space-y-3">
+          <p className="text-sm text-[var(--text-muted)]">
+            Finnhub General News aktuell nicht verfügbar.
+          </p>
+          <p className="text-xs text-[var(--text-muted)]">
+            Mögliche Ursachen: Finnhub Free-Tier Rate-Limit (60 Calls/Min)
+            oder keine neuen Artikel in den letzten 24h.
+            Nächster Versuch in 10 Minuten.
+          </p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Tipp: Watchlist-Ticker erhalten News über die
+            FinBERT-Pipeline (n8n, alle 30 Min).
+          </p>
         </div>
       )}
       
@@ -1140,6 +1346,7 @@ export default function MarketsPage() {
           data={macroDashboard} 
           timestamp={macroDashboard ? new Date().toISOString() : undefined} 
         />
+        <VIXDetailBlock intermarket={crossAsset} macro={macroDashboard} />
         
         {/* Block 5: Cross-Asset Signals */}
         <CrossAssetBlock 

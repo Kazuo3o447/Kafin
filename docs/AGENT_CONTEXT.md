@@ -5,7 +5,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 5.10.0 (Plattformweite Sentiment-Integration)
+**Version**: 5.10.1 (Sentiment-/Log-Bugfixes)
 **Stand**: 2026-03-21
 
 ---
@@ -52,6 +52,12 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 - **Watchlist**: `/api/watchlist/enriched` - Batch-Sentiment-Enrichment
 - **Earnings**: `/api/data/earnings-radar` - Pre-Earnings Sentiment
 - **Background Tasks**: Sofortiger News-Scan bei neuen Ticker-Additions
+
+### Bugfixes in v5.10.1
+- **Logs**: `/api/logs` bleibt array-kompatibel für den Admin-Viewer
+- **Cache-Invalidierung**: News-Scans invalidieren Research-, Watchlist- und Earnings-Caches direkt
+- **Null-Safety**: Ticker ohne News erzeugen keine irreführende Market-Divergenz mehr
+- **Batch-Fairness**: Sentiment-Batch lädt fehlende Ticker bei Bedarf gezielt nach
 
 ---
 

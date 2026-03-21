@@ -36,7 +36,7 @@ from backend.app.analysis.shadow_portfolio import (
 )
 from backend.app.memory.long_term import get_insights
 from backend.app.db import get_supabase_client
-from backend.app.cache import cache_get, cache_set
+from backend.app.cache import cache_get, cache_set, cache_invalidate, cache_invalidate_prefix
 from schemas.base import HealthCheckResponse
 
 logger = get_logger(__name__)
@@ -91,7 +91,7 @@ async def api_get_logs(level: str = None, limit: int = 200):
     logs = get_recent_logs()
     if level:
         logs = [l for l in logs if l.get("level") == level]
-    return {"logs": logs[:limit]}
+    return logs[:limit]
 
 @app.get("/api/logs/errors")
 async def api_get_logs_errors():
@@ -1422,7 +1422,8 @@ async def api_research_dashboard(
     # Sentiment-Divergenz:
     # Ticker historisch positiv aber aktuelle Trend neg
     sentiment_divergence_calc = (
-        ticker_sent["avg"] > 0.1
+        ticker_sent["count"] > 0
+        and ticker_sent["avg"] > 0.1
         and ticker_sent["trend"] == "deteriorating"
     )
 
@@ -1681,7 +1682,7 @@ async def api_research_dashboard(
         "market_sentiment_detail": mkt_cat,
         "sentiment_vs_market": round(
             ticker_sent["avg"] - market_avg_sentiment, 3
-        ) if mkt_scores else None,
+        ) if (mkt_scores and ticker_sent["count"] > 0) else None,
     }
 
     # ── Datenvollständigkeit prüfen ────────────────────────────
@@ -2583,7 +2584,7 @@ def _fetch_all_scores_sync(tickers: list, db) -> dict:
 async def _enrich_single(
     item: dict,
     scores_by_ticker: dict,
-    bullets_by_ticker: dict = {},   # NEU
+    bullets_by_ticker: dict | None = None,
 ) -> dict:
     """
     Enriched einen einzelnen Watchlist-Ticker mit Kursdaten + Scores.
@@ -2594,6 +2595,7 @@ async def _enrich_single(
         return item
 
     entry = dict(item)
+    bullets_by_ticker = bullets_by_ticker or {}
 
     # web_prio aus DB beibehalten (None = Auto)
     if "web_prio" not in entry:
@@ -2676,7 +2678,7 @@ async def api_watchlist_enriched():
     db = get_supabase_client()
 
     # Einmalige Batch-Query für alle Scores
-    tickers = [item.get("ticker", "") for item in watchlist if item.get("ticker")]
+    tickers = list({item.get("ticker", "").upper() for item in watchlist if item.get("ticker")})
     scores_by_ticker = await asyncio.to_thread(_fetch_all_scores_sync, tickers, db)
 
     # Batch-Query für Sentiment-Bullets
@@ -2737,13 +2739,19 @@ async def api_add_watchlist_item(
     company_name = item.company_name or item.ticker.upper()
     sector = item.sector or "Unknown"
     
-    # Cache invalidieren
-    from backend.app.cache import cache_invalidate
-    cache_invalidate("watchlist:enriched:v2")
-    
     # Hintergrund-Task für sofortigen News-Scan
     from backend.app.data.news_processor import process_news_for_ticker
-    background_tasks.add_task(process_news_for_ticker, item.ticker.upper())
+
+    async def _scan_and_invalidate(ticker: str):
+        await process_news_for_ticker(ticker)
+        cache_invalidate("watchlist:enriched:v2")
+        cache_invalidate(f"research_dashboard_{ticker}")
+        cache_invalidate_prefix("earnings_radar_")
+
+    background_tasks.add_task(_scan_and_invalidate, item.ticker.upper())
+
+    # Sofortige Cache-Invalidierung für die betroffene Watchlist
+    cache_invalidate("watchlist:enriched:v2")
     
     return await add_ticker(
         item.ticker, company_name, sector,
@@ -2810,6 +2818,9 @@ async def api_news_scan():
     wl = await get_watchlist()
     tickers = [item["ticker"] for item in wl]
     results = await run_news_pipeline(tickers)
+    cache_invalidate("watchlist:enriched:v2")
+    cache_invalidate_prefix("research_dashboard_")
+    cache_invalidate_prefix("earnings_radar_")
     return {"status": "success", "results": results}
 
 @news_router.post("/scan/{ticker}")
@@ -2817,6 +2828,9 @@ async def api_news_scan_ticker(ticker: str):
     """Führt die News-Pipeline für einen einzelnen Ticker aus."""
     logger.info(f"API Call: news-scan for {ticker}")
     result = await process_news_for_ticker(ticker)
+    cache_invalidate("watchlist:enriched:v2")
+    cache_invalidate(f"research_dashboard_{ticker.upper()}")
+    cache_invalidate_prefix("earnings_radar_")
     return {"status": "success", "result": result}
 
 @news_router.get("/memory/{ticker}")

@@ -129,7 +129,7 @@ async def get_bullet_points_batch(
         if db is None:
             return {}
 
-        tickers_upper = [t.upper() for t in tickers]
+        tickers_upper = list(dict.fromkeys(t.upper() for t in tickers if t))
         # Eine Query für alle Ticker
         res = (
             db.table("short_term_memory")
@@ -139,7 +139,7 @@ async def get_bullet_points_batch(
             )
             .in_("ticker", tickers_upper)
             .order("date", desc=True)
-            .limit(limit_per_ticker * len(tickers_upper))
+            .limit(max(limit_per_ticker * len(tickers_upper) * 2, limit_per_ticker))
             .execute()
         )
         rows = res.data if res and res.data else []
@@ -151,6 +151,18 @@ async def get_bullet_points_batch(
                 by_ticker[t] = []
             if len(by_ticker[t]) < limit_per_ticker:
                 by_ticker[t].append(row)
+
+        # Fairness-Fallback: falls ein Ticker durch die globale Limitierung
+        # unterfüllt ist, laden wir ihn einmal gezielt nach.
+        for ticker in tickers_upper:
+            if len(by_ticker.get(ticker, [])) >= limit_per_ticker:
+                continue
+            try:
+                full_rows = await get_bullet_points(ticker)
+                if full_rows:
+                    by_ticker[ticker] = full_rows[:limit_per_ticker]
+            except Exception:
+                continue
 
         return by_ticker
 

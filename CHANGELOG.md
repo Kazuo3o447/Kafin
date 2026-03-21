@@ -2,6 +2,14 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.10.1] - 2026-03-21 - Sentiment-/Log-Bugfixes
+
+### 🐛 Fixes
+- **Logs**: `/api/logs` liefert wieder direkt ein Array und bleibt damit mit dem Admin-Logviewer kompatibel
+- **News-Invalidation**: News-Scans invalidieren Research-, Watchlist- und Earnings-Caches sofort
+- **Sentiment Null-Safety**: Ticker ohne News erzeugen keine irreführende Market-Divergenz mehr
+- **Batch-Fairness**: `get_bullet_points_batch()` lädt fehlende Ticker bei Bedarf gezielt nach
+
 ## [5.10.0] - 2026-03-21 - Plattformweite Sentiment-Integration
 
 ### 🧠 Sentiment-Features

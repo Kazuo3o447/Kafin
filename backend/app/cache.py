@@ -58,3 +58,31 @@ def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> None:
         client.setex(key, ttl_seconds, json.dumps(value, default=str))
     except Exception as exc:  # pragma: no cover
         logger.debug(f"Cache set Fehler für {key}: {exc}")
+
+
+def cache_invalidate(key: str) -> bool:
+    """Löscht einen einzelnen Cache-Key."""
+    client = _get_redis()
+    if client is None:
+        return False
+    try:
+        client.delete(key)
+        return True
+    except Exception as exc:  # pragma: no cover
+        logger.debug(f"Cache invalidate Fehler für {key}: {exc}")
+        return False
+
+
+def cache_invalidate_prefix(prefix: str) -> int:
+    """Löscht alle Cache-Keys, die mit dem Prefix beginnen."""
+    client = _get_redis()
+    if client is None:
+        return 0
+    deleted = 0
+    try:
+        for key in client.scan_iter(match=f"{prefix}*"):
+            deleted += int(client.delete(key) or 0)
+        return deleted
+    except Exception as exc:  # pragma: no cover
+        logger.debug(f"Cache invalidate prefix Fehler für {prefix}: {exc}")
+        return deleted

@@ -485,7 +485,12 @@ async def get_general_market_news() -> list[dict]:
         return []
 
 
-async def save_daily_snapshot(market_data: dict, macro_data, regime: str = "neutral"):
+async def save_daily_snapshot(
+    market_data: dict,
+    macro_data,
+    regime: str = "neutral",
+    breadth_data: dict | None = None,
+):
     """Speichert den Tages-Snapshot für den Vergleich am nächsten Tag."""
     from backend.app.db import get_supabase_client
     from datetime import date
@@ -515,6 +520,18 @@ async def save_daily_snapshot(market_data: dict, macro_data, regime: str = "neut
             "bottom_sector": ranking[-1]["name"] if ranking else None,
             "regime": regime,
             "composite_regime_score": None,  # Placeholder for future frontend calculation backend storage
+            # HINWEIS: Falls DB-Fehler → SQL ausführen:
+            # ALTER TABLE daily_snapshots
+            #   ADD COLUMN IF NOT EXISTS pct_above_sma50 FLOAT,
+            #   ADD COLUMN IF NOT EXISTS pct_above_sma200 FLOAT;
+            "pct_above_sma50": (
+                breadth_data.get("pct_above_sma50")
+                if breadth_data else None
+            ),
+            "pct_above_sma200": (
+                breadth_data.get("pct_above_sma200")
+                if breadth_data else None
+            ),
         }
 
         db.table("daily_snapshots").upsert(record, on_conflict="date").execute()
@@ -629,11 +646,66 @@ async def get_market_breadth() -> dict:
             "declining": declining,
             "sample_size": total,
             "breadth_index": "S&P 500 Top 50 (Marktkapitalisierung)",
-            "pct_above_sma50_5d_ago": None,
-            "pct_above_sma50_20d_ago": None,
         }
 
     result = await asyncio.to_thread(_calc_breadth)
+
+    # Historische Werte aus daily_snapshots
+    pct_5d_ago = None
+    pct_20d_ago = None
+    try:
+        from backend.app.db import get_supabase_client
+        from datetime import date, timedelta
+        db = get_supabase_client()
+        if db:
+            today = date.today()
+            d5 = (today - timedelta(days=7)).isoformat()
+            d20 = (today - timedelta(days=28)).isoformat()
+
+            rows = (
+                db.table("daily_snapshots")
+                .select("date,pct_above_sma50")
+                .gte("date", d20)
+                .order("date", desc=False)
+                .execute()
+            )
+            if rows.data:
+                # 5T-Ago: Datensatz ~5 Handelstage zurück
+                candidates_5 = [
+                    r for r in rows.data
+                    if r["date"] <= (
+                        today - timedelta(days=5)
+                    ).isoformat()
+                    and r.get("pct_above_sma50") is not None
+                ]
+                if candidates_5:
+                    pct_5d_ago = candidates_5[-1]["pct_above_sma50"]
+
+                # 20T-Ago
+                candidates_20 = [
+                    r for r in rows.data
+                    if r.get("pct_above_sma50") is not None
+                ]
+                if candidates_20:
+                    pct_20d_ago = candidates_20[0]["pct_above_sma50"]
+    except Exception as e:
+        logger.debug(f"Breadth-History Fehler: {e}")
+
+    # Update result with historical values
+    result["pct_above_sma50_5d_ago"] = pct_5d_ago
+    result["pct_above_sma50_20d_ago"] = pct_20d_ago
+
+    # Add trend calculation
+    breadth_trend = None
+    if pct_5d_ago is not None and result:
+        delta = result["pct_above_sma50"] - pct_5d_ago
+        breadth_trend = (
+            "steigend" if delta > 3
+            else "fallend" if delta < -3
+            else "stabil"
+        )
+    result["breadth_trend_5d"] = breadth_trend
+
     cache_set(cache_key, result, ttl_seconds=1800)  # 30 Minuten
     return result
 

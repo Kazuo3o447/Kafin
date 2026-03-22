@@ -57,6 +57,7 @@ type MarketBreadth = {
   breadth_index: string;
   pct_above_sma50_5d_ago?: number | null;
   pct_above_sma50_20d_ago?: number | null;
+  breadth_trend_5d?: string | null;
   error?: string;
 };
 
@@ -837,25 +838,46 @@ function MarketBreadthBlock({ data, timestamp }: { data?: MarketBreadth; timesta
         </div>
       </div>
       
-      {/* Trend-Delta wenn verfügbar */}
-      {data.pct_above_sma50_5d_ago != null && (
-        <div className="mt-2 text-xs text-center">
-          <span className="text-[var(--text-muted)]">vor 5T: </span>
-          <span className={`font-semibold ${
-            data.pct_above_sma50 > data.pct_above_sma50_5d_ago
-              ? "text-[var(--accent-green)]"
-              : "text-[var(--accent-red)]"
-          }`}>
-            {data.pct_above_sma50_5d_ago}%
-            {data.pct_above_sma50 > data.pct_above_sma50_5d_ago
-              ? " ↑ verbessert"
-              : " ↓ verschlechtert"}
-          </span>
+      {/* Enhanced Trend-Delta wenn verfügbar */}
+      {(data.pct_above_sma50_5d_ago != null
+        || data.pct_above_sma50_20d_ago != null) && (
+        <div className="flex gap-4 text-xs text-[var(--text-muted)] mt-2">
+          {data.pct_above_sma50_5d_ago != null && (
+            <span>
+              vor 5T: {data.pct_above_sma50_5d_ago.toFixed(1)}%
+              <span className={
+                data.pct_above_sma50
+                  > data.pct_above_sma50_5d_ago
+                  ? " text-[var(--accent-green)]"
+                  : " text-[var(--accent-red)]"
+              }>
+                {" "}({(data.pct_above_sma50
+                  - data.pct_above_sma50_5d_ago
+                ).toFixed(1)}pp)
+              </span>
+            </span>
+          )}
+          {data.pct_above_sma50_20d_ago != null && (
+            <span>
+              vor 20T: {data.pct_above_sma50_20d_ago.toFixed(1)}%
+            </span>
+          )}
+          {data.breadth_trend_5d && (
+            <span className={
+              data.breadth_trend_5d === "steigend"
+                ? "text-[var(--accent-green)]"
+              : data.breadth_trend_5d === "fallend"
+                ? "text-[var(--accent-red)]"
+                : "text-[var(--text-muted)]"
+            }>
+              Trend: {data.breadth_trend_5d}
+            </span>
+          )}
         </div>
       )}
 
       {/* Wenn kein Delta: Hinweis */}
-      {data.pct_above_sma50_5d_ago == null && (
+      {data.pct_above_sma50_5d_ago == null && data.pct_above_sma50_20d_ago == null && (
         <div className="mt-2 text-[10px] text-center text-[var(--text-muted)]">
           Verlauf in Kürze verfügbar
         </div>

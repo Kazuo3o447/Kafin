@@ -2,6 +2,32 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.15.0] - 2026-03-22 - Marktbreite 5T/20T History
+
+### 🚀 Trading-Mehrwert
+- **Market Breadth History**: 5T und 20T Verlauf jetzt sichtbar
+  - `pct_above_sma50_5d_ago`: Wert vor ~5 Handelstagen
+  - `pct_above_sma50_20d_ago`: Wert vor ~20 Handelstagen
+  - `breadth_trend_5d`: "steigend" | "fallend" | "stabil"
+  - Delta-Anzeige mit pp-Änderung und farblichem Trend
+- **Datenbank-Erweiterung**: `daily_snapshots` speichert jetzt `pct_above_sma50` + `pct_above_sma200`
+- **Historische Analyse**: Breadth-Verlauf aus Supabase automatisch geladen
+
+### 🔧 Backend
+- **save_daily_snapshot**: `breadth_data` Parameter optional, speichert Breadth-Werte
+- **get_market_breadth**: Lädt historische Werte aus `daily_snapshots` Tabelle
+- **Smart History**: 5T-Ago sucht ~5 Handelstage zurück, 20T-Ago nutzt ältesten verfügbaren Wert
+- **Trend-Berechnung**: Delta > 3pp = steigend, < -3pp = fallend
+
+### 📊 Frontend
+- **MarketBreadthBlock**: Erweiterte Trend-Anzeige mit 5T/20T Verlauf
+- **Visualisierung**: Delta mit pp-Änderung und farblichem Trend-Indicator
+- **Type-Safety**: `breadth_trend_5d` Field zu `MarketBreadth` Type hinzugefügt
+
+### 💾 Datenbank
+- **Hinweis**: SQL für manuelle Migration im Code dokumentiert
+- **ALTER TABLE**: `pct_above_sma50` + `pct_above_sma200` Columns
+
 ## [5.14.3] - 2026-03-22 - DeepSeek Prompts v0.3
 
 ### 🚀 Trading-Mehrwert

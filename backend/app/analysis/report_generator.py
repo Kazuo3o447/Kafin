@@ -1464,7 +1464,15 @@ async def generate_morning_briefing() -> str:
         else:
             regime = "range-bound"
 
-        await save_daily_snapshot(market, macro, regime)
+        # Breadth-Daten für Snapshot sammeln
+        breadth = None
+        try:
+            from backend.app.data.market_overview import get_market_breadth
+            breadth = await get_market_breadth()
+        except Exception as e:
+            logger.debug(f"Breadth für Snapshot nicht geladen: {e}")
+
+        await save_daily_snapshot(market, macro, regime, breadth_data=breadth)
     except Exception as e:
         logger.warning(f"Snapshot-Speicherung fehlgeschlagen: {e}")
 

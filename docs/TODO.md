@@ -22,7 +22,7 @@
 - [ ] GEX Proxy (Gamma Exposure, Erweiterung Max Pain)
 
 ## 🟡 BATCH 3 — Nächste Woche
-- [ ] Marktbreite 5T/20T Verlauf (Supabase history)
+- [x] Marktbreite 5T/20T Verlauf (Supabase history)
 - [ ] VWAP Intraday
 - [ ] Options OI Chart (Heatmap)
 - [ ] P2a TickerContext Dataclass (kein Trader-Mehrwert,

@@ -89,6 +89,8 @@ async def get_earnings_calendar(from_date: str, to_date: str) -> List[EarningsEx
                 report_date=item.get("date") or item.get("report_date"),
                 eps_consensus=item.get("epsEstimate") or item.get("eps_consensus"),
                 revenue_consensus=item.get("revenueEstimate") or item.get("revenue_consensus"),
+                company_name=item.get("name") or item.get("company_name"),
+                report_hour=item.get("hour") or item.get("report_hour"),
             )
             for item in data
             if item.get("symbol") or item.get("ticker")
@@ -112,6 +114,8 @@ async def get_earnings_calendar(from_date: str, to_date: str) -> List[EarningsEx
                 report_date=item.get("date"),
                 eps_consensus=item.get("epsEstimate"),
                 revenue_consensus=item.get("revenueEstimate"),
+                company_name=None,  # Finnhub doesn't provide name, will be filled later
+                report_hour=item.get("hour") or None,
             ) for item in data if item.get("symbol")
         ]
 

@@ -7,8 +7,11 @@ import Link from "next/link";
 
 type EarningsEntry = {
   ticker: string;
+  company_name?: string | null;    // NEU: Unternehmensname
   report_date: string;
   report_timing: string | null;
+  report_hour?: string | null;     // NEU: "bmo" | "amc" | ""
+  report_time_mez?: string | null; // NEU: "07:00 MEZ" | "22:00 MEZ"
   eps_consensus: number | null;
   revenue_consensus: number | null;
   is_watchlist: boolean;
@@ -35,6 +38,7 @@ type RadarData = {
 
 type SnapshotData = {
   ticker: string;
+  company_name?: string | null;    // NEU: Unternehmensname
   price: number | null;
   rsi: number | null;
   trend: string | null;
@@ -42,6 +46,7 @@ type SnapshotData = {
   sma_200: number | null;
   next_earnings_date: string | null;
   report_timing: string | null;
+  report_time_mez?: string | null; // NEU: "07:00 MEZ" | "22:00 MEZ"
   eps_consensus: number | null;
   revenue_consensus: number | null;
   last_eps_surprise_pct: number | null;
@@ -111,6 +116,23 @@ function BattleCard({ snap, ticker }: {
 
   return (
     <div className="p-4 space-y-4">
+
+      {/* Header: Ticker + Firmenname */}
+      <div className="mb-1">
+        <Link
+          href={`/research/${ticker}`}
+          className="text-sm font-bold font-mono
+                      text-[var(--accent-blue)]
+                      hover:underline"
+        >
+          {ticker}
+        </Link>
+        {snap.company_name && (
+          <p className="text-xs text-[var(--text-muted)]">
+            {snap.company_name}
+          </p>
+        )}
+      </div>
 
       {/* Zeile 1: Ampel + Expected Move */}
       <div className="flex items-center justify-between
@@ -450,12 +472,19 @@ export default function EarningsRadarPage() {
                     <div key={entry.ticker} className={`card overflow-hidden transition-all ${entry.is_today ? 'border-l-4 border-l-amber-500' : ''}`}>
                       <div className="flex items-center justify-between p-4">
                         <div className="flex items-center gap-4">
-                          <div className={`px-2.5 py-1 rounded text-sm font-bold tracking-wider ${
-                            isWl ? 'bg-[var(--accent-green)] bg-opacity-20 text-[var(--accent-green)]' :
-                            entry.cross_signal_for.length > 0 ? 'bg-[var(--accent-blue)] bg-opacity-20 text-[var(--accent-blue)]' :
-                            'bg-[var(--bg-tertiary)] text-[var(--text-primary)]'
-                          }`}>
-                            {entry.ticker}
+                          <div>
+                            <div className={`px-2.5 py-1 rounded text-sm font-bold tracking-wider ${
+                              entry.is_today ? 'bg-[var(--accent-amber)] bg-opacity-20 text-[var(--accent-amber)]' :
+                              entry.cross_signal_for.length > 0 ? 'bg-[var(--accent-blue)] bg-opacity-20 text-[var(--accent-blue)]' :
+                              'bg-[var(--bg-tertiary)] text-[var(--text-primary)]'
+                            }`}>
+                              {entry.ticker}
+                            </div>
+                            {entry.company_name && (
+                              <p className="text-[10px] text-[var(--text-muted)] mt-0.5 leading-tight max-w-[120px] truncate">
+                                {entry.company_name}
+                              </p>
+                            )}
                           </div>
                           
                           {/* Pre-Earnings Sentiment */}
@@ -483,9 +512,34 @@ export default function EarningsRadarPage() {
                             </div>
                           )}
                           
-                          <div className="flex items-center gap-1 text-[var(--text-muted)] tooltip-trigger" title={entry.report_timing === "pre_market" ? "Vor Börseneröffnung" : entry.report_timing === "after_hours" ? "Nach Börsenschluss" : "Unbekannt"}>
-                             {renderTimingIcon(entry.report_timing)}
-                          </div>
+                          <div className="flex items-center gap-1 text-[var(--text-muted)]" 
+     title={
+       entry.report_timing === "pre_market"
+         ? "Vor Börseneröffnung (ungefähre Zeit)"
+         : entry.report_timing === "after_hours"
+           ? "Nach Börsenschluss (ungefähre Zeit)"
+         : "Zeitpunkt unbekannt"
+     }>
+  {renderTimingIcon(entry.report_timing)}
+  {/* MEZ-Uhrzeit aus Backend */}
+  {entry.report_time_mez ? (
+    <span className="text-[10px] font-mono">
+      {entry.report_time_mez}
+    </span>
+  ) : entry.report_hour === "bmo" ? (
+    <span className="text-[10px] font-mono">
+      07:00 MEZ
+    </span>
+  ) : entry.report_hour === "amc" ? (
+    <span className="text-[10px] font-mono">
+      22:00 MEZ
+    </span>
+  ) : (
+    <span className="text-[10px] text-[var(--text-muted)]">
+      Zeit n/a
+    </span>
+  )}
+</div>
                           
                           <div className="text-sm text-[var(--text-secondary)] w-24">
                             EPS: <span className="text-[var(--text-primary)] font-mono">{entry.eps_consensus != null ? `$${entry.eps_consensus.toFixed(2)}` : '—'}</span>

@@ -958,6 +958,25 @@ async def api_earnings_radar(days: int = 14):
     if cached: return cached
     now = now_mez()
     from_date, to_date = now.strftime("%Y-%m-%d"), (now + timedelta(days=days)).strftime("%Y-%m-%d")
+    
+    def _mez_time(hour: str | None) -> str | None:
+        """Konvertiert Finnhub hour zu MEZ-Uhrzeit."""
+        if hour == "bmo":
+            return "07:00 MEZ"
+        if hour == "amc":
+            return "22:00 MEZ"
+        return None
+    
+    def _get_company_name(ticker: str) -> str | None:
+        """Holt Firmennamen via yfinance."""
+        try:
+            import yfinance as yf
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            return info.get("shortName") or info.get("longName") or info.get("companyName")
+        except Exception:
+            return None
+    
     cal_result, watchlist = await asyncio.gather(get_earnings_calendar(from_date, to_date), get_watchlist(), return_exceptions=True)
     if isinstance(cal_result, Exception): return {"entries": [], "error": str(cal_result)}
     watchlist = watchlist if isinstance(watchlist, list) else []
@@ -987,7 +1006,22 @@ async def api_earnings_radar(days: int = 14):
         if ticker_bullets:
             sent = _calc_sentiment_from_bullets(ticker_bullets)
             pre_earnings_sentiment = {"avg": sent["avg"], "label": sent["label"], "trend": sent["trend"], "has_material": sent["has_material"], "count": sent["count"]}
-        entries.append({"ticker": ticker, "report_date": date_str, "report_timing": getattr(item, "report_timing", None), "eps_consensus": getattr(item, "eps_consensus", None), "revenue_consensus": getattr(item, "revenue_consensus", None), "is_watchlist": ticker in wl_tickers, "cross_signal_for": cross_signal_map.get(ticker, []), "is_today": date_str == today_str, "days_until": days_until, "pre_earnings_sentiment": pre_earnings_sentiment})
+        entry = {
+            "ticker": ticker,
+            "company_name": _get_company_name(ticker),  # NEU: Firmennamen von yfinance
+            "report_date": date_str,
+            "report_timing": getattr(item, "report_timing", None),
+            "report_hour": getattr(item, "report_hour", None),
+            "report_time_mez": _mez_time(getattr(item, "report_hour", None)),
+            "eps_consensus": getattr(item, "eps_consensus", None),
+            "revenue_consensus": getattr(item, "revenue_consensus", None),
+            "is_watchlist": ticker in wl_tickers,
+            "cross_signal_for": cross_signal_map.get(ticker, []),
+            "is_today": date_str == today_str,
+            "days_until": days_until,
+            "pre_earnings_sentiment": pre_earnings_sentiment
+        }
+        entries.append(entry)
     entries.sort(key=lambda e: (e.get("days_until") or 999))
     result = {"entries": entries, "total": len(entries), "from_date": from_date, "to_date": to_date, "watchlist_count": sum(1 for e in entries if e["is_watchlist"]), "today_count": sum(1 for e in entries if e["is_today"])}
     cache_set(cache_key, result, ttl_seconds=600)

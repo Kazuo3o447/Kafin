@@ -2,9 +2,20 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
-## [6.1.4] - 2026-03-22 - Performance Fix: Ladezeiten
+## [6.1.4] - 2026-03-22 - Earnings Radar: Firmenname + MEZ-Zeit
 
-### ⚡ Cold-Start Optimierung
+### 📊 Earnings Radar Upgrade
+- **EarningsExpectation**: +company_name, +report_hour Felder
+- **finnhub.py**: hour aus Finnhub API ausgelesen ("bmo"/"amc")
+- **Firmennamen**: Via yfinance API (shortName/longName) da Finnhub keine Namen liefert
+- **earnings_radar Endpoint**: +company_name, +report_time_mez
+- **MEZ-Zeiten**: bmo = "07:00 MEZ", amc = "22:00 MEZ" mit Tooltip
+- **Frontend Radar-Liste**: Firmenname unter Ticker (10px, truncate)
+- **Frontend Timing**: Icon + MEZ-Uhrzeit mit Fallback-Logik
+- **BattleCard Header**: Firmenname ergänzt mit Research-Link
+- **Tooltip**: "Ungefähre Zeit. Finnhub liefert nur Vor/Nach-Markt"
+
+### ⚡ Performance Fix: Ladezeiten
 - **Startup**: Watchlist Enriched wird im Hintergrund vorgewärmt (asyncio.create_task)
 - **Cache-TTL watchlist:enriched**: 120s → 300s (5 Minuten)
 - **Cache-TTL yf:enriched_v2**: 120s → 300s (einheitlich)

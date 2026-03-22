@@ -11,6 +11,8 @@ class EarningsExpectation(BaseModel):
     ticker: str
     report_date: Optional[date] = None
     report_timing: Optional[str] = None       # "pre_market" | "after_hours"
+    company_name: Optional[str] = None       # NEU: Unternehmensname aus Finnhub
+    report_hour: Optional[str] = None        # NEU: "bmo" | "amc" | ""
     eps_consensus: Optional[float] = None
     eps_whisper: Optional[float] = None
     revenue_consensus: Optional[float] = None

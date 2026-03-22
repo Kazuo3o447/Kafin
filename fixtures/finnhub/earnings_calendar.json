@@ -5,7 +5,9 @@
         "epsEstimate": 1.55,
         "epsActual": null,
         "revenueEstimate": 90500000000,
-        "revenueActual": null
+        "revenueActual": null,
+        "name": "Apple Inc.",
+        "hour": "amc"
     },
     {
         "symbol": "MSFT",
@@ -13,7 +15,9 @@
         "epsEstimate": 2.80,
         "epsActual": null,
         "revenueEstimate": 61000000000,
-        "revenueActual": null
+        "revenueActual": null,
+        "name": "Microsoft Corporation",
+        "hour": "amc"
     },
     {
         "symbol": "GOOGL",
@@ -21,7 +25,9 @@
         "epsEstimate": 1.75,
         "epsActual": null,
         "revenueEstimate": 85000000000,
-        "revenueActual": null
+        "revenueActual": null,
+        "name": "Alphabet Inc.",
+        "hour": "amc"
     },
     {
         "symbol": "AMZN",
@@ -29,7 +35,9 @@
         "epsEstimate": 0.95,
         "epsActual": null,
         "revenueEstimate": 145000000000,
-        "revenueActual": null
+        "revenueActual": null,
+        "name": "Amazon.com Inc.",
+        "hour": "amc"
     },
     {
         "symbol": "NVDA",
@@ -37,6 +45,8 @@
         "epsEstimate": 5.50,
         "epsActual": null,
         "revenueEstimate": 24000000000,
-        "revenueActual": null
+        "revenueActual": null,
+        "name": "NVIDIA Corp",
+        "hour": "bmo"
     }
 ]

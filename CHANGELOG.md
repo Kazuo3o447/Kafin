@@ -2,6 +2,33 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [6.2.2] - 2026-03-22 - Narrative Shift + PreMarket + Quick-Add
+
+### 🎨 UI/UX: Narrative Shift Filter + Pre/Post-Market + Quick-Add
+- **News: ⚡ Narrative Shift Filter**: "Nur Narrative Shifts" Toggle-Button
+  - Farbcodierte Badges: ⚡ Torpedo (Strategic-Downsizing), 🤝 Partnership, 🔄 Pivot
+  - Filter-Logik für `is_narrative_shift` Flag
+- **Watchlist: Pre/Post-Market Preise**: Morgens relevante Pre-Market Daten
+  - PRE: %Änderung farbcodiert (grün/rot)
+  - POST: Absoluter Preis wenn kein Pre-Market
+  - Backend: `pre_market_price`, `pre_market_change`, `post_market_price` in enriched API
+- **Research: + Watchlist Quick-Add**: Button im Header rechts neben Aktualisieren
+  - Styling: "+ Watchlist" / "✓ In Watchlist" mit hover-effekten
+  - Loading-State: "..." während API-Call
+
+### 🔧 Backend
+- **watchlist.py**: Pre/Post-Market Daten aus yfinance fast_info
+- **_fetch_ticker_data_sync()**: Erweitert um `pre_market_price`, `pre_market_change_percent`, `post_market_price`
+
+## [6.2.1] - 2026-03-22 - Torpedo Score-Sprung Alert
+
+### 🚨 Alerting: Torpedo Score-Sprünge
+- **_check_score_jump()**: Score-Vergleich Cache vs. Aktuell
+- **Alert-Bedingungen**: Delta +2.0, Delta +1.5 bei Score>6.5, Neu in kritischem Bereich (>8.0)
+- **Top-3 Treiber**: Faktoren im Telegram-Alert mit Werten
+- **4h Cooldown**: Pro Ticker避免 Spam
+- **scoring.py**: factors Feld im TorpedoScore Result
+
 ## [6.2.0] - 2026-03-22 - Report Rendering + Archiv
 
 ### 🎨 UI/UX: Strukturiertes Report Rendering
@@ -44,7 +71,7 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
 ## [6.1.3] - 2026-03-22 - API Usage Tracking + Token Counter
 
-### 📊 Neues Feature: Zentrales API Usage Tracking
+### � Neues Feature: Zentrales API Usage Tracking
 - **api_usage Tabelle in PostgreSQL**: Tagesaggregierte Zähler pro API + Modell
 - **usage_tracker.py**: Redis-Puffer + async DB-Flush (5min Intervall)
 - **DeepSeek**: input/output Tokens + Kosten ($/Call) pro Modell
@@ -54,7 +81,7 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 - **GET /api/admin/api-usage**: Aggregierte Summary mit Echtzeit-Redis-Daten
 - **Settings → APIs**: ApiUsageBlock mit Tagesverbrauch Balken + Token-Tabelle pro KI-Modell mit Kosten-Schätzung
 
-### 🔧 Implementation Details
+### �🔧 Implementation Details
 - **Redis Buffer**: Schnelle In-Memory Zählung mit 25h TTL
 - **Periodic Flush**: Alle 5 Minuten automatischer DB-Write
 - **Cost Calculation**: DeepSeek $0.28/$0.42 pro 1M Tokens (input/output)

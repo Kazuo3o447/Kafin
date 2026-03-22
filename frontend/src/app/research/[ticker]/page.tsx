@@ -2211,15 +2211,21 @@ export default function ResearchDashboard() {
           <button
             onClick={handleWatchlist}
             disabled={watchlistLoading}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs
-                       font-medium transition-all disabled:opacity-40 ${
+            className={`flex items-center gap-1.5
+                        rounded-lg px-3 py-1.5 text-xs
+                        font-semibold border transition-all
+                        disabled:opacity-50 ${
               onWatchlist
-                ? "bg-[var(--accent-green)]/15 text-[var(--accent-green)] border border-[var(--accent-green)]/30"
-                : "border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+                ? "border-[var(--accent-green)]/40 bg-[var(--accent-green)]/10 text-[var(--accent-green)]"
+                : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--accent-green)]/40 hover:text-[var(--accent-green)]"
             }`}
           >
-            {onWatchlist ? <BookmarkMinus size={12} /> : <BookmarkPlus size={12} />}
-            {onWatchlist ? "Auf Watchlist" : "Zur Watchlist"}
+            {watchlistLoading
+              ? "..."
+              : onWatchlist
+                ? "✓ In Watchlist"
+                : "+ Watchlist"
+            }
           </button>
         </div>
       </div>

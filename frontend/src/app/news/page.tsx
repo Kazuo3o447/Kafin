@@ -13,6 +13,8 @@ type NewsBullet = {
   bullet_text?: string;
   sentiment_score?: number;
   is_material?: boolean;
+  is_narrative_shift?: boolean;
+  shift_type?: string;
   created_at?: string;
 };
 
@@ -37,6 +39,7 @@ export default function NewsPage() {
   const [filterTicker, setFilterTicker] = useState("");
   const [filterSentiment, setFilterSentiment] = useState<"all" | "positive" | "negative">("all");
   const [filterMaterial, setFilterMaterial] = useState(false);
+  const [filterShift, setFilterShift] = useState<"all" | "shifts_only">("all");
   const [scanResult, setScanResult] = useState("");
   const [watchlist, setWatchlist] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<"news" | "google" | "signals">("news");
@@ -189,6 +192,7 @@ export default function NewsPage() {
   const filtered = news.filter((item) => {
     if (filterTicker && item.ticker !== filterTicker) return false;
     if (filterMaterial && !item.is_material) return false;
+    if (filterShift === "shifts_only" && !item.is_narrative_shift) return false;
     if (filterSentiment === "positive" && (item.sentiment_score ?? 0) <= 0.3) return false;
     if (filterSentiment === "negative" && (item.sentiment_score ?? 0) >= -0.3) return false;
     return true;
@@ -277,6 +281,27 @@ export default function NewsPage() {
               Nur Torpedo
             </span>
           </label>
+
+          {/* Narrative Shift Filter */}
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              onClick={() => setFilterShift(
+                filterShift === "all" ? "shifts_only" : "all"
+              )}
+              className={`flex items-center gap-1.5 rounded-full
+                          px-3 py-1 text-xs font-semibold
+                          border transition-colors ${
+                filterShift === "shifts_only"
+                  ? "border-[var(--accent-amber)] bg-[var(--accent-amber)]/10 text-[var(--accent-amber)]"
+                  : "border-[var(--border)] text-[var(--text-muted)]"
+              }`}
+            >
+              ⚡ Nur Narrative Shifts
+              {filterShift === "shifts_only" && (
+                <span className="ml-1 text-[10px]">✕</span>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Scans-Karte */}
@@ -386,6 +411,22 @@ export default function NewsPage() {
                   <span className="badge badge-neutral text-[9px] px-1.5 py-0.5">
                     {item.ticker}
                   </span>
+                  {item.is_narrative_shift && item.shift_type && (
+                    <span className={`rounded-full px-2 py-0.5
+                                       text-[10px] font-semibold ${
+                      item.shift_type === "Strategic-Downsizing"
+                        ? "bg-[var(--accent-red)]/10 text-[var(--accent-red)]"
+                      : item.shift_type === "Strategic-Partnership"
+                        ? "bg-[var(--accent-green)]/10 text-[var(--accent-green)]"
+                      : "bg-amber-400/10 text-amber-400"
+                    }`}>
+                      {item.shift_type === "Strategic-Downsizing"
+                        ? "⚡ Torpedo"
+                      : item.shift_type === "Strategic-Partnership"
+                        ? "🤝 Partnership"
+                      : "🔄 Pivot"}
+                    </span>
+                  )}
                   {item.category && (
                     <span className="text-[10px] text-[var(--text-muted)]">
                       {item.category}

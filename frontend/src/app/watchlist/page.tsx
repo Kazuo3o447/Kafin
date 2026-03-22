@@ -21,6 +21,9 @@ type WatchlistItem = {
   price?: number | null;
   change_pct?: number | null;      // 1T
   change_5d_pct?: number | null;   // 5T — NEU
+  pre_market_price?: number | null;
+  pre_market_change?: number | null;
+  post_market_price?: number | null;
   market_cap_b?: number | null;
   earnings_date?: string | null;
   earnings_countdown?: number | null;
@@ -38,7 +41,7 @@ type WatchlistItem = {
   sentiment_trend?: string | null;
   has_material_news?: boolean | null;
   sentiment_count?: number | null;
-}
+};
 
 // Sorting and filtering types
 type SortField = "opportunity_score" | "torpedo_score" | "change_pct" | "change_5d_pct" | "earnings_countdown" | "rvol" | "week_opp_delta";
@@ -953,6 +956,40 @@ export default function WatchlistPage() {
                                    font-mono font-semibold
                                    ${pctColor(item.change_pct)}`}>
                     {fmtPct(item.change_pct)}
+                    {/* Pre-Market */}
+                    {item.pre_market_price != null
+                     && item.pre_market_change != null && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="text-[9px]
+                                           text-[var(--text-muted)]">
+                          PRE
+                        </span>
+                        <span className={`text-[10px] font-mono
+                                            font-semibold ${
+                          item.pre_market_change >= 0
+                            ? "text-[var(--accent-green)]"
+                            : "text-[var(--accent-red)]"
+                        }`}>
+                          {item.pre_market_change >= 0 ? "+" : ""}
+                          {item.pre_market_change.toFixed(2)}%
+                        </span>
+                      </div>
+                    )}
+                    {/* Post-Market (wenn kein Pre-Market) */}
+                    {item.pre_market_price == null
+                     && item.post_market_price != null && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="text-[9px]
+                                           text-[var(--text-muted)]">
+                          POST
+                        </span>
+                        <span className="text-[10px] font-mono
+                                            font-semibold
+                                            text-[var(--text-muted)]">
+                          ${item.post_market_price.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
                   </td>
 
                   {/* 5T% */}

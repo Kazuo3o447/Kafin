@@ -69,6 +69,22 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
                 result["market_cap_b"] = round(float(fi.market_cap) / 1e9, 1)
         except Exception:
             pass
+        # Pre/Post-Market Daten
+        try:
+            if fi.pre_market_price:
+                result["pre_market_price"] = round(float(fi.pre_market_price), 2)
+        except Exception:
+            pass
+        try:
+            if fi.pre_market_change_percent:
+                result["pre_market_change"] = round(float(fi.pre_market_change_percent), 2)
+        except Exception:
+            pass
+        try:
+            if fi.post_market_price:
+                result["post_market_price"] = round(float(fi.post_market_price), 2)
+        except Exception:
+            pass
     except Exception:
         pass
 

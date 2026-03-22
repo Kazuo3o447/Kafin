@@ -4,7 +4,7 @@ const internalApiUrl = process.env.INTERNAL_API_URL ?? "http://localhost:8000";
 
 const nextConfig: NextConfig = {
   experimental: {
-    proxyTimeout: 300000,
+    proxyTimeout: 60000,   // 60s — reicht für alle Endpoints
   },
   async rewrites() {
     return [

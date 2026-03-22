@@ -1657,6 +1657,7 @@ export default function MarketsPage() {
   const [marketAudit, setMarketAudit] = useState<MarketAudit | undefined>(undefined);
   
   const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [economicCalendarLoading, setEconomicCalendarLoading] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -1805,6 +1806,7 @@ export default function MarketsPage() {
       console.error("Fetch all error:", error);
     } finally {
       setLoading(false);
+      setInitialLoading(false);
     }
   }, [
     fetchMarketOverview,
@@ -1872,6 +1874,23 @@ export default function MarketsPage() {
   
   return (
     <div className="space-y-6 p-8">
+      {/* Initial Loading Banner */}
+      {initialLoading && (
+        <div className="flex items-center gap-3
+                         rounded-xl bg-[var(--bg-tertiary)]
+                         border border-[var(--border)]
+                         px-4 py-3 mb-4">
+          <div className="h-2 w-2 rounded-full
+                           bg-[var(--accent-blue)]
+                           animate-pulse" />
+          <p className="text-xs text-[var(--text-secondary)]">
+            Marktdaten werden geladen
+            {/* Dot-Animation */}
+            <span className="animate-pulse">…</span>
+          </p>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>

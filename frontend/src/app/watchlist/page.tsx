@@ -666,7 +666,7 @@ export default function WatchlistPage() {
     if (!invalidate) setLoading(true);
 
     try {
-      const { data, fromCache: isCached } = await cachedFetch("watchlist:enriched", () => api.getWatchlistEnriched(), 60);
+      const { data, fromCache: isCached } = await cachedFetch("watchlist:enriched", () => api.getWatchlistEnriched(), 300);
       setWatchlist(data?.watchlist || []);
       setSectorDistribution(data?.sector_distribution || {});
       setConcentrationWarning(data?.concentration_warning || null);
@@ -776,8 +776,39 @@ export default function WatchlistPage() {
 
   if (loading) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <p className="text-[var(--text-muted)]">Lade Watchlist...</p>
+      <div className="space-y-3">
+        {[...Array(6)].map((_, i) => (
+          <div
+            key={i}
+            className="card p-4 animate-pulse"
+          >
+            <div className="flex items-center
+                           justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-14 rounded-lg
+                                 bg-[var(--bg-tertiary)]" />
+                <div className="space-y-1.5">
+                  <div className="h-3 w-24
+                                   bg-[var(--bg-tertiary)]
+                                   rounded" />
+                  <div className="h-2.5 w-16
+                                   bg-[var(--bg-tertiary)]
+                                   rounded" />
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <div className="h-8 w-12 rounded-lg
+                                 bg-[var(--bg-tertiary)]" />
+                <div className="h-8 w-12 rounded-lg
+                                 bg-[var(--bg-tertiary)]" />
+              </div>
+            </div>
+          </div>
+        ))}
+        <p className="text-xs text-center
+                       text-[var(--text-muted)] pt-2">
+          Kursdaten werden geladen…
+        </p>
       </div>
     );
   }

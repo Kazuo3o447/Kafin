@@ -2,6 +2,33 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [6.1.4] - 2026-03-22 - Performance Fix: Ladezeiten
+
+### ⚡ Cold-Start Optimierung
+- **Startup**: Watchlist Enriched wird im Hintergrund vorgewärmt (asyncio.create_task)
+- **Cache-TTL watchlist:enriched**: 120s → 300s (5 Minuten)
+- **Cache-TTL yf:enriched_v2**: 120s → 300s (einheitlich)
+- **Background Task**: `_warm_watchlist()` lädt alle Watchlist-Ticker beim Server-Start
+
+### 🎨 UX: Loading States
+- **Watchlist**: Skeleton-Cards während Loading (statt leerem Bildschirm)
+  - 6 animierte Platzhalter mit Ticker-Layout
+  - "Kursdaten werden geladen…" Indikator
+- **Markets**: Ladeindikator-Banner beim ersten Load
+  - Pulsierender Punkt + "Marktdaten werden geladen…"
+  - Nur bei initialLoading, nicht bei Refreshes
+
+### 🛠️ Technical Improvements
+- **Proxy Timeout**: 300s → 60s (schnelleres Error Surfacing)
+- **Client Cache**: Frontend TTL 60s → 300s für Watchlist
+- **Sequential Loading**: Watchlist warm-up läuft non-blocking im Hintergrund
+
+### 📊 Erwartetes Ergebnis
+- **Vorher**: Watchlist nach Neustart 8-15s (Cold-Start)
+- **Nachher**: Watchlist nach Neustart <1s (Cache warm)
+- **Cold-Miss** (alle 5min): 5-8s mit Skeleton sichtbar
+- **User Experience**: Keine leeren Bildschirme mehr während Ladevorgängen
+
 ## [6.2.4] - 2026-03-22 - Critical Bug Fixes
 
 ### 🔧 Critical Fixes

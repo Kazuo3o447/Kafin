@@ -117,7 +117,42 @@ async def startup_event():
         except Exception as e:
             logger.warning(f"Warm-Start Fehler: {e}")
 
-    asyncio.create_task(_warm())
+    async def _warm_watchlist():
+        """Watchlist Enriched im Hintergrund vorwärmen."""
+        try:
+            from backend.app.memory.watchlist import (
+                get_watchlist
+            )
+            from backend.app.cache import cache_get
+            wl = await get_watchlist()
+            if not wl:
+                return
+            # Direkt die Cache-Funktion aufrufen
+            # (triggert _fetch_ticker_data_sync für alle Ticker)
+            cache_key = "watchlist:enriched:v2"
+            if not cache_get(cache_key):
+                # Nur wenn Cache kalt — ganzen Endpoint simulieren
+                # Wir importieren den Router-Handler direkt
+                from backend.app.routers.watchlist import (
+                    api_watchlist_enriched
+                )
+                await api_watchlist_enriched()
+                logger.info(
+                    "Watchlist Enriched Cache vorgewärmt."
+                )
+        except Exception as e:
+            logger.debug(f"Watchlist warm Fehler: {e}")
+
+    # Alle Warm-Tasks parallel (non-blocking)
+    await asyncio.gather(
+        get_market_overview(),
+        get_market_breadth(),
+        get_intermarket_signals(),
+        return_exceptions=True,
+    )
+
+    # Watchlist separat — darf länger dauern
+    asyncio.create_task(_warm_watchlist())
 
     # Embedding-Modell vorwärmen
     async def _warm_embeddings():

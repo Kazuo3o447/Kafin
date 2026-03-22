@@ -1,11 +1,12 @@
 ---
-version: "0.3"
+version: "0.4"
 date: "2026-03-22"
 model: "deepseek"
 changelog:
   - "0.1: Initiales Template"
   - "0.2: Expected Move & Pre-Earnings Positioning hinzugefügt"
   - "0.3: Max Pain, Squeeze-Signal, Firmenprofil ergänzt"
+  - "0.4: TODO-Platzhalter implementiert"
 ---
 
 SYSTEM:
@@ -44,15 +45,6 @@ Max Pain (nächster Verfall): ${{max_pain}}
 Put/Call OI Ratio: {{pcr_oi}}
 Squeeze-Signal: {{squeeze_signal}}
 FINRA Short Volume Ratio: {{finra_short_ratio}}
-
-## TODO: Backend-Variable fehlt
-## Die folgenden neuen Platzhalter müssen noch in report_generator.py implementiert werden:
-## - {{max_pain}}: Wird bereits in yfinance_data.py berechnet, muss an audit_report übergeben werden
-## - {{pcr_oi}}: Wird bereits in yfinance_data.py berechnet, muss an audit_report übergeben werden  
-## - {{squeeze_signal}}: Wird bereits in main.py berechnet, muss an audit_report übergeben werden
-## - {{ceo}}: Wird bereits in main.py berechnet, muss an audit_report übergeben werden
-## - {{employees}}: Wird bereits in main.py berechnet, muss an audit_report übergeben werden
-## - {{peers}}: Muss noch implementiert werden (company_profile.peers)
 
 UNTERNEHMEN:
 CEO: {{ceo}}

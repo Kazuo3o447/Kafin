@@ -141,6 +141,7 @@ async def run_post_earnings_review(ticker: str, quarter: Optional[str] = None) -
         actual_surprise=actual_surprise,
         reaction_1d=stock_reaction_1d,
         reaction_5d=stock_reaction_5d,
+        ah_change_pct=ah_change_pct,
     )
 
     prediction_correct = _evaluate_prediction(
@@ -380,6 +381,7 @@ async def _generate_review(
     actual_surprise: Optional[float],
     reaction_1d: Optional[float],
     reaction_5d: Optional[float],
+    ah_change_pct: Optional[float],
 ) -> Tuple[str, str]:
     system_prompt, user_template = _read_prompt(POST_EARNINGS_PROMPT_PATH)
 
@@ -387,6 +389,30 @@ async def _generate_review(
     long_term_str = "\n".join(
         [f"[{i.get('category', '?')}] {i.get('insight', '')}" for i in insights[:5]]
     ) or "Keine historischen Erkenntnisse vorhanden."
+
+    # Fear & Greed
+    fg_score_val = "N/A"
+    fg_label_val = "N/A"
+    try:
+        from backend.app.data.fear_greed import (
+            get_fear_greed_score
+        )
+        fg = await get_fear_greed_score()
+        fg_score_val = str(round(fg.get("score", 50)))
+        fg_label_val = fg.get("label", "N/A")
+    except Exception:
+        pass
+
+    # Expected Move aus letzten Options-Daten
+    exp_move_val = "N/A"
+    try:
+        if ah_change_pct is not None:
+            # Aus pre_report falls vorhanden
+            em = pre_report.get("expected_move_pct")
+            if em:
+                exp_move_val = f"{em:.1f}"
+    except Exception:
+        pass
 
     user_prompt = (
         user_template
@@ -400,6 +426,12 @@ async def _generate_review(
         .replace("{{actual_surprise}}", _fmt(actual_surprise))
         .replace("{{reaction_1d}}", _fmt(reaction_1d))
         .replace("{{reaction_5d}}", _fmt(reaction_5d))
+        .replace("{{ah_change_pct}}", (
+            f"{ah_change_pct:+.1f}" if ah_change_pct else "N/A"
+        ))
+        .replace("{{expected_move_pct}}", exp_move_val)
+        .replace("{{fear_greed_score}}", fg_score_val)
+        .replace("{{fear_greed_label}}", fg_label_val)
         .replace("{{long_term_insights}}", long_term_str)
     )
 

@@ -17,6 +17,7 @@
 - [x] Fear & Greed Score (Frontend)
 - [x] Watchlist P1 Auto-Update bei neuer Prio
 - [x] DeepSeek Prompts aktualisiert (v0.3)
+- [x] Prompt TODO-Platzhalter befüllt (v0.4)
 - [x] Reddit Retail Sentiment Backend
 - [x] Sympathy Play Radar
 - [x] Shadow Trading Journal Phase A (Trade-Grund Dropdown)

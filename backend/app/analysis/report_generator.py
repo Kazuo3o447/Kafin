@@ -930,6 +930,72 @@ async def generate_audit_report(ticker: str) -> str:
         .replace("{{relative_strength}}", rel_str) \
         .replace("{{chart_analysis}}", chart_str)
     
+    # Max Pain (aus options_oi wenn verfügbar)
+    max_pain_val = "N/A"
+    try:
+        from backend.app.data.yfinance_data import (
+            get_options_oi_analysis
+        )
+        oi_data = await get_options_oi_analysis(ticker)
+        if oi_data and oi_data.get("nearest_max_pain"):
+            max_pain_val = f"${oi_data['nearest_max_pain']:.2f}"
+            # PCR aus erstem Expiry
+            exp = next(
+                (e for e in oi_data.get("expirations", [])
+                 if not e.get("error")), {}
+            )
+            pcr_oi_val = (
+                f"{exp['pcr_oi']:.2f}"
+                if exp.get("pcr_oi") else "N/A"
+            )
+        else:
+            pcr_oi_val = "N/A"
+    except Exception:
+        pcr_oi_val = "N/A"
+
+    # Squeeze-Signal aus FINRA + Short Interest
+    squeeze_val = "N/A"
+    try:
+        from backend.app.data.finra import (
+            get_squeeze_signal
+        )
+        si_pct = getattr(short_interest, "short_interest_pct", None)
+        squeeze = await get_squeeze_signal(ticker, si_pct)
+        squeeze_val = squeeze.get("signal", "N/A")
+        finra_ratio_val = (
+            f"{squeeze.get('short_volume_ratio', 0):.1%}"
+            if squeeze.get("short_volume_ratio") else "N/A"
+        )
+    except Exception:
+        finra_ratio_val = "N/A"
+
+    # Firmenprofil (CEO, Mitarbeiter, Peers)
+    ceo_val       = "N/A"
+    employees_val = "N/A"
+    peers_val     = "N/A"
+    try:
+        if profile:
+            ceo_val       = getattr(profile, "ceo", None) or "N/A"
+            emp           = getattr(profile, "fullTimeEmployees", None)
+            employees_val = (
+                f"{int(emp):,}" if emp else "N/A"
+            )
+            raw_peers     = getattr(profile, "peers", []) or []
+            peers_val     = ", ".join(
+                str(p).upper() for p in raw_peers[:5]
+            ) if raw_peers else "N/A"
+    except Exception:
+        pass
+
+    user_prompt = user_prompt \
+        .replace("{{max_pain}}", max_pain_val) \
+        .replace("{{pcr_oi}}", pcr_oi_val) \
+        .replace("{{squeeze_signal}}", squeeze_val) \
+        .replace("{{finra_short_ratio}}", finra_ratio_val) \
+        .replace("{{ceo}}", ceo_val) \
+        .replace("{{employees}}", employees_val) \
+        .replace("{{peers}}", peers_val)
+    
     # Sicherheitsnetz: alle verbleibenden unfilled Placeholders mit N/A ersetzen
     import re
     user_prompt = re.sub(r"\{\{[^}]+\}\}", "N/A", user_prompt)
@@ -1328,6 +1394,19 @@ async def generate_morning_briefing() -> str:
     ys_str = _fmt(macro.yield_curve_10y_2y, getattr(macro, "yield_curve_date", None))
     dxy_str = _fmt(macro.dxy, getattr(macro, "dxy_date", None))
 
+    # Fear & Greed für Morning Briefing
+    fg_score_mb  = "N/A"
+    fg_label_mb  = "N/A"
+    try:
+        from backend.app.data.fear_greed import (
+            get_fear_greed_score
+        )
+        fg_mb = await get_fear_greed_score()
+        fg_score_mb = str(round(fg_mb.get("score", 50)))
+        fg_label_mb = fg_mb.get("label", "N/A")
+    except Exception:
+        pass
+
     # Prompt laden und befüllen
     MORNING_PROMPT_PATH = os.path.join(ROOT_DIR, "prompts", "morning_briefing.md")
     sys_prompt, user_tmpl = _read_prompt(MORNING_PROMPT_PATH)
@@ -1431,6 +1510,8 @@ async def generate_morning_briefing() -> str:
         .replace("{{credit_spread}}", cs_str) \
         .replace("{{yield_spread}}", ys_str) \
         .replace("{{dxy}}", dxy_str) \
+        .replace("{{fear_greed_score}}", fg_score_mb) \
+        .replace("{{fear_greed_label}}", fg_label_mb) \
         .replace("{{analyst_ratings}}", analyst_str) \
         .replace("{{general_news}}", general_news_str) \
         .replace("{{watchlist_news}}", watchlist_news_str) \

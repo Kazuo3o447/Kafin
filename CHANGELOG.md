@@ -2,6 +2,43 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [6.1.4] - 2026-03-22 - Prompt-Qualität + Modell-Optimierung
+
+### 🧠 KI-Prompts
+- Alle TODO-Platzhalter implementiert (prompts v0.4):
+  audit_report: Max Pain, PCR-OI, Squeeze-Signal,
+    FINRA-Ratio, CEO, Mitarbeiter, Peers — jetzt live
+  post_earnings: AH-Reaktion, Expected Move,
+    Fear & Greed — jetzt live
+  morning_briefing: Fear & Greed — jetzt live
+- TODO-Kommentare aus Prompts entfernt
+- DeepSeek Modell-Matrix verifiziert:
+  Reasoner: Audit + Torpedo (komplex, ok)
+  Chat: Morning/Weekly/Post-Earnings/Chart (schnell, ok)
+
+### 🔧 Fixes
+- groq.py: api key from settings not module-level env
+  Verhindert Key-Not-Found bei Lazy-Load
+
+## [6.1.3] - 2026-03-22 - API Usage Tracking + Token Counter
+
+### 📊 Neues Feature: Zentrales API Usage Tracking
+- **api_usage Tabelle in PostgreSQL**: Tagesaggregierte Zähler pro API + Modell
+- **usage_tracker.py**: Redis-Puffer + async DB-Flush (5min Intervall)
+- **DeepSeek**: input/output Tokens + Kosten ($/Call) pro Modell
+- **Groq**: input/output Tokens (Free Tier = $0.00)  
+- **FMP**: Call-Counter vs. 250/Tag Limit
+- **Finnhub**: Call-Counter vs. 60/min Limit
+- **GET /api/admin/api-usage**: Aggregierte Summary mit Echtzeit-Redis-Daten
+- **Settings → APIs**: ApiUsageBlock mit Tagesverbrauch Balken + Token-Tabelle pro KI-Modell mit Kosten-Schätzung
+
+### 🔧 Implementation Details
+- **Redis Buffer**: Schnelle In-Memory Zählung mit 25h TTL
+- **Periodic Flush**: Alle 5 Minuten automatischer DB-Write
+- **Cost Calculation**: DeepSeek $0.28/$0.42 pro 1M Tokens (input/output)
+- **UI Components**: Farbcodierte Verbrauchs-Balken (grün/amber/rot bei 50/75%)
+- **Real-time**: Heutiger Verbrauch direkt aus Redis, historische Daten aus DB
+
 ## [5.13.6] - 2026-03-22 - Groq News-Extraction
 
 ### 🚀 Performance + Kosten

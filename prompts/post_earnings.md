@@ -1,10 +1,11 @@
 ---
-version: "0.3"
+version: "0.4"
 date: "2026-03-22"
 model: "deepseek"
 changelog:
   - "0.1: Initiales Template für Post-Earnings-Reviews"
   - "0.2: AH-Reaktion und Fear/Greed ergänzt"
+  - "0.4: TODO-Platzhalter implementiert"
 ---
 
 SYSTEM:
@@ -31,13 +32,6 @@ Expected Move war: ±{{expected_move_pct}}%
 
 MARKT-KONTEXT:
 Fear & Greed: {{fear_greed_score}} ({{fear_greed_label}})
-
-## TODO: Backend-Variable fehlt
-## Die folgenden neuen Platzhalter müssen noch in post_earnings_review.py implementiert werden:
-## - {{ah_change_pct}}: Wird bereits berechnet, muss an prompt übergeben werden
-## - {{expected_move_pct}}: Muss aus options Daten berechnet und übergeben werden
-## - {{fear_greed_score}}: Muss von /api/data/fear-greed geholt und übergeben werden
-## - {{fear_greed_label}}: Muss von /api/data/fear-greed geholt und übergeben werden
 
 Berücksichtige: Ein Beat mit negativer AH-Reaktion innerhalb des Expected Move kann eine Kaufgelegenheit sein (Sell-the-News erschöpft).
 

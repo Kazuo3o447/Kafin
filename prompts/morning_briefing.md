@@ -1,11 +1,12 @@
 ---
-version: "0.3"
+version: "0.4"
 date: "2026-03-22"
 model: "deepseek"
 changelog:
   - "0.1: Initiales Template"
   - "0.2: Analytischer Tiefgang"
   - "0.3: Straffere Struktur, Analysten-Ratings, klareres Format, weniger Redundanz, Fear & Greed ergänzt"
+  - "0.4: TODO-Platzhalter implementiert"
 ---
 
 SYSTEM:
@@ -41,11 +42,6 @@ FRED-DATEN:
 Fed Rate: {{fed_rate}} | VIX: {{vix}} | Credit Spread: {{credit_spread}} | Yield Curve: {{yield_spread}} | DXY: {{dxy}}
 
 Fear & Greed Score: {{fear_greed_score}} ({{fear_greed_label}})
-
-## TODO: Backend-Variable fehlt
-## Die folgenden neuen Platzhalter müssen noch in morning_briefing.py implementiert werden:
-## - {{fear_greed_score}}: Muss von /api/data/fear-greed geholt und übergeben werden
-## - {{fear_greed_label}}: Muss von /api/data/fear-greed geholt und übergeben werden
 
 GESTERN:
 {{yesterday_snapshot}}

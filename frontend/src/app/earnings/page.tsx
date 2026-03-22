@@ -65,6 +65,15 @@ type SnapshotData = {
 function setupAmpel(snap: SnapshotData): {
   color: string; bg: string; label: string;
 } {
+  // Wenn keine Scores vorhanden (neuer Ticker ohne Audit)
+  if (snap.opportunity_score == null && snap.torpedo_score == null) {
+    return {
+      color: "text-[var(--text-muted)]",
+      bg: "bg-[var(--bg-tertiary)]",
+      label: "Kein Rating",
+    };
+  }
+  
   const opp = snap.opportunity_score ?? 0;
   const torp = snap.torpedo_score ?? 10;
   if (opp >= 6.5 && torp <= 4)

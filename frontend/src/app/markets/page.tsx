@@ -1504,7 +1504,7 @@ export default function MarketsPage() {
     setAnalysisPending(prev => ({ ...prev, [symbol]: true }));
     try {
       const res = await fetch(
-        `/api/data/chart-analysis/${symbol}` 
+        `/api/chart-analysis/${symbol}` 
       );
       const data = await res.json();
       setIndexAnalysis(prev => ({ ...prev, [symbol]: data }));

@@ -20,12 +20,17 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
 ### 🏗️ Backend
 - Keine neuen API-Endpunkte nötig
-- Bestehender `/api/data/chart-analysis/{ticker}` wird genutzt
+- Bestehender `/api/chart-analysis/{ticker}` wird genutzt
 
 ### 🎨 Frontend
 - **Dashboard**: Komplette Neugestaltung als Morning Brief
 - **Markets**: Per-Index Analyse mit DeepSeek Integration
 - **UX**: Kompakte Darstellung, aufklappbare Elemente
+
+### 🔧 Bug Fixes (Kritisch)
+- **chart_analyst.py**: Fallback-Dict enthält jetzt alle 6 Reasoning-Felder (why_entry, why_stop, trend_context, floor_scenario, turnaround_conditions, falling_knife_risk)
+- **markets/page.tsx**: API-Pfad korrigiert von `/api/data/chart-analysis/` zu `/api/chart-analysis/` — Index-Analyse funktioniert jetzt
+- **earnings/page.tsx**: Battle Card zeigt "Kein Rating" für neue Ticker ohne Scores statt fälschlich "Meiden"
 
 ## [5.12.1] - 2026-03-22 - Earnings Battle Card
 

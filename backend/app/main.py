@@ -3259,6 +3259,25 @@ async def api_economic_calendar():
         return {"events": []}
 
 
+@data_router.get("/scoring-config")
+async def api_scoring_config():
+    """Gibt aktuelle Scoring-Gewichtungen zurück."""
+    import yaml
+    import os
+    config_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        "config",
+        "scoring.yaml"
+    )
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        return config
+    except Exception as e:
+        logger.error(f"Scoring config load error: {e}")
+        return {"error": "config_not_found"}
+
+
 @data_router.post("/market-audit")
 async def api_market_audit():
     """

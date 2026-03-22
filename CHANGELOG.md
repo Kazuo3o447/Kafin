@@ -2,6 +2,20 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.11.2] - 2026-03-22 - Settings Command Center Hotfix
+
+### 🐛 Bugfixes (Review-Findings)
+- **Module-Status**: Object.entries() statt .map() für Record-Struktur, Log-Drilldown per Modul implementiert
+- **Fehler-Feed**: data.errors statt data.logs verwenden
+- **Log-Stats**: data.stats.error/warning/info statt flache Felder
+- **DB-Status**: /api/diagnostics/db statt /api/data/db-status + korrekte Object.entries-Struktur
+- **FinBERT-Test**: Query-Param ?text= statt JSON-Body
+- **Scoring-Config**: Object.entries() auf echte YAML-Struktur, Gewichte als %, Thresholds separat
+- **Pipeline-Ergebnisse**: JSON geparst, echte Zusammenfassung statt fire-and-forget
+
+### 🚀 Neu
+- **Readiness-Banner**: Kompakter Status-Header "Bereit / Prüfen erforderlich" mit Module-Count, Error-Count und Systemcheck-Zeitstempel
+
 ## [5.10.11] - 2026-03-22 - Stability: Free-Tier News Sentiment Hardening
 
 ### 🐛 Fixes

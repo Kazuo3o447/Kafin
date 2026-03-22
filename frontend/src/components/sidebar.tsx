@@ -12,7 +12,6 @@ import {
   Settings,
   CalendarDays,
   Search,
-  Activity,
   BarChart2,
 } from "lucide-react";
 import { useMemo } from "react";
@@ -26,7 +25,6 @@ const navItems = [
   { label: "Reports", href: "/reports", icon: FileText },
   { label: "News", href: "/news", icon: Newspaper },
   { label: "Performance", href: "/performance", icon: LineChart },
-  { label: "Status", href: "/status", icon: Activity },
   { label: "Einstellungen", href: "/settings", icon: Settings },
 ];
 

@@ -143,16 +143,9 @@ async def startup_event():
         except Exception as e:
             logger.debug(f"Watchlist warm Fehler: {e}")
 
-    # Alle Warm-Tasks parallel (non-blocking)
-    await asyncio.gather(
-        get_market_overview(),
-        get_market_breadth(),
-        get_intermarket_signals(),
-        return_exceptions=True,
-    )
-
     # Watchlist separat — darf länger dauern
     asyncio.create_task(_warm_watchlist())
+    asyncio.create_task(_warm())
 
     # Embedding-Modell vorwärmen
     async def _warm_embeddings():

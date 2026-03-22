@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     fred_api_key: str = ""
     coinglass_api_key: str = ""
     deepseek_api_key: str = ""
+    groq_api_key: str = ""
     kimi_api_key: str = ""
     tavily_api_key: str = ""
 

@@ -2,6 +2,21 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.13.6] - 2026-03-22 - Groq News-Extraction
+
+### 🚀 Performance + Kosten
+- **groq.py**: Groq API Client (llama-3.1-8b-instant)
+  - ~200ms Latenz, kostenloser Free Tier
+  - Automatischer Fallback auf DeepSeek bei Fehler/Timeout
+- **news_processor.py**: call_groq() statt call_deepseek()
+  - Kostenbremse: 5/h → 20/h (Groq hat mehr Kapazität)
+- **config.py**: groq_api_key Setting
+- **test_groq.py**: Verbindung + JSON + Fallback Tests
+
+### 📊 Auswirkung
+Vollständige News-Coverage ohne Kostenbremse.
+DeepSeek bleibt für Audit-Reports, Groq für Extraktion.
+
 ## [6.0.4] - 2026-03-22 - RAG + DB Migration Complete
 
 ### 🏗️ Architektur-Meilenstein abgeschlossen

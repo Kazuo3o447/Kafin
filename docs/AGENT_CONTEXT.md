@@ -64,6 +64,17 @@ RAG Endpoints:
 
 ---
 
+## KI-Pipeline (v5.13.6)
+Stufe 1: FinBERT (lokal) — Sentiment-Filter
+Stufe 2: Groq llama-3.1-8b-instant — News-Extraktion
+         Fallback: DeepSeek Chat
+         Voraussetzung: `GROQ_API_KEY` lokal in `.env` setzen, nicht committen
+Stufe 3: DeepSeek Chat — komplexe Analyse
+Stufe 4: Kimi K2.5 — Earnings-Transkripte
+Stufe 5: DeepSeek Reasoner — Audit-Reports
+
+---
+
 ## Sentiment-Integration (v5.10.0+)
 
 ### Architektur

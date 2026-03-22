@@ -8,7 +8,7 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **Watchlist Management**: Hinzufügen/Entfernen von Tickern mit automatischer Datenanreicherung
 - **Real-time News**: FinBERT-gestützte Sentiment-Analyse mit Material-Event-Detection
 - **Chart Intelligence**: Interaktive Kurs-Charts mit SMA-Overlays und Event-Markern
-- **KI-Analysen**: DeepSeek-Integration für Reports und Stichpunkt-Extraktion
+- **KI-Analysen**: Groq (News-Extraktion) + DeepSeek (Reports) mit automatischem Fallback
 - **Automatisierung**: n8n-Workflows für tägliche Briefings und wöchentliche Reports
 - **System Monitoring**: Live Status Dashboard mit Service-Health und Latenz-Tracking
 - **Persistent Logging**: RotatingFileHandler mit Docker-Volume-Persistenz
@@ -33,8 +33,9 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 
 ### Voraussetzungen
 - Docker und Docker Compose
-- API Keys (siehe `.env.example`)
-- Supabase Projekt (optional für Persistenz)
+- **Alle API Keys konfiguriert** (siehe `.env.example`)
+- **KEINE Mock-Daten**: `USE_MOCK_DATA=false` zwingend erforderlich
+- **Funktionierende API-Keys**: Finnhub, FMP, FRED, etc.
 
 ### Installation
 
@@ -45,7 +46,7 @@ cd Kafin
 
 # 2. Umgebungsvariablen konfigurieren
 cp .env.example .env
-# .env mit deinen API Keys bearbeiten
+# WICHTIG: Alle API Keys eintragen und USE_MOCK_DATA=false belassen
 
 # 3. Backend starten
 docker-compose up -d kafin-backend

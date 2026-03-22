@@ -15,6 +15,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - **Position Sizing**: Ungültige Stop-Loss-Konstellationen werden im Research-UI abgefangen.
 - **Markets**: Der Composite Regime Header bleibt prominent auf `/markets`; die großen Kalibrierungsthemen sind in `docs/FUTURE.md` dokumentiert.
 - **Logs**: `Ignore`-Filter ist im `LogViewer` sichtbar; Backend-Logs liegen in `logs/kafin.log` und via `docker logs`.
+- **Groq Integration**: News-Extraction nutzt Groq llama-3.1-8b-instant (~200ms Latenz) mit DeepSeek-Fallback; Rate Limit auf 20/h erhöht; `GROQ_API_KEY` lokal in `.env` erforderlich.
 - **Kaskade 6**: Vollständige Migration von Supabase auf PostgreSQL 16 + pgvector; lokales Embedding-Pipeline (all-MiniLM-L6-v2) für semantische Suche (RAG) ist produktiv.
 - **Datenbank-Härtung**: Asyncpg Connection Pooling mit Lazy-Init, Locking und sauberem Shutdown-Handling; native pgvector-Codec Registrierung.
 - **RAG-Endpoints**: Semantische Suche für News und Audits via pgvector-Similarity-Search live.
@@ -34,6 +35,8 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 | Log Viewer | `frontend/src/components/LogViewer.tsx` | Suche, Filter, Export und `Ignore`-Kategorie |
 | Backend Router | `backend/app/main.py` | API-Router, Log-Endpunkte, Diagnostics, System-Integrationen |
 | Logging | `backend/app/logger.py` | Datei-Logging, In-Memory-Buffer, Ignore-Klassifizierung |
+| Groq Client | `backend/app/analysis/groq.py` | Groq llama-3.1-8b-instant API mit DeepSeek-Fallback |
+| News Pipeline | `backend/app/data/news_processor.py` | News-Extraction mit Groq, Rate Limit 20/h |
 | FRED Fetch | `backend/app/data/fred.py` | FRED-Abfrage mit Retry, Redaction und Fallbacks |
 | Doku | `STATUS.md`, `CHANGELOG.md`, `docs/apis/fred.md`, `docs/ROADMAP.md` | Status, Changelog, API-Details und Roadmap |
 
@@ -44,6 +47,13 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - **DB-Diagnose**: `GET /api/diagnostics/db`
 - **Live-Logs**: `GET /api/logs` und `GET /api/logs/file`
 - **FRED-Verifikation**: `backend/app/data/fred.py` und `docs/apis/fred.md`
+- **Groq-Test**: `python backend/tests/test_groq.py` (erfordert `GROQ_API_KEY` in `.env`)
+
+## ⚠️ WICHTIG: KEINE MOCK DATEN ERLAUBT
+- **Mock-Daten sind deaktiviert**: `USE_MOCK_DATA=false`
+- **Nur echte API-Daten**: Alle Datenquellen müssen Live-Daten liefern
+- **Fehlerbehandlung**: Bei API-Ausfällen klare Fehlermeldungen statt Fakes
+- **Verbot**: Mock-Daten untergräben das Vertrauen in die Trading-Entscheidungen
 
 ## ⚠️ Erwartetes Verhalten / bekannte Signale
 - **yfinance 404s** sind erwartetes Verhalten für delisted oder fehlerhafte Ticker und erscheinen im `Ignore`-Filter.

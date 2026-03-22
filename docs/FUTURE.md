@@ -414,7 +414,7 @@ Bereits vorhandenes Short Interest ergänzen.
 
 ## 🟠 ARCHITEKTUR: News-Pipeline Stufe 2 — Groq statt DeepSeek Chat
 
-**Status: ✅ ERLEDIGT (22.03.2026) — v5.13.0**
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.13.6**
 
 **Warum (korrigierte Einschätzung):**
 FinBERT und generative LLMs lösen VERSCHIEDENE Aufgaben:

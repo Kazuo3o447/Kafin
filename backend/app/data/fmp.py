@@ -9,10 +9,9 @@ API:    FMP (https://financialmodelingprep.com)
 
 WICHTIG: Alle Endpoints nutzen /stable/ mit symbol= als Query-Parameter.
 Jeder Call ist fehlertolerant — bei 400/403/404 wird None oder ein leeres Schema zurückgegeben.
+KEINE MOCK DATEN ERLAUBT - IMMER ECHTE API-DATEN VERWENDEN.
 """
 import httpx
-import json
-import os
 from typing import Optional
 from datetime import datetime
 
@@ -24,14 +23,7 @@ from schemas.earnings import EarningsExpectation, EarningsHistorySummary, Earnin
 
 logger = get_logger(__name__)
 
-FIXTURES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "fixtures", "fmp")
 FMP_BASE = "https://financialmodelingprep.com"
-
-
-def load_mock_data(filename: str):
-    path = os.path.join(FIXTURES_DIR, filename)
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
 
 
 async def _fmp_get(endpoint: str, params: dict = None) -> list | dict | None:
@@ -67,15 +59,6 @@ async def _fmp_get(endpoint: str, params: dict = None) -> list | dict | None:
 @rate_limit("fmp")
 async def get_company_profile(ticker: str) -> ValuationData | None:
     """Holt das Firmenprofil. Probiert /stable/ dann /api/v3/ als Fallback."""
-    if settings.use_mock_data:
-        try:
-            data = load_mock_data(f"profile_{ticker}.json")
-            if isinstance(data, list) and data:
-                data = data[0]
-            return ValuationData(ticker=ticker, sector=data.get("sector"), industry=data.get("industry"))
-        except Exception:
-            return ValuationData(ticker=ticker)
-
     # Versuch 1: /stable/ mit symbol= Parameter
     data = await _fmp_get("/stable/profile", {"symbol": ticker})
 
@@ -84,7 +67,7 @@ async def get_company_profile(ticker: str) -> ValuationData | None:
         data = await _fmp_get(f"/api/v3/profile/{ticker}")
 
     if data is None:
-        logger.warning(f"FMP Profil für {ticker} nicht verfügbar.")
+        logger.error(f"FMP Profil für {ticker} nicht verfügbar - API-Fehler oder Rate Limit.")
         return None
 
     if isinstance(data, list) and data:
@@ -104,21 +87,6 @@ async def get_company_profile(ticker: str) -> ValuationData | None:
 @rate_limit("fmp")
 async def get_analyst_estimates(ticker: str) -> EarningsExpectation | None:
     """Holt Analysten-Schätzungen."""
-    if settings.use_mock_data:
-        try:
-            data = load_mock_data(f"analyst_estimates_{ticker}.json")
-            if isinstance(data, list) and data:
-                data = data[0]
-            d_str = data.get("date", "2026-01-01")
-            return EarningsExpectation(
-                ticker=ticker,
-                report_date=datetime.strptime(d_str, "%Y-%m-%d").date(),
-                eps_consensus=data.get("estimatedEpsAvg"),
-                revenue_consensus=data.get("estimatedRevenueAvg")
-            )
-        except Exception:
-            return None
-
     # /stable/ ohne limit (manche Plans unterstützen limit nicht)
     data = await _fmp_get("/stable/analyst-estimates", {"symbol": ticker})
 
@@ -127,6 +95,7 @@ async def get_analyst_estimates(ticker: str) -> EarningsExpectation | None:
         data = await _fmp_get(f"/api/v3/analyst-estimates/{ticker}")
 
     if not data:
+        logger.error(f"FMP Analyst Estimates für {ticker} nicht verfügbar - API-Fehler oder Rate Limit.")
         return None
 
     if isinstance(data, list) and data:
@@ -150,17 +119,12 @@ async def get_analyst_estimates(ticker: str) -> EarningsExpectation | None:
 @rate_limit("fmp")
 async def get_earnings_history(ticker: str, limit: int = 8) -> EarningsHistorySummary | None:
     """Holt historische Earnings-Surprises."""
-    if settings.use_mock_data:
-        try:
-            data = load_mock_data(f"earnings_surprises_{ticker}.json")
-        except Exception:
-            return None
-    else:
-        data = await _fmp_get("/stable/earnings-surprises", {"symbol": ticker})
-        if data is None:
-            data = await _fmp_get(f"/api/v3/earnings-surprises/{ticker}")
-        if not data:
-            return None
+    data = await _fmp_get("/stable/earnings-surprises", {"symbol": ticker})
+    if data is None:
+        data = await _fmp_get(f"/api/v3/earnings-surprises/{ticker}")
+    if not data:
+        logger.error(f"FMP Earnings History für {ticker} nicht verfügbar - API-Fehler oder Rate Limit.")
+        return None
 
     if not isinstance(data, list):
         return None
@@ -209,21 +173,14 @@ async def get_earnings_history(ticker: str, limit: int = 8) -> EarningsHistorySu
 @rate_limit("fmp")
 async def get_key_metrics(ticker: str) -> ValuationData | None:
     """Holt Key Metrics (TTM)."""
-    if settings.use_mock_data:
-        try:
-            data = load_mock_data(f"key_metrics_{ticker}.json")
-            if isinstance(data, list) and data:
-                data = data[0]
-        except Exception:
-            return None
-    else:
-        data = await _fmp_get("/stable/key-metrics-ttm", {"symbol": ticker})
-        if data is None:
-            data = await _fmp_get(f"/api/v3/key-metrics-ttm/{ticker}")
-        if not data:
-            return None
-        if isinstance(data, list) and data:
-            data = data[0]
+    data = await _fmp_get("/stable/key-metrics-ttm", {"symbol": ticker})
+    if data is None:
+        data = await _fmp_get(f"/api/v3/key-metrics-ttm/{ticker}")
+    if not data:
+        logger.error(f"FMP Key Metrics für {ticker} nicht verfügbar - API-Fehler oder Rate Limit.")
+        return None
+    if isinstance(data, list) and data:
+        data = data[0]
 
     # Profil für Sektor laden
     profile = await get_company_profile(ticker)
@@ -244,24 +201,19 @@ async def get_key_metrics(ticker: str) -> ValuationData | None:
 @rate_limit("fmp")
 async def get_analyst_grades(ticker: str) -> list[dict]:
     """Holt Analysten Upgrades/Downgrades."""
-    if settings.use_mock_data:
-        return []
-
     data = await _fmp_get("/stable/grades", {"symbol": ticker, "limit": 5})
     if data is None:
         data = await _fmp_get(f"/api/v3/grade/{ticker}", {"limit": 5})
 
     if isinstance(data, list):
         return data[:5]
+    logger.error(f"FMP Analyst Grades für {ticker} nicht verfügbar - API-Fehler oder Rate Limit.")
     return []
 
 
 @rate_limit("fmp")
 async def get_price_target_consensus(ticker: str) -> dict | None:
     """Holt Price Target Konsens."""
-    if settings.use_mock_data:
-        return None
-
     data = await _fmp_get("/stable/price-target-consensus", {"symbol": ticker})
     if data is None:
         data = await _fmp_get(f"/api/v4/price-target-consensus", {"symbol": ticker})
@@ -270,6 +222,7 @@ async def get_price_target_consensus(ticker: str) -> dict | None:
         return data[0]
     elif isinstance(data, dict) and data:
         return data
+    logger.error(f"FMP Price Target Consensus für {ticker} nicht verfügbar - API-Fehler oder Rate Limit.")
     return None
 
 

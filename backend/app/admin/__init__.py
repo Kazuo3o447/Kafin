@@ -21,12 +21,14 @@ from backend.app.logger import get_recent_logs, get_logger
 
 # Include score backfill router
 from .score_backfill import router as score_backfill_router
+from .endpoints import router as admin_ops_router
 
 logger = get_logger(__name__)
 router = APIRouter()
 
-# Register the score backfill router
+# Register the routers
 router.include_router(score_backfill_router, prefix="/scores", tags=["scores"])
+router.include_router(admin_ops_router, prefix="/api/admin", tags=["admin-ops"])
 
 # ---------------------------------------------------------------------------
 # HTML TEMPLATE

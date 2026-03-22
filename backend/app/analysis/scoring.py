@@ -357,6 +357,22 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
     assessment = getattr(ia, "assessment", "") if not isinstance(ia, dict) else ia.get("assessment", "") if ia else ""
     if assessment == "bearish": isa_score = 10.0
 
+    # Reddit-Verstärker: Retail gierig + Insider verkauft
+    # = verstärktes Torpedo-Signal
+    reddit_score = data.get("reddit_sentiment")
+    reddit_mentions = data.get("reddit_mentions", 0)
+    if (reddit_score is not None
+            and reddit_score > 0.2   # Retail bullisch
+            and reddit_mentions >= 3
+            and isa_score > 0.5):    # Insider verkauft
+        # Max 20% Verstärkung
+        isa_score = min(10.0, isa_score * 1.2)
+        logger.debug(
+            f"Reddit-Divergenz Verstärker aktiv: "
+            f"retail={reddit_score:.2f}, "
+            f"mentions={reddit_mentions}"
+        )
+
     # guidance_deceleration: Analyst-Downgrade Druck
     # Downgrades = Analysten sehen Risiken die der
     # Markt noch nicht eingepreist hat

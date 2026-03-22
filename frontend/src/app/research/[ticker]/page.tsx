@@ -132,6 +132,15 @@ type ResearchData = {
   market_sentiment_detail?: Record<string,{
     score: number; count: number; label: string
   }> | null;
+  reddit_sentiment?: {
+    score: number | null;
+    mentions: number;
+    label: string | null;
+  } | null;
+  fear_greed?: {
+    score: number | null;
+    label: string | null;
+  } | null;
   sector_earnings_upcoming?: Array<{
     ticker: string;
     date: string | null;
@@ -522,6 +531,25 @@ function ScoreBlock({ data, delta }: { data: ResearchData; delta?: ScoreDeltaDat
             ⚠️ whisper_delta, guidance_trend, sector_regime sind
             aktuell noch nicht berechnet (Roadmap P1b).
           </p>
+        </div>
+      )}
+
+      {/* Fear & Greed Badge */}
+      {data.fear_greed?.score != null && (
+        <div className="flex items-center gap-1.5 mt-2">
+          <span className="text-[10px] text-[var(--text-muted)]">
+            Markt:
+          </span>
+          <span className={`text-[10px] font-semibold ${
+            (data.fear_greed.score ?? 50) <= 25
+              ? "text-[var(--accent-red)]"
+            : (data.fear_greed.score ?? 50) >= 75
+              ? "text-[var(--accent-green)]"
+            : "text-[var(--text-muted)]"
+          }`}>
+            {data.fear_greed.label}
+            {" "}({Math.round(data.fear_greed.score ?? 50)})
+          </span>
         </div>
       )}
     </div>
@@ -1010,20 +1038,54 @@ function SentimentBlock({ data }: { data: ResearchData }) {
             </p>
             <p className={`text-xl font-bold font-mono ${
               vs >  0.1 ? "text-[var(--accent-green)]"
-            : vs < -0.1 ? "text-[var(--accent-red)]"
-            : "text-[var(--text-muted)]"
+              : vs < -0.1 ? "text-[var(--accent-red)]"
+              : "text-[var(--text-muted)]"
             }`}>
               {vs >= 0 ? "+" : ""}{vs.toFixed(2)}
             </p>
             <p className={`text-[10px] mt-1 ${
               vs >  0.1 ? "text-[var(--accent-green)]"
-            : vs < -0.1 ? "text-[var(--accent-red)]"
-            : "text-[var(--text-muted)]"
+              : vs < -0.1 ? "text-[var(--accent-red)]"
+              : "text-[var(--text-muted)]"
             }`}>
               {vs >  0.1 ? "Stärker als Markt"
              : vs < -0.1 ? "Schwächer als Markt"
              : "Markt-neutral"}
             </p>
+          </div>
+        )}
+        {/* Reddit Sentiment */}
+        {data.reddit_sentiment?.mentions
+         && data.reddit_sentiment.mentions > 0 && (
+          <div className="rounded-lg
+                           bg-[var(--bg-tertiary)] p-3">
+            <p className="text-[10px]
+                           text-[var(--text-muted)] mb-1">
+              Reddit (WSB/stocks)
+            </p>
+            <p className={`text-lg font-bold font-mono ${
+              (data.reddit_sentiment.score ?? 0) > 0.1
+                ? "text-[var(--accent-green)]"
+              : (data.reddit_sentiment.score ?? 0) < -0.1
+                ? "text-[var(--accent-red)]"
+              : "text-amber-400"
+            }`}>
+              {data.reddit_sentiment.label ?? "—"}
+            </p>
+            <p className="text-[10px]
+                           text-[var(--text-muted)] mt-1">
+              {data.reddit_sentiment.mentions} Erwähnungen (24h)
+            </p>
+            {/* Divergenz-Warnung */}
+            {data.reddit_sentiment.score !== null
+             && (data.reddit_sentiment.score ?? 0) > 0.15
+             && data.insider_assessment === "bearish" && (
+              <p className="text-[10px]
+                             text-[var(--accent-red)] mt-1
+                             font-semibold">
+                ⚠ Retail gierig + Insider bearish
+              </p>
+            )}
           </div>
         )}
       </div>

@@ -172,6 +172,22 @@ Anzeige: Research Dashboard, Options-Block:
 Erweiterung von get_options_oi_analysis() in
 yfinance_data.py. gamma aus option_chain verfügbar.
 
+**⛔ TECHNISCHE EINSCHRÄNKUNG (verifiziert):**
+yfinance option_chain() gibt KEIN Gamma zurück.
+Spalten: strike, bid, ask, volume, openInterest,
+impliedVolatility — kein delta/gamma/theta.
+
+GEX erfordert entweder:
+  - Polygon.io Options API ($29/Monat)
+  - Tradier Options API (kostenlos bis 10K calls/Tag)
+  - CBOE Livevol (teuer, institutional)
+
+Empfehlung: Tradier API evaluieren.
+  https://developer.tradier.com/documentation/markets/get-chains
+
+Bis API vorhanden: als OFFEN markieren.
+Status bleibt ⛔ BLOCKIERT (API-Key nötig).
+
 **Aufwand:** ~2h | **Modell:** SWE-1.5
 **Priorität:** Batch 2 (nach Max Pain live)
 

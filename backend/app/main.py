@@ -1001,6 +1001,8 @@ async def api_research_dashboard(
     from backend.app.data.finra import get_finra_short_volume
     from backend.app.data.market_overview import get_market_overview
     from backend.app.data.market_overview import get_market_news_for_sentiment
+    from backend.app.data.reddit_monitor import get_reddit_sentiment
+    from backend.app.data.fear_greed import get_fear_greed_score
     from backend.app.memory.short_term import get_bullet_points
     from backend.app.memory.watchlist import get_watchlist
     from backend.app.utils.timezone import now_mez, mez_date_string
@@ -1030,6 +1032,8 @@ async def api_research_dashboard(
         get_market_news_for_sentiment(),                 # 15 - NEW for market sentiment context
         get_options_oi_analysis(effective_ticker),       # 16 - NEW for Max Pain
         get_finra_short_volume(effective_ticker),        # 17 - NEW for FINRA Short Volume
+        get_reddit_sentiment(effective_ticker),          # 18 - NEW for Reddit sentiment
+        get_fear_greed_score(),                          # 19 - NEW for Fear & Greed
         return_exceptions=True,
     )
 
@@ -1083,6 +1087,8 @@ async def api_research_dashboard(
     market_sent_data = safe(15) or {}
     oi_data = safe(16)
     finra_data = safe(17)
+    reddit_data = safe(18)
+    fg = safe(19)
 
     # ── Watchlist-Status ───────────────────────────────────────
     is_watchlist = any(
@@ -1773,6 +1779,9 @@ async def api_research_dashboard(
             # NEU: für sector_regime
             "sector_ranking": market_ov.get("sector_ranking_5d", []) if market_ov else [],
             "ticker_sector": sector or "Unknown",
+            # NEU: Reddit sentiment für scoring integration
+            "reddit_sentiment": reddit_data.get("avg_score") if reddit_data else None,
+            "reddit_mentions": reddit_data.get("mention_count", 0) if reddit_data else 0,
         }
 
         opp_score_obj = await calculate_opportunity_score(
@@ -1975,6 +1984,22 @@ async def api_research_dashboard(
         "sentiment_vs_market": round(
             ticker_sent["avg"] - market_avg_sentiment, 3
         ) if (mkt_scores and ticker_sent["count"] > 0) else None,
+
+        # Reddit Sentiment (NEU)
+        "reddit_sentiment": {
+            "score": reddit_data.get("avg_score")
+                if reddit_data else None,
+            "mentions": reddit_data.get("mention_count", 0)
+                if reddit_data else 0,
+            "label": reddit_data.get("label")
+                if reddit_data else None,
+        } if reddit_data else None,
+
+        # Fear & Greed (NEU)
+        "fear_greed": {
+            "score": fg.get("score") if fg else None,
+            "label": fg.get("label") if fg else None,
+        } if fg else None,
 
         # Sektor-Peers Earnings nächste 14T
         "sector_earnings_upcoming": sector_earnings[:5],

@@ -2,6 +2,38 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.16.3] - 2026-03-22 - Integration Layer
+
+### 🔗 Feature-Verbindungen
+- **Reddit-Sentiment parallel im Research-Gather**: 
+  - `get_reddit_sentiment()` in `asyncio.gather()` integriert
+  - Response erweitert um `reddit_sentiment` mit score, mentions, label
+  - Reddit-Daten in `data_ctx` für Scoring-Algorithmus verfügbar
+- **Reddit-Verstärker im Torpedo-Signal**: 
+  - Insider selling wird um 20% verstärkt wenn Retail bullisch (>0.2) 
+  - und >=3 Reddit mentions vorhanden
+  - Log-Eintrag: "Reddit-Divergenz Verstärker aktiv"
+- **Reddit Tile im SentimentBlock**: 
+  - Neuer Tile neben FinBERT und S&P-Vergleich
+  - Zeigt Reddit-Label und Erwähnungen (24h)
+  - Divergenz-Warnung: "⚠ Retail gierig + Insider bearish"
+- **Fear & Greed im Research-Kontext**: 
+  - `get_fear_greed_score()` parallel geladen
+  - Badge im ScoreBlock mit Farbcodierung (Fear=rot, Greed=grün)
+  - Zeigt CNN Fear & Greed Index mit Score und Label
+
+### 🛠 Technical Details
+- **Backend**: `api_research_dashboard` gather erweitert (+2 Calls)
+- **Scoring**: `calculate_torpedo_score()` Reddit-Modifikator
+- **Frontend**: TypeScript Types erweitert (reddit_sentiment, fear_greed)
+- **UI**: SentimentBlock grid 3→4 Tiles, ScoreBlock Badge
+- **Error Handling**: Reddit-Daten optional, graceful fallback
+
+### 📊 Integration Benefits
+- **Divergenz-Erkennung**: Retail gierig + Insider bearish = starkes Short-Signal
+- **Markt-Kontext**: Fear & Greed gibt übergeordnetes Sentiment
+- **Kohärenz**: Keine Feature-Inseln mehr, alle Daten fließen zusammen
+
 ## [5.16.2] - 2026-03-22 - Shadow Journal Phase A
 
 ### 📝 Trade-Grund Dropdown

@@ -2,6 +2,27 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.12.1] - 2026-03-22 - Earnings Battle Card
+
+### 🚀 Trading-Mehrwert
+- **Setup-Ampel**: Grün/Amber/Rot aus Opp+Torp Score
+- **Expected Move**: ±% mit Break-Even Levels
+- **Track Record**: Beats/8 + Ø Surprise + Letzter Beat
+- **Konsens**: EPS + Revenue auf einen Blick
+- **Buy-Rumor Warnung**: wenn +10% in 30T vor Earnings
+- **Backend**: quick_snapshot +expected_move, +price_change_30d
+
+### 🏗️ Backend
+- **quick_snapshot**: Expected Move aus IV berechnet
+- **30T-Performance**: Buy-Rumor Detection für Preis-Momentum
+- **Neue Felder**: expected_move_pct/usd, price_change_30d, current_price
+
+### 🎨 Frontend
+- **BattleCard**: Kompakte Darstellung aller trading-relevanten Daten
+- **Setup-Ampel**: Visuelle Entscheidungsgrundlage Tradeable/Prüfen/Meiden
+- **Risk Assessment**: Buy-Rumor Warnung bei starkem Vorlauf
+- **Research Link**: Direkter Sprung zur Detailseite
+
 ## [5.12.0] - 2026-03-22 - Chart-Analyse Begründung
 
 ### 🚀 Trading-Mehrwert

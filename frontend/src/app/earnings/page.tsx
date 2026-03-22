@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { api } from "@/lib/api";
-import { Loader2, Sunrise, Moon, Clock, TrendingUp, TrendingDown, ExternalLink } from "lucide-react";
+import { Loader2, Sunrise, Moon, Clock, TrendingUp, TrendingDown, ExternalLink, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
 type EarningsEntry = {
@@ -53,8 +53,217 @@ type SnapshotData = {
   earnings_countdown_days: number | null;
   earnings_today: boolean;
   is_on_watchlist: boolean;
+  expected_move_pct?: number | null;
+  expected_move_usd?: number | null;
+  price_change_30d?: number | null;
+  current_price?: number | null;
+  opportunity_score?: number | null;
+  torpedo_score?: number | null;
   error?: string;
 };
+
+function setupAmpel(snap: SnapshotData): {
+  color: string; bg: string; label: string;
+} {
+  const opp = snap.opportunity_score ?? 0;
+  const torp = snap.torpedo_score ?? 10;
+  if (opp >= 6.5 && torp <= 4)
+    return {
+      color: "text-[var(--accent-green)]",
+      bg: "bg-[var(--accent-green)]/10",
+      label: "Tradeable",
+    };
+  if (opp <= 3.5 || torp >= 7)
+    return {
+      color: "text-[var(--accent-red)]",
+      bg: "bg-[var(--accent-red)]/10",
+      label: "Meiden",
+    };
+  return {
+    color: "text-amber-400",
+    bg: "bg-amber-500/10",
+    label: "Prüfen",
+  };
+}
+
+function BattleCard({ snap, ticker }: {
+  snap: SnapshotData; ticker: string;
+}) {
+  if (snap.error) return (
+    <p className="text-xs text-[var(--text-muted)] p-4">
+      Keine Daten verfügbar.
+    </p>
+  );
+
+  const ampel = setupAmpel(snap);
+  const buyRumorRisk =
+    (snap.price_change_30d ?? 0) > 10
+    && (snap.earnings_countdown_days ?? 99) <= 14;
+
+  return (
+    <div className="p-4 space-y-4">
+
+      {/* Zeile 1: Ampel + Expected Move */}
+      <div className="flex items-center justify-between
+                      flex-wrap gap-3">
+        <div className={`flex items-center gap-2
+                         rounded-full px-3 py-1.5
+                         ${ampel.bg}`}>
+          <span className={`text-sm font-bold ${ampel.color}`}>
+            {ampel.label}
+          </span>
+          {snap.opportunity_score != null && (
+            <span className="text-xs text-[var(--text-muted)]">
+              Opp {snap.opportunity_score.toFixed(1)} /
+              Torp {snap.torpedo_score?.toFixed(1) ?? "—"}
+            </span>
+          )}
+        </div>
+        {snap.expected_move_pct != null && (
+          <div className="text-right">
+            <p className="text-[10px] text-[var(--text-muted)]">
+              Expected Move
+            </p>
+            <p className="text-lg font-bold font-mono
+                           text-[var(--text-primary)]">
+              ±{snap.expected_move_pct}%
+            </p>
+            {snap.expected_move_usd && snap.current_price && (
+              <p className="text-[10px] text-[var(--text-muted)]">
+                ±${snap.expected_move_usd.toFixed(2)} |
+                Break-Even ${(snap.current_price - snap.expected_move_usd).toFixed(2)}–${(snap.current_price + snap.expected_move_usd).toFixed(2)}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Zeile 2: Track Record */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-lg bg-[var(--bg-tertiary)] p-2.5">
+          <p className="text-[10px] text-[var(--text-muted)]">
+            Beat-Rate
+          </p>
+          <p className={`text-sm font-bold font-mono ${
+            (snap.beats_of_8 ?? 0) >= 6
+              ? "text-[var(--accent-green)]"
+            : (snap.beats_of_8 ?? 0) <= 3
+              ? "text-[var(--accent-red)]"
+            : "text-amber-400"
+          }`}>
+            {snap.beats_of_8 ?? "—"}/8
+          </p>
+        </div>
+        <div className="rounded-lg bg-[var(--bg-tertiary)] p-2.5">
+          <p className="text-[10px] text-[var(--text-muted)]">
+            Ø Surprise
+          </p>
+          <p className={`text-sm font-bold font-mono ${
+            (snap.avg_surprise_pct ?? 0) > 0
+              ? "text-[var(--accent-green)]"
+            : "text-[var(--accent-red)]"
+          }`}>
+            {snap.avg_surprise_pct != null
+              ? `${snap.avg_surprise_pct > 0 ? "+" : ""}${snap.avg_surprise_pct.toFixed(1)}%` 
+              : "—"}
+          </p>
+        </div>
+        <div className="rounded-lg bg-[var(--bg-tertiary)] p-2.5">
+          <p className="text-[10px] text-[var(--text-muted)]">
+            Letzter Beat
+          </p>
+          <p className={`text-sm font-bold ${
+            snap.last_beat === true
+              ? "text-[var(--accent-green)]"
+            : snap.last_beat === false
+              ? "text-[var(--accent-red)]"
+            : "text-[var(--text-muted)]"
+          }`}>
+            {snap.last_beat === true ? "✓ Beat"
+             : snap.last_beat === false ? "✗ Miss"
+             : "—"}
+            {snap.last_eps_surprise_pct != null
+              ? ` ${snap.last_eps_surprise_pct > 0 ? "+" : ""}${snap.last_eps_surprise_pct.toFixed(1)}%` 
+              : ""}
+          </p>
+        </div>
+      </div>
+
+      {/* Zeile 3: Konsens */}
+      {(snap.eps_consensus || snap.revenue_consensus) && (
+        <div className="flex gap-4 text-sm">
+          {snap.eps_consensus && (
+            <div>
+              <span className="text-[10px]
+                               text-[var(--text-muted)]">
+                EPS Konsens{" "}
+              </span>
+              <span className="font-mono font-semibold">
+                ${snap.eps_consensus.toFixed(2)}
+              </span>
+            </div>
+          )}
+          {snap.revenue_consensus && (
+            <div>
+              <span className="text-[10px]
+                               text-[var(--text-muted)]">
+                Revenue{" "}
+              </span>
+              <span className="font-mono font-semibold">
+                {snap.revenue_consensus >= 1e9
+                  ? `$${(snap.revenue_consensus / 1e9).toFixed(1)}B` 
+                  : `$${(snap.revenue_consensus / 1e6).toFixed(0)}M`}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Warnung: Buy-Rumor */}
+      {buyRumorRisk && (
+        <div className="flex items-start gap-2 rounded-lg
+                        border border-amber-500/30
+                        bg-amber-500/5 px-3 py-2">
+          <AlertTriangle size={12}
+            className="text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-400">
+            <span className="font-semibold">
+              Buy-the-Rumor Risiko:
+            </span>{" "}
+            Kurs +{snap.price_change_30d?.toFixed(1)}% in 30T.
+            Viel ist eingepreist — enger Stop empfohlen.
+          </p>
+        </div>
+      )}
+
+      {/* IV + Short Interest */}
+      <div className="flex gap-4 text-xs
+                      text-[var(--text-muted)]">
+        {snap.iv_approx && (
+          <span>IV ≈ {snap.iv_approx.toFixed(1)}%</span>
+        )}
+        {snap.short_interest_pct && (
+          <span>
+            Short {snap.short_interest_pct.toFixed(1)}%
+          </span>
+        )}
+      </div>
+
+      {/* Aktionen */}
+      <div className="flex gap-2 pt-1">
+        <Link
+          href={`/research/${ticker}`}
+          className="flex-1 rounded-lg bg-[var(--accent-blue)]
+                     px-3 py-2 text-xs font-semibold
+                     text-white text-center
+                     hover:opacity-90"
+        >
+          Research →
+        </Link>
+      </div>
+    </div>
+  );
+}
 
 export default function EarningsRadarPage() {
   const [radarData, setRadarData] = useState<RadarData | null>(null);
@@ -321,74 +530,7 @@ export default function EarningsRadarPage() {
                           ) : snapshot?.error ? (
                             <div className="text-rose-400 text-sm py-4 text-center">{snapshot.error}</div>
                           ) : snapshot ? (
-                            <div className="space-y-5">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Links: Technik */}
-                                <div className="space-y-3">
-                                  <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Technisches Setup</h4>
-                                  <div className="grid grid-cols-2 gap-2 text-sm">
-                                    <div className="text-[var(--text-secondary)]">Preis:</div>
-                                    <div className={`font-mono font-bold ${(snapshot.rsi || 50) > 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                      ${snapshot.price?.toFixed(2) ?? '—'}
-                                    </div>
-                                    
-                                    <div className="text-[var(--text-secondary)]">RSI (14):</div>
-                                    <div className="font-mono flex items-center gap-1 text-[var(--text-primary)]">
-                                      {snapshot.rsi?.toFixed(1) ?? '—'} 
-                                      {snapshot.rsi && snapshot.rsi > 70 ? <TrendingUp size={14} className="text-rose-400"/> : snapshot.rsi && snapshot.rsi < 30 ? <TrendingDown size={14} className="text-emerald-400"/> : null}
-                                    </div>
-                                    
-                                    <div className="text-[var(--text-secondary)]">Trend:</div>
-                                    <div className="capitalize text-[var(--text-primary)]">{snapshot.trend ?? '—'}</div>
-                                    
-                                    <div className="text-[var(--text-secondary)]">SMA 50/200:</div>
-                                    <div className="font-mono text-xs text-[var(--text-muted)] flex items-center gap-2">
-                                       <span className={snapshot.price && snapshot.sma_50 && snapshot.price > snapshot.sma_50 ? "text-emerald-400" : "text-rose-400"}>50: {snapshot.sma_50 ?? '-'}</span>
-                                       <span className={snapshot.price && snapshot.sma_200 && snapshot.price > snapshot.sma_200 ? "text-emerald-400" : "text-rose-400"}>200: {snapshot.sma_200 ?? '-'}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                                
-                                {/* Rechts: Earnings */}
-                                <div className="space-y-3">
-                                  <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Earnings Context</h4>
-                                  <div className="grid grid-cols-2 gap-2 text-sm">
-                                    <div className="text-[var(--text-secondary)]">Termin:</div>
-                                    <div className="text-[var(--text-primary)]">{snapshot.next_earnings_date} <span className="text-[var(--text-muted)]">({snapshot.report_timing === 'pre_market' ? 'Pre' : snapshot.report_timing === 'after_hours' ? 'AH' : 'Unbekannt'})</span></div>
-                                    
-                                    <div className="text-[var(--text-secondary)]">Konsens:</div>
-                                    <div className="font-mono text-[var(--text-primary)]">
-                                      EPS ${snapshot.eps_consensus?.toFixed(2) ?? '-'} | Rev {snapshot.revenue_consensus ? snapshot.revenue_consensus > 1e9 ? `${(snapshot.revenue_consensus/1e9).toFixed(2)}B` : `${(snapshot.revenue_consensus/1e6).toFixed(0)}M` : '-'}
-                                    </div>
-                                    
-                                    <div className="text-[var(--text-secondary)]">Letztes Quartal:</div>
-                                    <div className={`font-mono font-bold ${snapshot.last_beat === true ? 'text-emerald-400' : snapshot.last_beat === false ? 'text-rose-400' : 'text-[var(--text-primary)]'}`}>
-                                      {snapshot.last_eps_surprise_pct != null ? `${snapshot.last_eps_surprise_pct > 0 ? '+' : ''}${snapshot.last_eps_surprise_pct.toFixed(1)}% Surprise` : '—'}
-                                    </div>
-                                    
-                                    <div className="text-[var(--text-secondary)]">Historie (8Q):</div>
-                                    <div className="text-[var(--text-primary)]">
-                                      {snapshot.beats_of_8 ?? '-'}/8 Beats <span className="text-[var(--text-muted)] text-xs">(Ø {snapshot.avg_surprise_pct != null ? `${snapshot.avg_surprise_pct>0?'+':''}${snapshot.avg_surprise_pct}%` : '-'})</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              
-                              <div className="flex items-center gap-6 border-t border-[var(--border)] pt-3 text-xs text-[var(--text-muted)]">
-                                <div>Short Interest: <span className="text-[var(--text-primary)] font-mono ml-1">{snapshot.short_interest_pct?.toFixed(1) ?? '—'}%</span></div>
-                                <div>IV (Approx): <span className="text-[var(--text-primary)] font-mono ml-1">{snapshot.iv_approx?.toFixed(1) ?? '—'}%</span></div>
-                                
-                                <div className="ml-auto flex items-center gap-2">
-                                  {!isWl && (
-                                     <button onClick={() => handleAddToWatchlist(entry.ticker)} className="hover:text-[var(--text-primary)] transition">+ Zur Watchlist</button>
-                                  )}
-                                  {isWl && <span className="text-emerald-400">✓ Auf Watchlist</span>}
-                                  <Link href={`/research/${entry.ticker}`} target="_blank" className="flex items-center gap-1 hover:text-[var(--text-primary)] transition ml-2">
-                                    Detailseite <ExternalLink size={12}/>
-                                  </Link>
-                                </div>
-                              </div>
-                            </div>
+                            <BattleCard snap={snapshot} ticker={expandedTicker!} />
                           ) : null}
                           
                           {generatingReport === entry.ticker && (

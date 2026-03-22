@@ -758,6 +758,47 @@ async def api_quick_snapshot(ticker: str):
         except Exception:
             pass
 
+        # Expected Move aus IV (wie in research_dashboard)
+        expected_move_pct = None
+        expected_move_usd = None
+        try:
+            import math
+            from datetime import date as _date
+            iv = iv_rank / 100 if iv_rank else None
+            if estimates and iv and iv > 0:
+                report_date = getattr(estimates, "report_date", None)
+                days_to = 1
+                if report_date:
+                    try:
+                        d = _date.fromisoformat(str(report_date))
+                        days_to = max(1, (d - _date.today()).days)
+                    except Exception:
+                        pass
+                price_val = getattr(tech, "current_price", None)
+                if price_val and price_val > 0:
+                    expected_move_pct = round(
+                        iv * math.sqrt(days_to / 365) * 100, 1
+                    )
+                    expected_move_usd = round(
+                        price_val * iv * math.sqrt(days_to / 365), 2
+                    )
+        except Exception:
+            pass
+
+        # 30T-Performance für Buy-Rumor-Detection
+        price_change_30d = None
+        try:
+            def _fetch_30d():
+                hist = yf.Ticker(ticker).history(period="35d")
+                if len(hist) >= 22:
+                    c = float(hist["Close"].iloc[-1])
+                    o = float(hist["Close"].iloc[-22])
+                    return round(((c - o) / o) * 100, 1)
+                return None
+            price_change_30d = await asyncio.to_thread(_fetch_30d)
+        except Exception:
+            pass
+
         # Letztes Audit aus Supabase laden
         latest_audit = None
         try:
@@ -800,6 +841,10 @@ async def api_quick_snapshot(ticker: str):
             "days_to_cover": getattr(short_int, "days_to_cover", None) if short_int else None,
             "iv_approx": iv_rank,
             "latest_audit": latest_audit,
+            "expected_move_pct": expected_move_pct,
+            "expected_move_usd": expected_move_usd,
+            "price_change_30d":  price_change_30d,
+            "current_price":     getattr(tech, "current_price", None),
         }
 
         if snapshot["next_earnings_date"]:

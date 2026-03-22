@@ -15,7 +15,7 @@
 - [ ] P1c — Firmenprofil (CEO, Mitarbeiter, Peers)
 - [ ] FINRA Short Volume (täglich, kostenlos)
 - [x] Fear & Greed Score (Frontend)
-- [ ] Watchlist P1 Auto-Update bei neuer Prio
+- [x] Watchlist P1 Auto-Update bei neuer Prio
 - [ ] Reddit Retail vs. Smart Money Divergenz
 - [ ] Sympathy Play Radar (peer_monitor.py erweitern)
 - [ ] GEX Proxy (Gamma Exposure, Erweiterung Max Pain)

@@ -2,6 +2,27 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.14.2] - 2026-03-22 - Watchlist P1 Auto-Update
+
+### 🚀 Trading-Mehrwert
+- **Post-Earnings Watchlist-Auto-Update**: Prio und Notizen automatisch aktualisieren
+  - Beat + AH-Dip → P1 (sofort watchen)
+  - Starker Beat + positiver AH → P2
+  - Miss + AH-Rallye → vorsichtig P1
+  - Starker Miss → P3-4 (reduzieren)
+- **Notiz-Tag**: `[Post-Earnings YYYY-MM-DD: EPS +X%, AH -Y%]`
+- **Cache-Invalidierung**: Watchlist + Research Dashboard + Earnings Radar
+
+### 🔧 Backend
+- **Intelligente Prio-Logik**: EPS Surprise + After-Hours Reaktion kombiniert
+- **Notizen-Management**: Alten Post-Earnings-Tag ersetzen, neue Tags anhängen
+- **Fehlerbehandlung**: Nur Update wenn ticker in Watchlist, robuste Exception Handling
+
+### 📊 Trigger
+- Ausführung nach jedem Post-Earnings Review
+- Nur für Ticker in der aktuellen Watchlist
+- Automatische Cache-Aktualisierung für UI
+
 ## [5.14.1] - 2026-03-22 - Fear & Greed Widget
 
 ### 🚀 Trading-Mehrwert

@@ -17,6 +17,8 @@ from backend.app.analysis.deepseek import call_deepseek
 from backend.app.memory.long_term import save_insight, get_insights
 from backend.app.db import get_supabase_client
 from backend.app.analysis.shadow_portfolio import close_shadow_trade
+from backend.app.alerts.telegram import send_post_earnings_alert
+from backend.app.utils.timezone import now_mez, mez_timestamp
 
 logger = get_logger(__name__)
 
@@ -39,7 +41,7 @@ def _read_prompt(path: str) -> Tuple[str, str]:
 
 
 def _current_quarter() -> str:
-    now = datetime.now()
+    now = now_mez()
     quarter = (now.month - 1) // 3 + 1
     return f"Q{quarter}_{now.year}"
 
@@ -81,6 +83,35 @@ async def run_post_earnings_review(ticker: str, quarter: Optional[str] = None) -
         actual_revenue = getattr(last, "revenue_actual", None)
         actual_revenue_consensus = getattr(last, "revenue_consensus", None)
 
+    # After-Hours Reaktion
+    ah_change_pct = None
+    try:
+        import yfinance as yf
+        import asyncio
+        def _fetch_ah():
+            hist = yf.Ticker(ticker).history(
+                period="5d", interval="1h", prepost=True
+            )
+            if hist.empty or len(hist) < 2:
+                return None
+            # Suche den ersten AH-Balken nach Marktschluss
+            # AH = nach 16:00 ET = 22:00-02:00 CET/CEST
+            for i in range(len(hist)-1, 0, -1):
+                idx = hist.index[i]
+                if hasattr(idx, 'hour'):
+                    # In CET/CEST: AH ist 22:00-23:59 oder 00:00-02:00
+                    if (idx.hour >= 22) or (idx.hour <= 2):
+                        ah_close = float(hist["Close"].iloc[i])
+                        reg_close = float(hist["Close"].iloc[i-1])
+                        if reg_close > 0:
+                            return round(
+                                (ah_close - reg_close) / reg_close * 100, 2
+                            )
+            return None
+        ah_change_pct = await asyncio.to_thread(_fetch_ah)
+    except Exception:
+        pass
+
     stock_price_pre = None
     stock_reaction_1d = None
     stock_reaction_5d = None
@@ -117,6 +148,28 @@ async def run_post_earnings_review(ticker: str, quarter: Optional[str] = None) -
         reaction_1d=stock_reaction_1d,
         surprise=actual_surprise,
     )
+
+    # Historische Win-Rate aus past_trades
+    win_rate = None
+    try:
+        db = get_supabase_client()
+        if db:
+            trades = (
+                db.table("shadow_trades")
+                .select("outcome_correct")
+                .eq("ticker", ticker)
+                .eq("status", "closed")
+                .limit(10)
+                .execute()
+            )
+            if trades.data and len(trades.data) >= 3:
+                wins = sum(
+                    1 for t in trades.data
+                    if t.get("outcome_correct") is True
+                )
+                win_rate = round(wins / len(trades.data) * 100)
+    except Exception:
+        pass
 
     review_record = {
         "ticker": ticker,
@@ -163,6 +216,109 @@ async def run_post_earnings_review(ticker: str, quarter: Optional[str] = None) -
 
     await _update_performance_tracking(quarter, prediction_correct)
 
+    # Telegram Alert
+    try:
+        await send_post_earnings_alert(
+            ticker=ticker,
+            company_name=ticker,  # Fallback
+            eps_actual=actual_eps,
+            eps_consensus=actual_eps_consensus,
+            eps_surprise_pct=actual_surprise,
+            revenue_actual=actual_revenue,
+            revenue_consensus=actual_revenue_consensus,
+            ah_change_pct=ah_change_pct,
+            expected_move_pct=None,  # Could be calculated from options
+            rsi=None,  # Could be fetched from technicals
+            opp_score=pre_report.get("opportunity_score"),
+            torpedo_score=pre_report.get("torpedo_score"),
+            win_rate=win_rate,
+            recommendation=pre_report.get("pre_earnings_recommendation"),
+        )
+    except Exception as e:
+        logger.warning(f"Post-Earnings Alert Fehler: {e}")
+
+    # Watchlist-Prio nach Earnings aktualisieren
+    try:
+        from backend.app.db import get_supabase_client
+        db = get_supabase_client()
+        if db:
+            # Hole aktuelle Watchlist-Einträge
+            wl = db.table("watchlist") \
+                   .select("ticker,web_prio,notes") \
+                   .eq("ticker", ticker.upper()) \
+                   .execute()
+
+            if wl.data:
+                entry = wl.data[0]
+
+                # Neue Prio berechnen
+                new_prio = entry.get("web_prio")
+                eps_surp = actual_surprise or 0
+                ah = ah_change_pct or 0
+
+                # Beat + AH-Dip → P1 (sofort watchen)
+                if eps_surp > 5 and ah < -2:
+                    new_prio = 1
+                # Starker Beat + positiver AH → P2
+                elif eps_surp > 5 and ah > 2:
+                    new_prio = min(
+                        entry.get("web_prio") or 3, 2
+                    )
+                # Miss + AH-Rallye → vorsichtig P1
+                elif eps_surp < -5 and ah > 3:
+                    new_prio = 1
+                # Starker Miss → P4 (reduzieren)
+                elif eps_surp < -10:
+                    new_prio = max(
+                        entry.get("web_prio") or 2, 3
+                    )
+
+                # Notiz-Update
+                from backend.app.utils.timezone import now_mez
+                date_str = now_mez().strftime("%Y-%m-%d")
+                note_tag = (
+                    f"[Post-Earnings {date_str}: "
+                    f"EPS {eps_surp:+.1f}%, "
+                    f"AH {ah:+.1f}%]"
+                )
+                old_notes = entry.get("notes") or ""
+                # Alten Post-Earnings-Tag ersetzen
+                import re
+                old_notes = re.sub(
+                    r"\[Post-Earnings[^\]]*\]",
+                    "", old_notes
+                ).strip()
+                new_notes = (
+                    f"{old_notes} {note_tag}".strip()
+                    if old_notes else note_tag
+                )
+
+                # Nur updaten wenn sich etwas ändert
+                updates: dict = {"notes": new_notes}
+                if (new_prio is not None
+                        and new_prio != entry.get("web_prio")):
+                    updates["web_prio"] = new_prio
+                    logger.info(
+                        f"Watchlist-Prio {ticker}: "
+                        f"{entry.get('web_prio')} → {new_prio}"
+                    )
+
+                db.table("watchlist") \
+                  .update(updates) \
+                  .eq("ticker", ticker.upper()) \
+                  .execute()
+
+                # Cache invalidieren
+                from backend.app.cache import cache_invalidate
+                cache_invalidate("watchlist:enriched:v2")
+                cache_invalidate(f"research_dashboard_{ticker.upper()}")
+                cache_invalidate_prefix("earnings_radar_")
+
+    except Exception as e:
+        logger.warning(
+            f"Watchlist-Update nach Earnings Fehler: {e}"
+        )
+
     return {
         "ticker": ticker,
         "quarter": quarter,
@@ -171,6 +327,8 @@ async def run_post_earnings_review(ticker: str, quarter: Optional[str] = None) -
         "reaction_1d": stock_reaction_1d,
         "review": review_text,
         "lessons": lessons,
+        "ah_change_pct": ah_change_pct,
+        "historical_win_rate": win_rate,
     }
 
 

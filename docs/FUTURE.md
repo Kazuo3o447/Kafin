@@ -487,12 +487,20 @@ Besser: S&P 500 Advance-Decline-Linie via ^SPXAD (yfinance).
 `yf.Ticker("^SPXAD").history(period="1mo")` — testen ob verfügbar.
 Aufwand: 30 Minuten wenn ^SPXAD korrekt liefert.
 
-## 🟡 FUTURE: Fear & Greed Score
-Berechenbar aus: VIX-Level, Put/Call Ratio, Junk Bond Demand (HYG),
-Market Momentum (SPY vs SMA125), Safe Haven Demand (TLT vs SPY),
-Stock Price Strength (new 52W highs vs lows).
-Zeigt 0-100 Score analog CNN Fear & Greed.
-Aufwand: ~3h, SWE-1.5.
+## ✅ KASKADE 3 ABGESCHLOSSEN
+
+- **Fear & Greed Score** → ✅ ERLEDIGT (22.03.2026) — v5.14.0 / v5.14.1
+  - `backend/app/data/fear_greed.py` mit 5 Komponenten und 30min Cache
+  - `GET /api/data/fear-greed`
+  - `FearGreedBlock` direkt nach MacroDashboard auf `/markets`
+- **Watchlist Auto-Update** → ✅ ERLEDIGT (22.03.2026) — v5.14.2
+  - `post_earnings_review.py` aktualisiert `web_prio` + `notes` nach Earnings
+  - Cache-Invalidierung für Watchlist / Research Dashboard / Earnings Radar
+- **DeepSeek Prompts** → ✅ ERLEDIGT (22.03.2026) — v5.14.3
+  - `news_extraction`: `is_directly_relevant` + `relevance_reason`
+  - `audit_report`: Max Pain, PCR-OI, Squeeze-Signal, Firmenprofil
+  - `post_earnings`: AH-Reaktion + Fear & Greed Kontext
+  - `morning_briefing`: Fear & Greed bei Extremen
 
 ## 🟡 AUS DEM REVIEW OFFEN
 

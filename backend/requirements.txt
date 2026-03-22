@@ -12,6 +12,7 @@ redis>=5.0.0
 yfinance>=0.2.37
 pandas>=2.0.0
 feedparser==6.*
+pytz>=2023.3
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.5.*
 transformers==4.47.*

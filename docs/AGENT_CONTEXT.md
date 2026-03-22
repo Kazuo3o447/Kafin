@@ -198,6 +198,19 @@ Kein roher Placeholder-Text mehr im Prompt.
 - **Frontend State-Sharing**: `fetchMarketOverview()` eliminiert Triple-Call auf `getMarketOverview()`
 - **Vollständige UI**: Alle Datenblöcke mit Block-Labels und Timestamps
 
+### Kaskade 3 (v5.14.0-5.14.4)
+- **Fear & Greed Score**: `backend/app/data/fear_greed.py`
+  - 5 Komponenten: VIX (30%), Breite (20%), TLT/SPY (20%), Credit (20%), Momentum (10%)
+  - Cache 30min, GET `/api/data/fear-greed`
+- **FearGreedBlock**: Neuer Markets-Block auf `/markets` direkt nach MacroDashboard
+- **Watchlist P1 Auto-Update**: `post_earnings_review.py` aktualisiert `web_prio` + Notiz nach Earnings und invalidiert relevante Caches
+- **DeepSeek Prompts v0.3**:
+  - `news_extraction`: `is_directly_relevant`-Check + `relevance_reason`
+  - `audit_report`: Max Pain, PCR-OI, Squeeze-Signal, Firmenprofil
+  - `post_earnings`: AH-Reaktion + Fear & Greed Kontext
+  - `morning_briefing`: Fear & Greed bei Extremen
+- **Chart Analyst**: optionale `pre_market_price` / `pre_market_change` Parameter
+
 ### Batch 1 (v5.13.0)
 - **Max Pain**: GET /api/data/options-oi/{ticker}, Cache 4h
   Berechnet Max Pain Preis + Top-5 OI-Strikes + Put/Call Ratio aus yfinance option_chain

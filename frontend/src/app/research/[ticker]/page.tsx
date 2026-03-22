@@ -167,6 +167,16 @@ type ResearchData = {
     label: string;
     signal: "bullish" | "bearish" | "neutral";
   } | null;
+  company_profile?: {
+    ceo?: string | null;
+    employees?: number | null;
+    description?: string | null;
+    website?: string | null;
+    ipo_date?: string | null;
+    country?: string | null;
+    exchange?: string | null;
+    peers?: string[];
+  } | null;
 };
 
 type ScoreDeltaData = {
@@ -1376,6 +1386,126 @@ function EarningsContextBanner({ data }: { data: ResearchData }) {
   );
 }
 
+// ── Company Profile Block (P1c) ────────────────────────────────
+function CompanyProfileBlock({
+  profile,
+  ticker,
+}: {
+  profile: ResearchData["company_profile"];
+  ticker: string;
+}) {
+  if (!profile) return null;
+  if (
+    !profile.ceo && !profile.description
+    && !profile.employees
+  ) return null;
+
+  return (
+    <div className="card p-5">
+      <h3 className="text-xs font-semibold uppercase
+                     tracking-widest text-[var(--text-muted)]
+                     mb-4">
+        Unternehmen
+      </h3>
+      <div className="space-y-3">
+
+        {/* CEO + Employees */}
+        <div className="flex items-center
+                        justify-between flex-wrap gap-2">
+          {profile.ceo && (
+            <div>
+              <p className="text-[10px] text-[var(--text-muted)]">
+                CEO
+              </p>
+              <p className="text-sm font-medium
+                             text-[var(--text-primary)]">
+                {profile.ceo}
+              </p>
+            </div>
+          )}
+          {profile.employees && (
+            <div className="text-right">
+              <p className="text-[10px] text-[var(--text-muted)]">
+                Mitarbeiter
+              </p>
+              <p className="text-sm font-mono
+                             text-[var(--text-primary)]">
+                {profile.employees.toLocaleString("de-DE")}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Meta: IPO, Country, Exchange */}
+        {(profile.ipo_date || profile.country
+          || profile.exchange) && (
+          <div className="flex flex-wrap gap-3
+                          text-xs text-[var(--text-muted)]">
+            {profile.country && (
+              <span>🌍 {profile.country}</span>
+            )}
+            {profile.exchange && (
+              <span>📊 {profile.exchange}</span>
+            )}
+            {profile.ipo_date && (
+              <span>
+                IPO: {new Date(profile.ipo_date)
+                  .getFullYear()}
+              </span>
+            )}
+            {profile.website && (
+              <a
+                href={profile.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--accent-blue)]
+                           hover:underline"
+              >
+                Website ↗
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Beschreibung */}
+        {profile.description && (
+          <p className="text-xs text-[var(--text-secondary)]
+                         leading-relaxed border-t
+                         border-[var(--border)] pt-3">
+            {profile.description}
+          </p>
+        )}
+
+        {/* Peers */}
+        {profile.peers && profile.peers.length > 0 && (
+          <div className="border-t border-[var(--border)] pt-3">
+            <p className="text-[10px] text-[var(--text-muted)]
+                           mb-2">
+              Peers
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {profile.peers.map((peer) => (
+                <a
+                  key={peer}
+                  href={`/research/${peer}`}
+                  className="rounded px-2 py-1 text-xs
+                             font-mono font-semibold
+                             bg-[var(--bg-tertiary)]
+                             text-[var(--accent-blue)]
+                             hover:bg-[var(--bg-elevated)]
+                             transition-colors"
+                >
+                  {peer}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Hauptkomponente ───────────────────────────────────────────
 export default function ResearchDashboard() {
   const { ticker } = useParams() as { ticker: string };
@@ -2215,6 +2345,12 @@ export default function ResearchDashboard() {
         onAccountSizeChange={setAccountSize}
         onRiskPercentChange={setRiskPercent}
         onStopLossChange={setStopLoss}
+      />
+
+      {/* Company Profile Block (P1c) */}
+      <CompanyProfileBlock
+        profile={data.company_profile}
+        ticker={tickerUpper}
       />
 
       {/* ══════════════════════════════════════════════════════

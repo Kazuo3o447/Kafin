@@ -11,6 +11,7 @@ API:    Supabase
 from datetime import datetime
 from typing import Optional
 from backend.app.db import get_supabase_client
+from backend.app.utils.timezone import now_mez
 from backend.app.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,7 +27,7 @@ async def save_insight(
 ) -> bool:
     """Speichert eine Erkenntnis im Langzeit-Gedächtnis."""
     if quarter is None:
-        now = datetime.now()
+        now = now_mez()
         quarter = f"Q{(now.month - 1) // 3 + 1}_{now.year}"
 
     record = {
@@ -36,7 +37,7 @@ async def save_insight(
         "confidence": confidence,
         "source": source,
         "quarter": quarter,
-        "updated_at": datetime.now().isoformat(),
+        "updated_at": now_mez().isoformat(),
     }
 
     try:

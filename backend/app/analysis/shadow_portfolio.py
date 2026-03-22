@@ -6,13 +6,14 @@ from typing import Any, Dict, List
 import yfinance as yf
 
 from backend.app.db import get_supabase_client
+from backend.app.utils.timezone import now_mez
 from backend.app.logger import get_logger
 
 logger = get_logger(__name__)
 
 
 def _current_quarter() -> str:
-    now = datetime.now()
+    now = now_mez()
     quarter = (now.month - 1) // 3 + 1
     return f"Q{quarter}_{now.year}"
 
@@ -72,7 +73,7 @@ async def open_shadow_trade(
         logger.error(f"Shadow Trade Duplikat-Check Fehler: {exc}")
         return {"error": str(exc)}
 
-    entry_price = await _get_next_trading_day_close(ticker, datetime.now())
+    entry_price = await _get_next_trading_day_close(ticker, now_mez())
     if not entry_price:
         logger.warning(f"Shadow Trade für {ticker} übersprungen: kein Entry-Preis")
         return {"skipped": True, "reason": "Entry-Preis nicht verfügbar"}
@@ -91,11 +92,11 @@ async def open_shadow_trade(
         "opportunity_score": round(opportunity_score, 2),
         "torpedo_score": round(torpedo_score, 2),
         "entry_price": entry_price,
-        "entry_date": datetime.now().isoformat(),
+        "entry_date": now_mez().isoformat(),
         "stop_loss_price": stop_loss,
         "position_size_usd": 10000,
         "status": "open",
-        "created_at": datetime.now().isoformat(),
+        "created_at": now_mez().isoformat(),
     }
 
     try:
@@ -131,7 +132,7 @@ async def close_shadow_trade(ticker: str, quarter: str) -> Dict[str, Any]:
         logger.error(f"Shadow Trade Lookup Fehler {ticker}: {exc}")
         return {"error": str(exc)}
 
-    exit_price = await _get_next_trading_day_close(ticker, datetime.now() - timedelta(days=1))
+    exit_price = await _get_next_trading_day_close(ticker, now_mez() - timedelta(days=1))
     if not exit_price:
         logger.warning(f"Exit-Preis für {ticker} nicht verfügbar — Trade bleibt offen")
         return {"skipped": True, "reason": "Exit-Preis nicht verfügbar"}
@@ -149,7 +150,7 @@ async def close_shadow_trade(ticker: str, quarter: str) -> Dict[str, Any]:
             entry_dt = datetime.fromisoformat(trade["entry_date"])
             hist = yf.Ticker(ticker).history(
                 start=entry_dt.date().isoformat(),
-                end=datetime.now().date().isoformat(),
+                end=now_mez().date().isoformat(),
             )
             if not hist.empty:
                 if direction == "long":
@@ -178,7 +179,7 @@ async def close_shadow_trade(ticker: str, quarter: str) -> Dict[str, Any]:
 
     update_data = {
         "exit_price": round(actual_exit_price, 4),
-        "exit_date": datetime.now().isoformat(),
+        "exit_date": now_mez().isoformat(),
         "exit_reason": exit_reason,
         "pnl_usd": round(pnl_usd, 2),
         "pnl_percent": round(pnl_percent, 2),
@@ -217,7 +218,7 @@ async def get_shadow_portfolio_summary() -> Dict[str, Any]:
     for trade in open_trades:
         try:
             current_price = await _get_next_trading_day_close(
-                trade["ticker"], datetime.now() - timedelta(days=1)
+                trade["ticker"], now_mez() - timedelta(days=1)
             )
             if current_price and trade.get("entry_price"):
                 entry = trade["entry_price"]
@@ -312,7 +313,7 @@ async def get_weekly_shadow_report() -> str:
         t
         for t in summary.get("closed_trades", [])
         if t.get("exit_date")
-        and datetime.fromisoformat(t["exit_date"]) > datetime.now() - timedelta(days=7)
+        and datetime.fromisoformat(t["exit_date"]) > now_mez() - timedelta(days=7)
     ]
 
     if closed_this_week:

@@ -95,7 +95,7 @@ async def analyze_chart(
         pre_market_str = (
             f"PRE-MARKET: ${pre_market_price:.2f} "
             f"({pre_market_change:+.1f}%)\n"
-            if pre_market_price and pre_market_change
+            if pre_market_price is not None and pre_market_change is not None
             else ""
         )
 

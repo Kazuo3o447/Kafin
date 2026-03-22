@@ -28,6 +28,23 @@ def _clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
 
 
+def _credit_spread_score(cs_bps: float) -> float:
+    """Map HY spread (bps) to a 0-100 greed score.
+
+    300bp is treated as a neutral-ish normal market, 500bp as clear stress,
+    and 600bp+ as panic/fear.
+    """
+    if cs_bps <= 250:
+        return 100.0
+    if cs_bps <= 300:
+        return 100.0 - ((cs_bps - 250.0) / 50.0) * 40.0
+    if cs_bps <= 500:
+        return 60.0 - ((cs_bps - 300.0) / 200.0) * 40.0
+    if cs_bps <= 600:
+        return 20.0 - ((cs_bps - 500.0) / 100.0) * 20.0
+    return 0.0
+
+
 async def get_fear_greed_score() -> dict:
     """
     Berechnet Fear & Greed aus 5 Komponenten:
@@ -113,13 +130,12 @@ async def get_fear_greed_score() -> dict:
             total_weight  += 0.20
 
     # ── 4. Credit Spread (20%) ────────────────────
-    # < 3.0% = Greed, > 6.0% = Fear
+    # HY spreads: ~300bp normal, ~500bp stress, ~600bp fear
     cs = None
     if not isinstance(macro, Exception):
         cs = getattr(macro, "credit_spread_bps", None)
     if cs is not None:
-        cs_pct = cs / 100  # bps → %
-        raw = _clamp((6.0 - cs_pct) / (6.0 - 3.0) * 100, 0, 100)
+        raw = _clamp(_credit_spread_score(cs), 0, 100)
         components["credit_spread"] = {
             "value": round(cs, 0),
             "score": round(raw, 1),

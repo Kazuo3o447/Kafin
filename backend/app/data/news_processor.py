@@ -131,6 +131,10 @@ async def process_news_for_ticker(ticker: str) -> dict:
         
         try:
             extracted_data = await _extract_bullet_points(ticker, news_item)
+            is_relevant = extracted_data.get("is_directly_relevant", True)
+            if not is_relevant:
+                logger.debug(f"{ticker}: News nicht direkt relevant, skip")
+                continue  # zur nächsten News
             bullet_points = extracted_data.get("bullet_points", [])
             category = _categorize_news(news_item.headline, news_item.summary)
 

@@ -18,9 +18,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 import yaml, os
 
-from backend.app.memory.watchlist import get_watchlist
-from backend.app.memory.short_term import get_bullet_points
+from backend.app.logger import get_logger
+from backend.app.memory.short_term import get_bullet_points_batch
 from backend.app.alerts.telegram import send_telegram_alert
+from backend.app.utils.timezone import now_mez
 from backend.app.logger import get_logger
 
 logger = get_logger(__name__)
@@ -300,7 +301,7 @@ async def check_sentiment_divergence() -> dict:
                 f"🚨 <b>SENTIMENT ALERT: {ticker}</b>\n"
                 f"<i>{company}</i>\n\n"
                 + "\n\n".join(alert_parts)
-                + f"\n\n⏰ {datetime.now().strftime('%d.%m.%Y %H:%M')} CET"
+                + f"\n\n⏰ {now_mez().strftime('%d.%m.%Y %H:%M')} CET"
                 + f"\n🔗 /watchlist/{ticker}"
             )
             success = await send_telegram_alert(message)

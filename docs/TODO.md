@@ -33,6 +33,11 @@
 - [ ] Shadow Trading Journal Phase A (Trade-Grund Dropdown)
 
 ## 🟢 BATCH 4 — Technische Schuld (wenn Zeit)
+- [x] PostgreSQL + pgvector Docker Setup
+- [ ] DB Client Drop-in Adapter (K6-2)
+- [ ] Backend DB Switch (K6-3)
+- [ ] pgvector Embedding Pipeline (K6-4)
+- [ ] RAG Query Endpoint (K6-5)
 - [ ] P3a main.py Router-Split (3124 Zeilen → 6 Dateien)
 - [ ] SYSTEM_LOGS Cleanup (1 SQL-Statement)
 - [ ] SECTOR_TO_ETF Duplikation → shared utils

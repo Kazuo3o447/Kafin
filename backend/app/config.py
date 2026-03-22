@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     kimi_api_key: str = ""
     tavily_api_key: str = ""
+
+    # PostgreSQL (neu)
+    database_url: str = (
+        "postgresql://kafin:kafin_local_dev"
+        "@postgres:5432/kafin"
+    )
     
     # Supabase (via .env)
     supabase_url: str = ""

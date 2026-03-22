@@ -2,6 +2,25 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [6.0.0] - 2026-03-22 - PostgreSQL + pgvector Docker Setup
+
+### 🏗️ Architektur-Meilenstein
+- **PostgreSQL 16 + pgvector**: Docker-Container mit `pgvector/pgvector:pg16`
+  - Healthcheck via `pg_isready` vor Backend-Start
+  - `postgres-data` Volume für persistente DB-Daten
+- **Vollständiges Schema**: alle 14 Tabellen inkl. fehlender Trading-Tabellen
+  - `shadow_trades`, `score_history`, `system_logs`, `web_intelligence_cache`, `custom_search_terms`
+  - `ALTER TABLE`-Ergänzungen für bestehende Tabellen
+- **pgvector-Setup**: `vector(384)`-Spalten in `short_term_memory`, `long_term_memory`, `audit_reports`
+  - HNSW-Index für Cosine-Similarity-Suche
+- **Lokale Embeddings**: `sentence-transformers` für K6-4 vorbereitet
+- **Legacy-Fallback**: Supabase bleibt in der Konfiguration erhalten, wird aber mittelfristig abgelöst
+
+### 🔧 Konfiguration
+- **DATABASE_URL**: lokale PostgreSQL-Verbindung über `postgres`-Service
+- **Backend-Dependencies**: `asyncpg`, `psycopg2-binary`, `pgvector`
+- **Init-Skripte**: `database/init/01_extensions.sql`, `02_schema.sql`, `03_seed.sql`
+
 ## [5.15.3] - 2026-03-22 - P2b Earnings Fallback + Kalender
 
 ### 🚀 Trading-Mehrwert

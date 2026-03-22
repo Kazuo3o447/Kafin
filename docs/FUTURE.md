@@ -5,6 +5,17 @@
 
 ---
 
+## 🟠 FEATURE: Supabase → PostgreSQL Migration
+
+**Status: 🟠 IN ARBEIT — v6.0.0 (K6-1 abgeschlossen)**
+
+- PostgreSQL 16 läuft lokal als Docker-Container mit pgvector
+- `DATABASE_URL` zeigt auf den `postgres`-Service im Compose-Setup
+- Supabase bleibt bis K6-3 als Legacy-Fallback in der Konfiguration erhalten
+- K6-2 bis K6-5 bauen auf diesem Datenbank-Setup auf
+
+---
+
 ## Kürzlich abgeschlossen (v5.12.2)
 
 ### ✅ Index-Chartanalyse auf Markets

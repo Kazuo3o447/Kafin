@@ -2375,6 +2375,15 @@ async def api_fear_greed():
     return await get_fear_greed_score()
 
 
+@data_router.get("/reddit-sentiment/{ticker}")
+async def api_reddit_sentiment(ticker: str):
+    """Reddit Retail Sentiment für Ticker (1h Cache)."""
+    from backend.app.data.reddit_monitor import (
+        get_reddit_sentiment
+    )
+    return await get_reddit_sentiment(ticker.upper())
+
+
 @data_router.get("/options-oi/{ticker}")
 async def api_options_oi(ticker: str):
     """Max Pain + OI-Heatmap für Ticker."""

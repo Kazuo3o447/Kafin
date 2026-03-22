@@ -2,6 +2,33 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.16.0] - 2026-03-22 - Reddit Retail Sentiment
+
+### 📱 Reddit Sentiment Monitor
+- **reddit_monitor.py**: WSB + r/stocks JSON-API Integration
+  - User-Agent korrekt gesetzt (Reddit-TOS compliant)
+  - FinBERT-Bewertung der Post-Titel mit Batch-Processing
+  - Cache 1h, kein API-Key nötig, Rate-Limit 1 Request/2s
+- **get_retail_smart_divergence()**: Retail vs Insider Divergenz
+  - Signale: torpedo_divergence, opportunity_divergence, confirmed_bullish
+  - Zusätzliche Signale: retail_hype, retail_panic (ohne Insider-Daten)
+  - Divergenz-Score: +1.0 (Opportunity) bis -1.0 (Torpedo)
+- **GET /api/data/reddit-sentiment/{ticker}**: Public API Endpoint
+  - Return: ticker, mention_count, avg_score, label, titles_sample
+  - Graceful Fallback bei Netzwerkfehlern oder Rate-Limits
+
+### 🎯 Trading Edge Benefits
+- **Retail Smart Money Divergenz**: Early Warning für Short-Setups
+- **Hype-Erkennung**: Retail gierig + Insider verkauft = starkes Torpedo
+- **Contrarian Signale**: Retail panik + Insider kaufen = Opportunity
+- **Keine API-Kosten**: Reddit JSON-API ist kostenlos und öffentlich
+
+### 🛠 Technical Implementation
+- **Async Architecture**: asyncio.to_thread für Reddit HTTP Calls
+- **Error Handling**: Robuste Fehlerbehandlung mit Debug-Logging
+- **Cache Strategy**: 1h TTL für Reddit-Daten (verändert sich langsam)
+- **FinBERT Integration**: Lokale Sentiment-Analyse ohne externe Abhängigkeit
+
 ## [5.16.3] - 2026-03-22 - Integration Layer
 
 ### 🔗 Feature-Verbindungen

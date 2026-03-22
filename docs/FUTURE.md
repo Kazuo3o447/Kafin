@@ -546,11 +546,17 @@ Historische 5T/20T-Werte werden aus Supabase geladen.
 `pct_above_sma50_5d_ago`, `pct_above_sma50_20d_ago` und `breadth_trend_5d`
 sind jetzt im Markets-Dashboard sichtbar.
 
-## 🟡 FUTURE: General News Endpoint
-GET /api/news/general fehlt noch.
-Backend: `get_general_market_news()` existiert in `backend/app/data/market_overview.py`.
-Endpoint in `backend/app/main.py` verdrahten und optional `api.ts` ergänzen.
-Aufwand: 30 Minuten, SWE-1.5.
+## ✅ GENERAL NEWS ENDPOINT
+**Status: ✅ ERLEDIGT (22.03.2026) — v6.1.5**
+
+**Was:** GET /api/news/general für marktweite Nachrichten.
+
+**Implementiert:**
+- `GET /api/news/general` im `news_router`
+- Nutzt `get_market_news_for_sentiment()` aus `market_overview.py`
+- Integriert in die neue modulare Router-Struktur.
+
+---
 
 ## 🟡 FUTURE: Marktbreite verbessern
 Aktuell: 30 Dow-Titel als Proxy.
@@ -640,6 +646,26 @@ Gibt auch VWAP, erweiterte Optionsdaten und Tick-Daten.
 URL: https://polygon.io/dashboard/stocks/starter
 
 **Aufwand:** ~1 Tag, Polygon.io Key nötig.
+
+---
+
+## ✅ CHART ANALYSIS COMPLETE OVERHAUL
+
+**Status: ✅ ERLEDIGT (22.03.2026) — v6.1.6**
+
+**Was:** Chart-Analyse mit immer sichtbaren Begründungen und ETF/Index-Unterstützung.
+→ Kein Akkordeon-Klick mehr nötig, vollständige Audit-Integration, Asset-Type Detection.
+
+**Implementiert:**
+- **Frontend**: TradeSetupBlock zeigt why_entry/why_stop/trend_context/turnaround_conditions IMMER sichtbar
+- **Backend**: Asset-Type Detection für ETF_TICKERS und INDEX_TICKERS Konstanten
+- **API**: /research/{ticker} liefert is_etf, is_index, asset_type Felder
+- **Frontend**: Badge im Research Header (ETF=blau, Index=lila)
+- **Markets Page**: "Research" Button neben "⚡ Chart" für Indizes
+- **Audit Integration**: report_generator.py chart_str enthält alle reasoning fields
+- **Chart Analyst**: max_tokens 2048, explizite Anweisung für vollständige Sätze
+
+**Aufwand:** ~4h, SWE-1.5.
 
 ---
 

@@ -8,6 +8,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 3. Skimme die historischen Meilensteine nur für Kontext oder Audit-Zwecke.
 
 ## 🟢 Aktueller Stand
+- **Chart Analysis Overhaul v6.1.6**: Begründungen immer sichtbar (kein Akkordeon), ETF/Index Research mit Asset-Type Detection, vollständige Chart-Daten in Audit-Prompts, max_tokens 2048 für DeepSeek
 - **Modular Architecture v6.1.5**: Monolithische `main.py` vollständig in fachliche Router (`routers/`, `admin/`) zerlegt. Bessere Wartbarkeit und Übersichtlichkeit.
 - **Prompt Quality v6.1.4**: Alle TODO-Platzhalter implementiert (audit_report: Max Pain, CEO, Mitarbeiter; post_earnings: AH-Reaktion, Fear & Greed; morning_briefing: Fear & Greed); DeepSeek Modell-Matrix optimiert (Reasoner für komplexe Tasks, Chat für schnelle); groq.py API-Key aus settings statt module-level
 - **API Usage Tracking**: usage_tracker.py mit Redis-Puffer + DB-Flush (5min); Token-Counter für DeepSeek/Groq; Call-Counter für FMP (250/Tag) + Finnhub (60/min); Settings → APIs zeigt Echtzeit-Verbrauch mit Balken und Kosten
@@ -43,6 +44,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 | Logging | `backend/app/logger.py` | Datei-Logging, In-Memory-Buffer, Ignore-Klassifizierung |
 | Groq Client | `backend/app/analysis/groq.py` | Groq llama-3.1-8b-instant API mit DeepSeek-Fallback |
 | Usage Tracker | `backend/app/analysis/usage_tracker.py` | API Usage Tracking + Token Counter (Redis + PostgreSQL) |
+| Chart Analyst | `backend/app/analysis/chart_analyst.py` | Chart-Analyse mit DeepSeek, max_tokens 2048, vollständige Begründungen |
 | Report Generator | `backend/app/analysis/report_generator.py` | Audit/Morning/Weekly Report Generierung mit Prompts v0.4 |
 | Post Earnings | `backend/app/analysis/post_earnings_review.py` | Post-Earnings Reviews mit Fear & Greed Kontext |
 | Prompt Templates | `prompts/audit_report.md`, `prompts/post_earnings.md`, `prompts/morning_briefing.md` | KI-Prompts v0.4 mit vollständigen Platzhaltern |

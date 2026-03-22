@@ -5,14 +5,15 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 6.1.5 (Modular Architecture + Prompt Quality + API Usage)
+**Version**: 6.1.6 (Chart Analysis Complete Overhaul)
 **Stand**: 2026-03-22
-**Latest Commit**: refactor: modularize main.py into dedicated routers v6.1.5
+**Latest Commit**: feat: chart analysis complete overhaul v6.1.6
 
 ---
 
-## Architektur-Überblick (v6.1.5)
+## Architektur-Überblick (v6.1.6)
 Das Backend wurde von einer monolithischen `main.py` auf eine modulare Router-Struktur umgestellt.
+Die Chart-Analyse wurde komplett überarbeitet mit immer sichtbaren Begründungen und ETF/Index-Unterstützung.
 
 ### Kern-Struktur (backend/app/)
 - `main.py` - Minimaler Entrypoint, Middleware & Router-Registrierung
@@ -354,6 +355,23 @@ POST /api/data/sympathy-check/{REPORTER_TICKER}?move_pct={REACTION}
 
 Oder n8n: Nach scan-earnings-results den
 Sympathy-Check für jeden gemeldeten Ticker triggern.
+
+### Kaskade 6 (v6.1.6)
+- **chart_analyst.py**: Complete Overhaul mit immer sichtbaren Begründungen
+  - max_tokens von 512 auf 2048 erhöht
+  - Explizite Anweisung für vollständige Sätze
+  - Temperature 0.2 für Konsistenz
+- **Research Frontend**: Akkordeon entfernt, Begründungen immer sichtbar
+  - Farbige Headers (blau/rot/grün) für why_entry/why_stop/turnaround
+  - Direkte Darstellung ohne Klick erforderlich
+- **ETF/Index Research**: Asset-Type Detection für SPY/QQQ/IWM/DXY etc.
+  - Backend: ETF_TICKERS und INDEX_TICKERS Konstanten
+  - API: /research/{ticker} liefert is_etf, is_index, asset_type
+  - Frontend: Badge im Research Header (ETF=blau, Index=lila)
+  - Markets Page: "Research" Button neben "⚡ Chart"
+- **Audit Report Integration**: Vollständige Chart-Daten im Prompt
+  - report_generator.py: chart_str enthält alle reasoning fields
+  - DeepSeek Reasoner erhält why_entry, why_stop, trend_context etc.
 
 ### Kaskade 5 (v5.16.0-5.16.4)
 - **reddit_monitor.py**: WSB + r/stocks JSON → FinBERT

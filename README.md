@@ -7,14 +7,20 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 ### Core Funktionalität
 - **Watchlist Management**: Hinzufügen/Entfernen von Tickern mit automatischer Datenanreicherung
 - **Real-time News**: FinBERT-gestützte Sentiment-Analyse mit Material-Event-Detection
-- **Chart Intelligence**: Interaktive Kurs-Charts mit SMA-Overlays und Event-Markern
+- **Chart Intelligence v6.1.6**: Immer sichtbare Begründungen + ETF/Index-Unterstützung
 - **KI-Analysen**: Groq (News-Extraktion) + DeepSeek (Reports) mit optimierter Modell-Matrix
-- **Modular Architecture v6.1.5**: Fachlich getrennte API-Router für bessere Wartbarkeit
+- **Modular Architecture v6.1.6**: Fachlich getrennte API-Router für bessere Wartbarkeit
 - **PostgreSQL 16 + pgvector**: Lokale Vektordatenbank für semantische Suche (RAG)
 - **API Usage Tracking**: Echtzeit-Token-Counter und Call-Limits für alle APIs
 - **Automatisierung**: n8n-Workflows für tägliche Briefings und wöchentliche Reports
 - **System Monitoring**: Live Status Dashboard mit Service-Health und Latenz-Tracking
 - **Persistent Logging**: RotatingFileHandler mit Docker-Volume-Persistenz
+
+### Chart Analysis Overhaul (v6.1.6)
+- **Immer sichtbare Begründungen**: why_entry/why_stop/trend_context ohne Akkordeon-Klick
+- **ETF/Index Research**: SPY/QQQ/IWM/DXY mit Asset-Type-Badges und Research-Links
+- **Vollständige Audit-Prompts**: DeepSeek erhält alle Chart-Begründungen für qualitativ bessere Reports
+- **Token-Optimierung**: max_tokens 2048 mit expliziten Anweisungen für vollständige Sätze
 
 ### UI/UX Highlights
 - **Modern Dark Mode**: Konsistentes Design mit CSS-Variablen für alle 45+ Karten

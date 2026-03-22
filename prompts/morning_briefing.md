@@ -6,7 +6,7 @@ changelog:
   - "0.1: Initiales Template"
   - "0.2: Analytischer Tiefgang"
   - "0.3: Straffere Struktur, Analysten-Ratings, klareres Format, weniger Redundanz, Fear & Greed ergänzt"
-  - "0.4: TODO-Platzhalter implementiert"
+  - "0.4: TODO-Platzhalter implementiert, Chart Analysis Overhaul Integration"
 ---
 
 SYSTEM:

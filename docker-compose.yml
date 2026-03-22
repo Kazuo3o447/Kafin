@@ -1,7 +1,7 @@
 version: '3.8'
 
-# Kafin v6.1.4 - Prompt Quality + Modell-Optimierung
-# Aktuelle Features: API Usage Tracking, Prompt Quality v0.4, DeepSeek Modell-Matrix
+# Kafin v6.1.6 - Chart Analysis Complete Overhaul
+# Aktuelle Features: Immer sichtbare Begründungen, ETF/Index Research, vollständige Audit-Prompts
 
 services:
   postgres:

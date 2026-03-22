@@ -11,17 +11,17 @@
 - [x] Groq → News-Extraction statt DeepSeek Chat
 
 ## 🟠 BATCH 2 — Diese Woche
-- [ ] Post-Earnings Kontext-Alert (Telegram)
-- [ ] P1c — Firmenprofil (CEO, Mitarbeiter, Peers)
-- [ ] FINRA Short Volume (täglich, kostenlos)
+- [x] Post-Earnings Kontext-Alert (Telegram)
+- [x] P1c — Firmenprofil (CEO, Mitarbeiter, Peers)
+- [x] FINRA Short Volume (täglich, kostenlos)
 - [x] Fear & Greed Score (Frontend)
 - [x] Watchlist P1 Auto-Update bei neuer Prio
 - [x] DeepSeek Prompts aktualisiert (v0.3)
-- [x] Reddit Retail Sentiment Backendey Divergenz
+- [x] Reddit Retail Sentiment Backend
 - [x] Sympathy Play Radar
 - [x] Shadow Trading Journal Phase A (Trade-Grund Dropdown)
 - [x] Integration Layer (Reddit + Fear & Greed verbinden)
-- [⛔] GEX Proxy → BLOCKIERT (Tradier API nötig)
+- [⛔] GEX Proxy → BLOCKIERT (Tradier API fehlt)
 
 ## 🟡 BATCH 3 — Nächste Woche
 - [x] Marktbreite 5T/20T Verlauf (Supabase history)

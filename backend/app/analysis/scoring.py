@@ -363,7 +363,7 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
     reddit_mentions = data.get("reddit_mentions", 0)
     if (reddit_score is not None
             and reddit_score > 0.2   # Retail bullisch
-            and reddit_mentions >= 3
+            and reddit_mentions >= 5
             and isa_score > 0.5):    # Insider verkauft
         # Max 20% Verstärkung
         isa_score = min(10.0, isa_score * 1.2)

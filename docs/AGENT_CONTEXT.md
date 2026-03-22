@@ -5,7 +5,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 5.15.4 (Cascade 4 self-review + docs)
+**Version**: 5.16.4 (Cascade 5 self-review + status)
 **Stand**: 2026-03-22
 
 ---
@@ -282,6 +282,21 @@ POST /api/data/sympathy-check/{REPORTER_TICKER}?move_pct={REACTION}
 
 Oder n8n: Nach scan-earnings-results den
 Sympathy-Check für jeden gemeldeten Ticker triggern.
+
+### Kaskade 5 (v5.16.0-5.16.4)
+- **reddit_monitor.py**: WSB + r/stocks JSON → FinBERT
+  - Divergenz: Retail vs. Insider-Signal
+  - GET `/api/data/reddit-sentiment/{ticker}`, Cache 1h
+- **peer_monitor.py**: `check_sympathy_reactions()`
+  - Klassifiziert Peer-Reaktionen nach Earnings
+  - POST `/api/data/sympathy-check/{ticker}?move_pct=X`
+  - Telegram: Relative Stärke + Sympathy Alerts
+- **shadow_portfolio.py**: `trade_reason` + `manual_entry`
+  - POST `/api/shadow/manual-trade` mit 11 Gründen
+  - Performance: "Trade eröffnen" Modal + Dropdown
+- **Integration**: Reddit im Research (Scoring + Sentiment)
+  - Fear & Greed Badge im Research-Score
+  - GEX aktuell als BLOCKIERT dokumentiert
 
 ---
 

@@ -331,7 +331,7 @@ async def check_sympathy_reactions(
         for peer in peers[:5]:  # Max 5 Peers
             try:
                 hist = yf.Ticker(peer).history(
-                    period="2d", interval="1h",
+                    period="5d", interval="1h",
                     prepost=True
                 )
                 if hist.empty or len(hist) < 2:
@@ -425,7 +425,7 @@ async def send_sympathy_alert(
                 f"(hält sich während {reporter} fällt)"
             )
         lines.append(
-            "\n💡 Strategie: {reporter} hat Earnings-IV-Crush."
+            f"\n💡 Strategie: {reporter} hat Earnings-IV-Crush."
             " Relative Stärke in Peers oft besseres Setup."
         )
 

@@ -2175,7 +2175,7 @@ async def api_shadow_portfolio_weekly():
     return {"report": report}
 
 
-from pydantic import BaseModel, HTTPException
+from pydantic import BaseModel
 
 class ManualTradeRequest(BaseModel):
     ticker: str
@@ -2219,10 +2219,20 @@ async def api_manual_shadow_trade(
         "long":  "STRONG BUY",
         "short": "STRONG SELL",
     }
-    rec = rec_map.get(req.direction, "STRONG BUY")
+    ticker = req.ticker.strip().upper()
+    if not ticker:
+        raise HTTPException(status_code=400, detail="Ticker darf nicht leer sein")
+
+    direction = req.direction.strip().lower()
+    if direction not in rec_map:
+        raise HTTPException(
+            status_code=400,
+            detail="Ungültige Richtung. Erlaubt: long, short",
+        )
+    rec = rec_map[direction]
 
     result = await open_shadow_trade(
-        ticker=req.ticker.upper(),
+        ticker=ticker,
         recommendation=rec,
         opportunity_score=req.opportunity_score,
         torpedo_score=req.torpedo_score,

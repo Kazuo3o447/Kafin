@@ -16,6 +16,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - **Markets**: Der Composite Regime Header bleibt prominent auf `/markets`; die großen Kalibrierungsthemen sind in `docs/FUTURE.md` dokumentiert.
 - **Logs**: `Ignore`-Filter ist im `LogViewer` sichtbar; Backend-Logs liegen in `logs/kafin.log` und via `docker logs`.
 - **Status-/Settings-Seiten**: Diagnose-Responses sind stabil und sollten keine Proxy-Fehler mehr erzeugen.
+- **Kaskade 5**: Reddit Retail Sentiment, Sympathy Play Radar, Shadow Trade Modal und Research-Integration sind live; v5.16.4 Self-Review abgeschlossen.
 
 ## �️ Wichtige Dateien / APIs
 | Bereich | Datei / Endpoint | Zweck |

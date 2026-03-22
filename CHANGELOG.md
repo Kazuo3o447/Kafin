@@ -2,6 +2,15 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.16.4] - 2026-03-22 - Cascade 5 Self-Review
+
+### 🧪 Review-Fixes
+- **Reddit User-Agent**: auf Reddit-konformes Format korrigiert
+- **Reddit Scoring**: Verstärker-Schwelle auf mindestens 5 Mentions erhöht
+- **Shadow Trade**: Ticker-/Richtungs-Validierung im Manual-Trade Endpoint ergänzt
+- **Sympathy Radar**: Peer-Window auf 5d erweitert und Alert-Text korrigiert
+- **Docs**: AGENT_CONTEXT, STATUS und TODO auf aktuellen Stand gebracht
+
 ## [5.16.0] - 2026-03-22 - Reddit Retail Sentiment
 
 ### 📱 Reddit Sentiment Monitor

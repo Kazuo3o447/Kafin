@@ -18,8 +18,7 @@ from backend.app.logger import get_logger
 logger = get_logger(__name__)
 
 REDDIT_HEADERS = {
-    "User-Agent": "Kafin-Trading-Platform/1.0 "
-                  "(research tool; contact: kafin@local)",
+    "User-Agent": "Kafin:reddit-sentiment-monitor:1.0 (by /u/kafin_dev)",
 }
 SUBREDDITS = ["wallstreetbets", "stocks"]
 REDDIT_BASE = "https://www.reddit.com/r/{sub}/search.json"
@@ -45,49 +44,55 @@ async def get_reddit_sentiment(
         cutoff = datetime.utcnow() - timedelta(hours=hours)
 
         import httpx as _httpx
-        for sub in SUBREDDITS:
+
+        def _fetch_titles(sub: str, endpoint: str, params: dict) -> list[str]:
+            endpoint_titles: list[str] = []
             try:
-                url = REDDIT_BASE.format(sub=sub)
+                url = f"https://www.reddit.com/r/{sub}/{endpoint}"
                 resp = _httpx.get(
                     url,
-                    params={
-                        "q":      ticker.upper(),
-                        "sort":   "new",
-                        "limit":  25,
-                        "t":      "day",
-                        "type":   "link",
-                    },
+                    params=params,
                     headers=REDDIT_HEADERS,
                     timeout=10.0,
                 )
                 if resp.status_code != 200:
-                    continue
+                    return []
 
                 data = resp.json()
-                posts = (
-                    data.get("data", {})
-                    .get("children", [])
-                )
+                posts = data.get("data", {}).get("children", [])
                 for post in posts:
                     pd = post.get("data", {})
-                    # Zeitfilter
                     created = pd.get("created_utc", 0)
                     if created:
-                        post_dt = datetime.utcfromtimestamp(
-                            created
-                        )
+                        post_dt = datetime.utcfromtimestamp(created)
                         if post_dt < cutoff:
                             continue
                     title = pd.get("title", "")
-                    if (title
-                            and ticker.upper()
-                            in title.upper()):
-                        titles.append(title)
+                    if title and ticker.upper() in title.upper():
+                        endpoint_titles.append(title)
             except Exception as e:
-                logger.debug(
-                    f"Reddit {sub}/{ticker}: {e}"
-                )
-        return titles
+                logger.debug(f"Reddit {sub}/{endpoint}: {e}")
+            return endpoint_titles
+
+        for sub in SUBREDDITS:
+            sub_titles = _fetch_titles(
+                sub,
+                "search.json",
+                {
+                    "q": ticker.upper(),
+                    "sort": "new",
+                    "limit": 25,
+                    "t": "day",
+                    "type": "link",
+                },
+            )
+            if not sub_titles:
+                sub_titles = _fetch_titles(sub, "new.json", {"limit": 25})
+            if not sub_titles:
+                sub_titles = _fetch_titles(sub, "hot.json", {"limit": 25})
+            titles.extend(sub_titles)
+
+        return list(dict.fromkeys(titles))
 
     try:
         titles = await asyncio.to_thread(_fetch_reddit)

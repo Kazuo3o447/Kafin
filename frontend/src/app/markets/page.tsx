@@ -430,7 +430,14 @@ function BlockHeaderBadge({ block, cadence }: { block: string; cadence: string }
 }
 
 // Block 1: Global Indices
-function GlobalIndicesBlock({ data, timestamp }: { data?: MarketOverview; timestamp?: string }) {
+function GlobalIndicesBlock({ data, timestamp, indexAnalysis, analysisPending, onAnalyze, onRemoveAnalysis }: { 
+  data?: MarketOverview; 
+  timestamp?: string;
+  indexAnalysis?: Record<string, any>;
+  analysisPending?: Record<string, boolean>;
+  onAnalyze?: (symbol: string) => void;
+  onRemoveAnalysis?: (symbol: string) => void;
+}) {
   if (!data?.indices) return <BlockError title="Globale Indizes" />;
   
   const indices = [
@@ -500,6 +507,60 @@ function GlobalIndicesBlock({ data, timestamp }: { data?: MarketOverview; timest
               <div className="text-xs text-[var(--text-muted)] mt-1">
                 {item.name}
               </div>
+              
+              {/* Analyse-Button */}
+              {onAnalyze && !indexAnalysis?.[symbol] && (
+                <button
+                  onClick={() => onAnalyze(symbol)}
+                  disabled={analysisPending?.[symbol]}
+                  className="mt-2 w-full text-[10px] rounded
+                             border border-[var(--border)]
+                             px-2 py-1 text-[var(--text-muted)]
+                             hover:text-[var(--accent-blue)]
+                             hover:border-[var(--accent-blue)]
+                             disabled:opacity-50 transition-colors"
+                >
+                  {analysisPending?.[symbol]
+                    ? "Analysiere…"
+                    : "⚡ Chart analysieren"}
+                </button>
+              )}
+
+              {/* Analyse-Ergebnis */}
+              {indexAnalysis?.[symbol] && !indexAnalysis[symbol].error && (
+                <div className="mt-2 rounded bg-[var(--bg-tertiary)]
+                                px-2.5 py-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-[10px] font-semibold ${
+                      indexAnalysis[symbol].bias === "bullish"
+                        ? "text-[var(--accent-green)]"
+                      : indexAnalysis[symbol].bias === "bearish"
+                        ? "text-[var(--accent-red)]"
+                      : "text-amber-400"
+                    }`}>
+                      {indexAnalysis[symbol].bias?.toUpperCase() ?? "—"}
+                    </span>
+                    <button
+                      onClick={() => onRemoveAnalysis?.(symbol)}
+                      className="text-[10px] text-[var(--text-muted)]
+                                 hover:text-[var(--text-primary)]"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {indexAnalysis[symbol].analysis_text && (
+                    <p className="text-[10px] text-[var(--text-secondary)]
+                           leading-relaxed">
+                      {indexAnalysis[symbol].analysis_text}
+                    </p>
+                  )}
+                  {indexAnalysis[symbol].key_risk && (
+                    <p className="text-[10px] text-[var(--accent-red)] mt-1">
+                      ⚠ {indexAnalysis[symbol].key_risk}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
@@ -1434,6 +1495,29 @@ export default function MarketsPage() {
   const [economicCalendarLoading, setEconomicCalendarLoading] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [indexAnalysis, setIndexAnalysis] = useState<Record<string, any>>({});
+  const [analysisPending, setAnalysisPending] = useState<Record<string, boolean>>({});
+
+  const analyzeIndex = async (symbol: string) => {
+    if (analysisPending[symbol] || indexAnalysis[symbol])
+      return;
+    setAnalysisPending(prev => ({ ...prev, [symbol]: true }));
+    try {
+      const res = await fetch(
+        `/api/data/chart-analysis/${symbol}` 
+      );
+      const data = await res.json();
+      setIndexAnalysis(prev => ({ ...prev, [symbol]: data }));
+    } catch {
+      setIndexAnalysis(prev => ({
+        ...prev, [symbol]: { error: true }
+      }));
+    } finally {
+      setAnalysisPending(prev =>
+        ({ ...prev, [symbol]: false })
+      );
+    }
+  };
 
   // Fetch functions for each block
   const [marketOverview, setMarketOverview] = useState<MarketOverview | null>(null);
@@ -1658,6 +1742,16 @@ export default function MarketsPage() {
         <GlobalIndicesBlock 
           data={sharedMarketOverview} 
           timestamp={sharedMarketOverviewTs} 
+          indexAnalysis={indexAnalysis}
+          analysisPending={analysisPending}
+          onAnalyze={analyzeIndex}
+          onRemoveAnalysis={(symbol) => {
+            setIndexAnalysis(prev => {
+              const next = { ...prev };
+              delete next[symbol];
+              return next;
+            });
+          }}
         />
         
         {/* Block 2: Sector Rotation */}

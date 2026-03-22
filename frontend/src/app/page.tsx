@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { TrendingUp, TrendingDown, Activity, DollarSign, Percent, Circle, RefreshCw, ArrowDownRight, ArrowUpRight, Info, Calendar as CalendarIcon, Clock } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, DollarSign, Percent, Circle, RefreshCw, ArrowDownRight, ArrowUpRight, Info, Calendar as CalendarIcon, Clock, AlertTriangle, Zap } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { api } from "@/lib/api";
 import { cachedFetch, cacheAge, cacheInvalidateAll } from "@/lib/clientCache";
@@ -513,6 +513,170 @@ function OpportunitiesSection({ opportunities, onAdd }: { opportunities: Opportu
   );
 }
 
+function RegimePulse({ macro }: { macro: MacroSnapshot }) {
+  const vix = macro.vix ?? 0;
+  const cs = macro.credit_spread_bps ?? 0;
+  const regime = macro.regime ?? "Neutral";
+  const isRiskOn = regime.toLowerCase().includes("risk") && regime.toLowerCase().includes("on");
+  const isRiskOff = regime.toLowerCase().includes("risk") && regime.toLowerCase().includes("off");
+
+  return (
+    <div className={`flex items-center gap-3 rounded-xl px-4 py-3
+                     border ${
+      isRiskOn  ? "border-[var(--accent-green)]/30 bg-[var(--accent-green)]/5"
+    : isRiskOff ? "border-[var(--accent-red)]/30 bg-[var(--accent-red)]/5"
+    : "border-[var(--border)] bg-[var(--bg-secondary)]"
+    }`}>
+      <div className={`h-3 w-3 rounded-full ${
+        isRiskOn  ? "bg-[var(--accent-green)] shadow-[0_0_8px_var(--accent-green)]"
+      : isRiskOff ? "bg-[var(--accent-red)] shadow-[0_0_8px_var(--accent-red)]"
+      : "bg-amber-400"
+      }`} />
+      <span className={`text-sm font-semibold ${
+        isRiskOn  ? "text-[var(--accent-green)]"
+      : isRiskOff ? "text-[var(--accent-red)]"
+      : "text-amber-400"
+      }`}>
+        {regime.toUpperCase()}
+      </span>
+      <span className="text-xs text-[var(--text-muted)]">
+        VIX {vix.toFixed(1)} · Credit {cs.toFixed(0)}bp
+      </span>
+    </div>
+  );
+}
+
+function AlertStrip({ alerts }: {
+  alerts: { ticker: string; message: string; color: string }[]
+}) {
+  if (!alerts.length) return null;
+  const colorMap: Record<string, string> = {
+    red:   "bg-[var(--accent-red)]/8 border-l-[var(--accent-red)] text-[var(--accent-red)]",
+    amber: "bg-amber-500/8 border-l-amber-500 text-amber-400",
+    green: "bg-[var(--accent-green)]/8 border-l-[var(--accent-green)] text-[var(--accent-green)]",
+  };
+  return (
+    <div className="card p-4 space-y-1.5">
+      <p className="text-[10px] font-semibold uppercase
+                    tracking-widest text-[var(--text-muted)] mb-2">
+        Heute aufpassen
+      </p>
+      {alerts.map((a, i) => (
+        <div key={i}
+             className={`flex items-center gap-3 rounded-lg
+                          px-3 py-2 border-l-2 text-xs
+                          ${colorMap[a.color] || colorMap.amber}`}>
+          <Link href={`/research/${a.ticker}`}
+                className="font-semibold hover:underline">
+            {a.ticker}
+          </Link>
+          <span className="text-[var(--text-secondary)]">
+            {a.message}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TopSetups({ watchlist }: { watchlist: WatchlistItem[] }) {
+  const sorted = [...watchlist]
+    .filter(w => w.opportunity_score != null)
+    .sort((a, b) =>
+      (b.opportunity_score ?? 0) - (a.opportunity_score ?? 0)
+    );
+  const best = sorted[0];
+  const worst = [...watchlist]
+    .filter(w => w.torpedo_score != null)
+    .sort((a, b) =>
+      (b.torpedo_score ?? 0) - (a.torpedo_score ?? 0)
+    )[0];
+  if (!best && !worst) return null;
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {best && (
+        <Link href={`/research/${best.ticker}`}
+              className="card p-4 hover:border-[var(--accent-green)]/50
+                         transition-colors">
+          <p className="text-[10px] text-[var(--text-muted)]
+                         uppercase tracking-wider mb-1">
+            Bestes Setup
+          </p>
+          <p className="text-lg font-bold font-mono
+                         text-[var(--accent-green)]">
+            {best.ticker}
+          </p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Opp {best.opportunity_score?.toFixed(1)} ·{" "}
+            {best.company_name || ""}
+          </p>
+        </Link>
+      )}
+      {worst && (
+        <Link href={`/research/${worst.ticker}`}
+              className="card p-4 hover:border-[var(--accent-red)]/50
+                         transition-colors">
+          <p className="text-[10px] text-[var(--text-muted)]
+                         uppercase tracking-wider mb-1">
+            Höchstes Risiko
+          </p>
+          <p className="text-lg font-bold font-mono
+                         text-[var(--accent-red)]">
+            {worst.ticker}
+          </p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Torp {worst.torpedo_score?.toFixed(1)} ·{" "}
+            {worst.company_name || ""}
+          </p>
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function buildDashboardAlerts(
+  watchlist: WatchlistItem[]
+): { ticker: string; message: string;
+    color: "red"|"amber"|"green" }[] {
+  const alerts: ReturnType<typeof buildDashboardAlerts> = [];
+  for (const w of watchlist) {
+    // Earnings ≤5T
+    if (w.earnings_countdown != null
+        && w.earnings_countdown >= 0
+        && w.earnings_countdown <= 5) {
+      alerts.push({
+        ticker: w.ticker,
+        message: `Earnings in ${
+          w.earnings_countdown === 0
+            ? "HEUTE" : w.earnings_countdown + " Tagen"
+        }`,
+        color: "red",
+      });
+    }
+    // Torpedo stark gestiegen
+    if ((w.torp_delta ?? 0) >= 1.5) {
+      alerts.push({
+        ticker: w.ticker,
+        message: `Torpedo +${w.torp_delta?.toFixed(1)} — Risiko steigt`,
+        color: "red",
+      });
+    }
+    // Earnings ≤14T
+    if (w.earnings_countdown != null
+        && w.earnings_countdown > 5
+        && w.earnings_countdown <= 14) {
+      alerts.push({
+        ticker: w.ticker,
+        message: `Earnings in ${w.earnings_countdown} Tagen`,
+        color: "amber",
+      });
+    }
+  }
+  return alerts.sort((a, b) =>
+    (a.color === "red" ? 0 : 1) - (b.color === "red" ? 0 : 1)
+  ).slice(0, 5);
+}
+
 export default function Home() {
   const [data, setData] = useState<{
     macro: MacroSnapshot;
@@ -625,11 +789,11 @@ export default function Home() {
   const { macro, overview, report, watchlist, concentrationWarning, opportunities } = data;
 
   return (
-    <div className="space-y-8 p-8">
+    <div className="space-y-4 p-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-4xl font-bold text-[var(--text-primary)]">Dashboard</h1>
-          <p className="text-sm text-[var(--text-secondary)] mt-2">Marktüberblick und Watchlist-Highlights</p>
+          <p className="text-sm text-[var(--text-secondary)] mt-2">Morning Brief — Trading-Setup für heute</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-end text-xs text-[var(--text-secondary)]">
@@ -649,23 +813,126 @@ export default function Home() {
         </div>
       </div>
 
-      <MacroBanner macro={macro} />
+      <div className="space-y-4">
 
-      <section className="space-y-6">
-        <h2 className="text-lg font-bold text-[var(--text-primary)]">Market Overview</h2>
-        <IndexCards data={overview.indices} />
-        <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-          <SectorTable sectors={overview.sector_ranking_5d || []} />
-          <MacroProxies macro={overview.macro} />
+        {/* 1. Regime-Pulse — 1 Zeile */}
+        <RegimePulse macro={macro} />
+
+        {/* 2. Alert-Streifen */}
+        <AlertStrip alerts={buildDashboardAlerts(watchlist)} />
+
+        {/* 3. Beste Setups + Höchstes Risiko */}
+        <TopSetups watchlist={watchlist} />
+
+        {/* 4. Earnings diese Woche (kompakt) */}
+        {watchlist.filter(w =>
+          w.earnings_countdown != null
+          && w.earnings_countdown >= 0
+          && w.earnings_countdown <= 7
+        ).length > 0 && (
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-semibold uppercase
+                         tracking-widest text-[var(--text-muted)]">
+                Earnings diese Woche
+              </p>
+              <Link href="/earnings"
+                    className="text-xs text-[var(--accent-blue)]
+                               hover:underline">
+                Alle →
+              </Link>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {watchlist
+                .filter(w =>
+                  w.earnings_countdown != null
+                  && w.earnings_countdown >= 0
+                  && w.earnings_countdown <= 7
+                )
+                .sort((a, b) =>
+                  (a.earnings_countdown ?? 99)
+                  - (b.earnings_countdown ?? 99)
+                )
+                .map(w => (
+                  <Link key={w.ticker}
+                        href={`/research/${w.ticker}`}
+                        className="flex items-center gap-2
+                                   rounded-lg bg-[var(--bg-tertiary)]
+                                   px-3 py-2 hover:bg-[var(--bg-elevated)]">
+                    <span className="text-sm font-mono font-semibold
+                                      text-[var(--accent-blue)]">
+                      {w.ticker}
+                    </span>
+                    <span className="text-xs text-amber-400">
+                      {w.earnings_countdown === 0
+                        ? "HEUTE"
+                        : `in ${w.earnings_countdown}T`}
+                    </span>
+                  </Link>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* 5. SPY + VIX + Credit (3 Zahlen) */}
+        <div className="grid grid-cols-3 gap-3">
+          {["SPY", "^VIX"].map(sym => {
+            const d = overview.indices?.[sym]
+                    || overview.macro?.[sym];
+            if (!d) return null;
+            return (
+              <div key={sym} className="card p-3 text-center">
+                <p className="text-[10px] text-[var(--text-muted)]">
+                  {sym}
+                </p>
+                <p className="text-lg font-bold font-mono
+                               text-[var(--text-primary)]">
+                  {d.price?.toFixed(2) ?? "—"}
+                </p>
+                <p className={`text-xs font-mono ${
+                  (d.change_1d_pct ?? 0) >= 0
+                    ? "text-[var(--accent-green)]"
+                  : "text-[var(--accent-red)]"
+                }`}>
+                  {d.change_1d_pct != null
+                    ? `${d.change_1d_pct >= 0 ? "+" : ""}${d.change_1d_pct.toFixed(2)}%` 
+                    : "—"}
+                </p>
+              </div>
+            );
+          })}
+          <div className="card p-3 text-center">
+            <p className="text-[10px] text-[var(--text-muted)]">
+              Credit Spread
+            </p>
+            <p className="text-lg font-bold font-mono
+                           text-[var(--text-primary)]">
+              {macro.credit_spread_bps?.toFixed(0) ?? "—"}bp
+            </p>
+            <p className="text-xs text-[var(--text-muted)]">
+              HY-Spread
+            </p>
+          </div>
         </div>
-      </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <BriefingPreview report={report} />
-        <WatchlistHeatmap items={watchlist} sparklines={sparklines} concentrationWarning={concentrationWarning} />
-      </section>
+        {/* 6. Briefing (kompakt, aufklappbar) */}
+        {report && report !== "Noch kein Briefing." && (
+          <details className="card p-4">
+            <summary className="cursor-pointer text-xs
+                                 text-[var(--text-muted)]
+                                 select-none hover:text-[var(--text-primary)]">
+              Morning Briefing ▸
+            </summary>
+            <p className="mt-3 text-xs text-[var(--text-secondary)]
+                           leading-relaxed whitespace-pre-wrap
+                           max-h-40 overflow-y-auto">
+              {report.slice(0, 600)}
+              {report.length > 600 ? "…" : ""}
+            </p>
+          </details>
+        )}
 
-      <OpportunitiesSection opportunities={opportunities} onAdd={handleAddOpportunity} />
+      </div>
     </div>
   );
 }

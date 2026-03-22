@@ -2,6 +2,31 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.12.2] - 2026-03-22 - Morning Brief + Index Analysis
+
+### 🚀 Trading-Mehrwert
+**Dashboard:**
+- RegimePulse: 1-Zeile Regime + VIX + Credit Spread
+- Alert-Streifen: Earnings ≤5T + Torpedo-Alarm
+- TopSetups: Bestes Setup + Höchstes Risiko (2 Kacheln)
+- Earnings diese Woche: kompakte Badge-Reihe
+- Overnight-Kontext: SPY + VIX + Credit (3 Zahlen)
+- Morning Briefing aufklappbar (nicht dominant)
+
+**Markets:**
+- Index-Chartanalyse: "⚡ Chart analysieren" Button
+  pro Index-Karte, on-demand, gecacht 600s
+  Zeigt: Bias + Analysis Text + Key Risk
+
+### 🏗️ Backend
+- Keine neuen API-Endpunkte nötig
+- Bestehender `/api/data/chart-analysis/{ticker}` wird genutzt
+
+### 🎨 Frontend
+- **Dashboard**: Komplette Neugestaltung als Morning Brief
+- **Markets**: Per-Index Analyse mit DeepSeek Integration
+- **UX**: Kompakte Darstellung, aufklappbare Elemente
+
 ## [5.12.1] - 2026-03-22 - Earnings Battle Card
 
 ### 🚀 Trading-Mehrwert

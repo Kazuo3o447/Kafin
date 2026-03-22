@@ -161,14 +161,60 @@ Bereits vorhandenes Short Interest ergänzen.
 
 ---
 
+## 🟠 ARCHITEKTUR: News-Pipeline Stufe 2 — Groq statt DeepSeek Chat
+
+**Warum (korrigierte Einschätzung):**
+FinBERT und generative LLMs lösen VERSCHIEDENE Aufgaben:
+  FinBERT: Sentiment-Klassifizierung (bullish/bearish)
+  LLM:     Text-Generierung, Strukturierung, Extraktion
+
+DeepSeek Chat macht in news_processor.py die
+Bullet-Point-Extraktion (Stufe 3 der Pipeline).
+Aktuell limitiert auf 5 Calls/Ticker/Stunde (Kostenbremse).
+Diese Bremse verhindert vollständige News-Abdeckung.
+
+Groq (Llama 3 / Qwen) ist für diese Aufgabe besser:
+  - Kostenloses Tier mit großzügigen Limits
+  - 10-50× schneller als DeepSeek Chat
+  - Kein Rate-Limit-Problem mehr
+  - Strukturiertes JSON funktioniert zuverlässig
+
+**Optimale Pipeline nach Migration:**
+  Stufe 1: FinBERT lokal      → Noise-Filter (0 Kosten)
+  Stufe 2: Groq/Llama3        → Bullet-Points + Entity
+                                 Extraction (Groq free tier)
+  Stufe 3: DeepSeek Chat      → Nur komplexe Analyse
+                                 (signifikant weniger Calls)
+  Stufe 4: Kimi K2.5          → Earnings-Transkripte
+  Stufe 5: DeepSeek Reasoner  → Audit-Reports
+
+**Entity Extraction (neu):**
+"Betrifft diese News wirklich {ticker} oder wird der
+Ticker nur erwähnt?" — Groq löst das in <100ms.
+Verhindert False Positives (Apple in Nebensatz).
+
+**Technisch:**
+  pip install groq (minimal, kein komplexes Setup)
+  Groq API Key: kostenlos registrieren
+  news_processor.py: call_deepseek() →  call_groq()
+  Kostenbremse (_DEEPSEEK_CALLS Limit) entfernen
+
+**Cohere Command R:**
+  Für RAG auf Earnings-Call-Transkripten evaluieren.
+  Alternative zu Kimi K2.5 wenn Transkript-Analyse kommt.
+
+**Aufwand:** ~2h | **Modell:** SWE-1.5
+
+---
+
 ## NOTIZ: KI-Modell-Erweiterungen
 
 Folgende Modelle wurden als potenzielle Ergänzungen
 evaluiert:
 
   Groq + Llama 3 / Qwen: Hohe Inferenzgeschwindigkeit
-  für News-Parsing. NICHT prioritär da FinBERT bereits
-  lokal auf NUC läuft und kostenlos ist.
+  für News-Parsing. JETZT PRIORITÄRT für Bullet-Point-
+  Extraktion in News-Pipeline Stufe 2.
 
   Cohere Command R: Stark für RAG auf Earnings-Calls.
   Interessant wenn Transkript-Analyse implementiert wird.
@@ -178,9 +224,9 @@ evaluiert:
   Als Fallback wenn DeepSeek Rate-Limits erreicht.
   BYOK in Windsurf möglich.
 
-Entscheidung: Erst umsetzen wenn FinBERT/DeepSeek
-an ihre Grenzen stoßen. Kein vorzeitiger
-Architektur-Wechsel.
+Entscheidung: Groq wird für News-Parsing implementiert.
+DeepSeek bleibt für komplexe Analyse und Audit-Reports.
+Kein vorzeitiger Architektur-Wechsel.
 
 ---
 

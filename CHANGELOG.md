@@ -2,6 +2,14 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.10.11] - 2026-03-22 - Stability: Free-Tier News Sentiment Hardening
+
+### 🐛 Fixes
+- **Market Sentiment**: Finnhub General News und Google News RSS werden jetzt kombiniert statt nur einer einzelnen News-Quelle zu vertrauen
+- **Sentiment Coverage**: Die Marktanalyse bekommt zusätzlich 24h-Bullish/Bearish/Neutral-Zähler und eine Source-Breakdown-Karte
+- **News Timestamps**: Google-News-Headlines werden mit normalisierten Unix-Timestamps versehen, damit Datum/Uhrzeit korrekt dargestellt werden können
+- **Google News Cache**: Cache-Keys sind jetzt scoped, damit Market-Sentiment nicht von Watchlist-Scans überschrieben wird
+
 ## [5.10.10] - 2026-03-22 - Stability: Falsey + Design Cleanup
 
 ### 🐛 Fixes

@@ -11,6 +11,7 @@ API:    Google News RSS
 from __future__ import annotations
 
 from typing import List, Dict, Optional, Set
+import calendar
 from urllib.parse import quote
 
 import feedparser
@@ -80,8 +81,16 @@ def _parse_feed(url: str, max_results: int = 15) -> List[Dict]:
             title = entry.get("title", "")
             link = entry.get("link", "")
             published = entry.get("published", "")
+            published_parsed = entry.get("published_parsed")
             source = _extract_source(title)
             headline = _clean_title(title)
+
+            timestamp = 0
+            if published_parsed:
+                try:
+                    timestamp = int(calendar.timegm(published_parsed))
+                except Exception:
+                    timestamp = 0
 
             if not headline or not link:
                 continue
@@ -95,6 +104,7 @@ def _parse_feed(url: str, max_results: int = 15) -> List[Dict]:
                     "source": source,
                     "url": link,
                     "published": published,
+                    "timestamp": timestamp,
                 }
             )
             if len(results) >= max_results:
@@ -177,7 +187,11 @@ def _add_news_item(
 
 async def scan_google_news(watchlist_items: Optional[List[Dict]] = None) -> List[Dict]:
     """Haupt-Scan über Topics, Custom Terms und Watchlist-Ticker."""
-    cache_key = "gnews:scan"
+    watchlist_scope = "market"
+    if watchlist_items:
+        watchlist_scope = ",".join(sorted({str(item.get("ticker", "")).upper() for item in watchlist_items if item.get("ticker")})) or "market"
+
+    cache_key = f"gnews:scan:{watchlist_scope}"
     cached = cache_get(cache_key)
     if cached:
         logger.debug("Google News aus Cache")

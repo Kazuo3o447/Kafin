@@ -22,6 +22,7 @@ import {
   Brain,
   Eye,
   EyeOff,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -101,6 +102,7 @@ type NewsSentimentItem = {
   timestamp: number;
   url: string;
   sentiment_score: number;
+  origin?: string;
 };
 
 type NewsSentimentData = {
@@ -108,6 +110,16 @@ type NewsSentimentData = {
   category_sentiment: Record<string, { score: number; count: number; label: string }>;
   total_analyzed: number;
   fetched_at: string;
+  overall_sentiment?: {
+    score: number;
+    label: string;
+    bullish: number;
+    bearish: number;
+    neutral: number;
+    sample_size: number;
+    source_counts?: Record<string, number>;
+  };
+  source_breakdown?: Record<string, { count: number; score: number; label: string }>;
 };
 
 type EconomicEvent = {
@@ -1018,9 +1030,9 @@ function CrossAssetBlock({ data, timestamp }: { data?: IntermarketData; timestam
   );
 }
 
-// Block 6: Market News + FinBERT Sentiment
+// Block 6: Market-Sentiment
 function NewsSentimentBlock({ data, timestamp }: { data?: NewsSentimentData; timestamp?: string }) {
-  if (!data) return <BlockError title="Marktnachrichten + Sentiment" />;
+  if (!data) return <BlockError title="Market-Sentiment" />;
   
   const getSentimentColor = (score: number) => {
     if (score > 0.15) return "text-green-500";
@@ -1033,14 +1045,24 @@ function NewsSentimentBlock({ data, timestamp }: { data?: NewsSentimentData; tim
     if (score < -0.15) return "🔴 Bearish";
     return "🟡 Neutral";
   };
-  
+
+  const formatTimestamp = (timestamp: number) => {
+    if (!timestamp) return "unbekannt";
+    return new Intl.DateTimeFormat("de-DE", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date(timestamp * 1000));
+  };
+
+  const overall = data.overall_sentiment;
+
   return (
     <div className="card p-6">
       <BlockHeaderBadge block="Block 6" cadence="10min Refresh" />
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
           <Newspaper size={18} />
-          Marktnachrichten + FinBERT
+          Market-Sentiment
         </h3>
         {timestamp && (
           <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
@@ -1052,6 +1074,42 @@ function NewsSentimentBlock({ data, timestamp }: { data?: NewsSentimentData; tim
           </div>
         )}
       </div>
+
+      {overall && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
+          <div className="p-2 rounded bg-[var(--bg-tertiary)] text-center">
+            <div className="text-xs text-[var(--text-muted)]">Gesamtsentiment</div>
+            <div className={`text-sm font-bold ${getSentimentColor(overall.score)}`}>
+              {overall.score.toFixed(2)}
+            </div>
+            <div className="text-xs text-[var(--text-muted)] capitalize">{overall.label}</div>
+          </div>
+          <div className="p-2 rounded bg-[var(--bg-tertiary)] text-center">
+            <div className="text-xs text-[var(--text-muted)]">Bullish</div>
+            <div className="text-sm font-bold text-green-500">{overall.bullish}</div>
+            <div className="text-xs text-[var(--text-muted)]">letzte 24h</div>
+          </div>
+          <div className="p-2 rounded bg-[var(--bg-tertiary)] text-center">
+            <div className="text-xs text-[var(--text-muted)]">Bearish</div>
+            <div className="text-sm font-bold text-red-500">{overall.bearish}</div>
+            <div className="text-xs text-[var(--text-muted)]">letzte 24h</div>
+          </div>
+          <div className="p-2 rounded bg-[var(--bg-tertiary)] text-center">
+            <div className="text-xs text-[var(--text-muted)]">Abdeckung</div>
+            <div className="text-sm font-bold text-[var(--text-primary)]">
+              {overall.sample_size}
+            </div>
+            <div className="text-xs text-[var(--text-muted)]">
+              F:{overall.source_counts?.finnhub ?? 0} · G:{overall.source_counts?.google_news ?? 0}
+            </div>
+          </div>
+          <div className="p-2 rounded bg-[var(--bg-tertiary)] text-center">
+            <div className="text-xs text-[var(--text-muted)]">Neutral</div>
+            <div className="text-sm font-bold text-amber-500">{overall.neutral}</div>
+            <div className="text-xs text-[var(--text-muted)]">letzte 24h</div>
+          </div>
+        </div>
+      )}
       
       {/* Category Sentiment Summary */}
       {Object.keys(data.category_sentiment || {}).length > 0 && (
@@ -1080,10 +1138,18 @@ function NewsSentimentBlock({ data, timestamp }: { data?: NewsSentimentData; tim
                   <h4 className="text-sm font-medium text-[var(--text-primary)] line-clamp-2 mb-1">
                     {item.headline}
                   </h4>
-                  <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
                     <span>{item.source}</span>
                     <span>•</span>
+                    <span>{formatTimestamp(item.timestamp)}</span>
+                    <span>•</span>
                     <span className="capitalize">{item.category.replace('_', ' ')}</span>
+                    {item.origin && (
+                      <>
+                        <span>•</span>
+                        <span className="capitalize">{item.origin.replace('_', ' ')}</span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
@@ -1093,6 +1159,17 @@ function NewsSentimentBlock({ data, timestamp }: { data?: NewsSentimentData; tim
                   <div className="text-xs text-[var(--text-muted)]">
                     {item.sentiment_score.toFixed(2)}
                   </div>
+                  {item.url && (
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                    >
+                      <ExternalLink size={12} />
+                      Link
+                    </a>
+                  )}
                 </div>
               </div>
             </div>

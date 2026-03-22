@@ -855,12 +855,84 @@ async def get_market_news_for_sentiment() -> dict:
                     "supply chain"]
     """
     from backend.app.data.finnhub import get_general_news
-    from datetime import datetime, timedelta
+    from backend.app.data.google_news import scan_google_news
+    from backend.app.analysis.finbert import analyze_sentiment_batch
+    from datetime import datetime
 
     cache_key = "market:news_sentiment"
     cached = cache_get(cache_key)
     if cached:
         return cached
+
+    def _source_weight(origin: str, source: str) -> float:
+        source_lower = source.lower()
+        if origin == "finnhub":
+            return 1.0
+        if any(q in source_lower for q in ["reuters", "bloomberg", "ap", "associated press", "ft", "financial times"]):
+            return 1.1
+        if any(q in source_lower for q in ["cnbc", "wsj", "wall street journal", "marketwatch", "yahoo"]):
+            return 1.0
+        return 0.9
+
+    def _label(score: float) -> str:
+        if score > 0.15:
+            return "bullish"
+        if score < -0.15:
+            return "bearish"
+        return "neutral"
+
+    def _categorize_google(category: str, headline: str) -> str:
+        if category in {"business", "world"}:
+            return category
+        headline_lower = headline.lower()
+        if any(k in headline_lower for k in ["fed", "federal reserve", "fomc", "powell", "rate", "monetary", "quantitative"]):
+            return "fed_rates"
+        if any(k in headline_lower for k in ["cpi", "inflation", "gdp", "unemployment", "jobs", "payroll", "pmi", "retail sales", "consumer", "housing", "deficit"]):
+            return "macro_data"
+        if any(k in headline_lower for k in ["tariff", "sanction", "trade war", "china", "geopolit", "conflict", "war", "opec", "supply chain", "ukraine", "taiwan"]):
+            return "geopolitics"
+        return category or "market_general"
+
+    def _normalize_item(item: dict, origin: str) -> dict | None:
+        if not isinstance(item, dict):
+            return None
+
+        headline = str(item.get("headline", "")).strip()
+        if not headline:
+            return None
+
+        timestamp = 0
+        raw_ts = item.get("timestamp")
+        if raw_ts is None:
+            raw_ts = item.get("datetime")
+        if isinstance(raw_ts, (int, float)):
+            timestamp = int(raw_ts)
+            if origin == "finnhub" and timestamp > 10_000_000_000:
+                timestamp = int(timestamp / 1000)
+        elif isinstance(raw_ts, str):
+            try:
+                timestamp = int(float(raw_ts))
+            except Exception:
+                timestamp = 0
+
+        if timestamp and timestamp < (datetime.now().timestamp() - 86400):
+            return None
+
+        source = str(item.get("source", "")).strip() or origin
+        url = str(item.get("url", "")).strip()
+        category = str(item.get("category", "")).strip() or "market_general"
+        if origin == "google_news":
+            category = _categorize_google(category, headline)
+
+        return {
+            "headline": headline,
+            "category": category,
+            "source": source,
+            "timestamp": timestamp,
+            "url": url,
+            "origin": origin,
+            "source_weight": _source_weight(origin, source),
+        }
 
     try:
         # Finnhub General News — kostenlos, Englisch
@@ -869,45 +941,32 @@ async def get_market_news_for_sentiment() -> dict:
     except Exception:
         news_raw = []
 
-    if not news_raw:
+    try:
+        google_news_raw = await scan_google_news([])
+    except Exception:
+        google_news_raw = []
+
+    if not news_raw and not google_news_raw:
         return {"categories": {}, "headlines": [], "error": "no_data"}
 
-    FED_KW = ["fed","federal reserve","fomc","powell","rate","monetary","quantitative"]
-    MACRO_KW = ["cpi","inflation","gdp","unemployment","jobs","payroll","pmi",
-                "retail sales","consumer","housing","deficit"]
-    GEO_KW = ["tariff","sanction","trade war","china","geopolit","conflict",
-               "war","opec","supply chain","ukraine","taiwan"]
+    combined = []
+    seen: set[str] = set()
+    for origin, items in (("finnhub", news_raw or []), ("google_news", google_news_raw or [])):
+        for item in items[:80]:
+            normalized = _normalize_item(item, origin)
+            if not normalized:
+                continue
+            dedupe_key = normalized["url"].lower() if normalized["url"] else normalized["headline"].lower()
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            combined.append(normalized)
 
-    def categorize(headline: str) -> str:
-        h = headline.lower()
-        if any(k in h for k in FED_KW): return "fed_rates"
-        if any(k in h for k in MACRO_KW): return "macro_data"
-        if any(k in h for k in GEO_KW): return "geopolitics"
-        return "market_general"
+    if not combined:
+        return {"categories": {}, "headlines": [], "error": "no_data"}
 
-    # Nur Headlines, max 24h alt, max 30 Items
-    cutoff = datetime.now().timestamp() - 86400
-    headlines = []
-    for item in (news_raw or [])[:60]:
-        if not isinstance(item, dict): continue
-        headline = item.get("headline", "")
-        timestamp = item.get("datetime", 0)
-        if not headline or timestamp < cutoff: continue
-        source = item.get("source", "")
-        # Nur bekannte Qualitätsquellen
-        if not any(q in source.lower() for q in [
-            "reuters","bloomberg","cnbc","wsj","ft","marketwatch",
-            "ap","yahoo","seekingalpha","barron"
-        ]):
-            continue
-        headlines.append({
-            "headline": headline,  # Nur Headline, kein Summary
-            "category": categorize(headline),
-            "source": source,
-            "timestamp": timestamp,
-            "url": item.get("url", ""),
-        })
-        if len(headlines) >= 30: break
+    combined.sort(key=lambda x: (x.get("timestamp", 0), abs(x.get("source_weight", 1.0))), reverse=True)
+    combined = combined[:36]
 
     # FinBERT Sentiment pro Headline
     categories = {
@@ -915,21 +974,23 @@ async def get_market_news_for_sentiment() -> dict:
         "macro_data": [],
         "geopolitics": [],
         "market_general": [],
+        "business": [],
+        "world": [],
     }
 
     try:
-        from backend.app.analysis.finbert import analyze_sentiment_batch
         # Alle Headlines auf einmal (Batch ist effizienter)
-        all_headlines = [h["headline"] for h in headlines]
+        all_headlines = [h["headline"] for h in combined]
         scores = analyze_sentiment_batch(all_headlines)
 
-        for i, item in enumerate(headlines):
+        for i, item in enumerate(combined):
             score = scores[i] if i < len(scores) else 0.0
             item["sentiment_score"] = round(score, 3)
-            categories[item["category"]].append(score)
+            categories.setdefault(item["category"], []).append(score)
+            categories.setdefault("market_general", [])
 
     except Exception:
-        for item in headlines:
+        for item in combined:
             item["sentiment_score"] = 0.0
 
     # Aggregiertes Sentiment pro Kategorie
@@ -947,14 +1008,53 @@ async def get_market_news_for_sentiment() -> dict:
                 )
             }
 
+    bullish = sum(1 for item in combined if item.get("sentiment_score", 0.0) > 0.15)
+    bearish = sum(1 for item in combined if item.get("sentiment_score", 0.0) < -0.15)
+    neutral = len(combined) - bullish - bearish
+
+    source_breakdown = {}
+    for origin in {item["origin"] for item in combined}:
+        origin_items = [item for item in combined if item["origin"] == origin]
+        origin_scores = [item.get("sentiment_score", 0.0) for item in origin_items]
+        if origin_scores:
+            avg_score = round(sum(origin_scores) / len(origin_scores), 3)
+            source_breakdown[origin] = {
+                "count": len(origin_items),
+                "score": avg_score,
+                "label": _label(avg_score),
+            }
+
+    weighted_score_total = 0.0
+    weighted_score_denominator = 0.0
+    for item in combined:
+        score = float(item.get("sentiment_score", 0.0))
+        weight = float(item.get("source_weight", 1.0))
+        weighted_score_total += score * weight
+        weighted_score_denominator += weight
+
+    overall_score = round(weighted_score_total / weighted_score_denominator, 3) if weighted_score_denominator else 0.0
+
     result = {
         "headlines": sorted(
-            headlines,
-            key=lambda x: abs(x.get("sentiment_score", 0)),
+            combined,
+            key=lambda x: (abs(x.get("sentiment_score", 0)), x.get("timestamp", 0)),
             reverse=True  # Stärkste Signale zuerst
         )[:12],
         "category_sentiment": category_sentiment,
-        "total_analyzed": len(headlines),
+        "overall_sentiment": {
+            "score": overall_score,
+            "label": _label(overall_score),
+            "bullish": bullish,
+            "bearish": bearish,
+            "neutral": neutral,
+            "sample_size": len(combined),
+            "source_counts": {
+                "finnhub": len([item for item in combined if item["origin"] == "finnhub"]),
+                "google_news": len([item for item in combined if item["origin"] == "google_news"]),
+            },
+        },
+        "source_breakdown": source_breakdown,
+        "total_analyzed": len(combined),
         "fetched_at": datetime.now().isoformat(),
     }
 

@@ -5,7 +5,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 5.10.10 (Stability: Falsey + Design Cleanup)
+**Version**: 5.10.11 (Stability: Free-Tier News Sentiment Hardening)
 **Stand**: 2026-03-22
 
 ---
@@ -82,6 +82,11 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 - **Falsey Values**: `0.0`-Werte bleiben in Research-/Technicals-Antworten erhalten
 - **Market Overview History**: `sma_200` ist mit 1y-Historie jetzt tatsächlich berechenbar
 - **Design System**: Inter wird nur noch über `next/font` geladen
+
+### Bugfixes in v5.10.11
+- **Free-Tier News Coverage**: Market-Sentiment kombiniert Finnhub General News und Google News RSS, um ein robusteres 24h-Sentimentbild zu erhalten
+- **Sentiment UX**: Der Markets-Block zeigt jetzt Datum/Uhrzeit, externe Links und Bullish/Bearish/Neutral-Zähler für die Marktanalyse
+- **Cache Isolation**: Google-News-Caches sind nach Scope getrennt, damit Market-Sentiment nicht versehentlich durch Watchlist-Scans überschrieben wird
 
 ---
 

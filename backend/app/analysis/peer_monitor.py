@@ -302,3 +302,138 @@ async def send_peer_reaction_alert(
         "move_pct": move_pct,
         "peers": peer_results,
     }
+
+
+async def check_sympathy_reactions(
+    reporter: str,
+    reporter_move_pct: float,
+    peers: list[str],
+) -> dict:
+    """
+    Analysiert Peer-Reaktionen nach einer Earnings-Meldung.
+
+    reporter: Ticker der gemeldet hat (z.B. "ASML")
+    reporter_move_pct: Kursreaktion des Reporters (%)
+    peers: Liste von Peer-Tickern aus cross_signal_tickers
+
+    Klassifiziert für jeden Peer:
+      sympathy_run: Peer bewegt sich gleich (>50% der Bewegung)
+      relative_strength: Reporter fällt, Peer stabil/steigt
+      divergence: Reporter steigt, Peer fällt
+      no_signal: Bewegung zu klein für Klassifizierung
+    """
+    if not peers or abs(reporter_move_pct) < 1.0:
+        return {"reporter": reporter, "peers": []}
+
+    def _fetch_peer_moves() -> list[dict]:
+        import yfinance as yf
+        results = []
+        for peer in peers[:5]:  # Max 5 Peers
+            try:
+                hist = yf.Ticker(peer).history(
+                    period="2d", interval="1h",
+                    prepost=True
+                )
+                if hist.empty or len(hist) < 2:
+                    continue
+                # Letzter regulärer Kurs vs. vorgestern
+                closes = hist["Close"]
+                current = float(closes.iloc[-1])
+                prev = float(closes.iloc[0])
+                if prev <= 0:
+                    continue
+                move_pct = round(
+                    (current - prev) / prev * 100, 2
+                )
+                results.append({
+                    "ticker":   peer.upper(),
+                    "move_pct": move_pct,
+                })
+            except Exception:
+                continue
+        return results
+
+    peer_moves = await asyncio.to_thread(_fetch_peer_moves)
+
+    classified = []
+    for pm in peer_moves:
+        peer_move = pm["move_pct"]
+        ticker = pm["ticker"]
+
+        # Klassifizierung
+        if abs(reporter_move_pct) >= 2.0:
+            ratio = peer_move / reporter_move_pct
+            if ratio > 0.5:
+                category = "sympathy_run"
+            elif reporter_move_pct < -2 and peer_move > -0.5:
+                category = "relative_strength"
+            elif reporter_move_pct > 2 and peer_move < -0.5:
+                category = "divergence"
+            else:
+                category = "no_signal"
+        else:
+            category = "no_signal"
+
+        classified.append({
+            "ticker":           ticker,
+            "move_pct":         peer_move,
+            "category":         category,
+        })
+
+    return {
+        "reporter":          reporter.upper(),
+        "reporter_move_pct": reporter_move_pct,
+        "peers":             classified,
+    }
+
+
+async def send_sympathy_alert(
+    analysis: dict,
+) -> None:
+    """
+    Telegram-Alert für Sympathy/Relative-Stärke Signale.
+    Sendet nur wenn mindestens 1 relevantes Signal.
+    """
+    reporter = analysis.get("reporter", "?")
+    move = analysis.get("reporter_move_pct", 0)
+    peers = analysis.get("peers", [])
+
+    # Nur senden wenn interessante Signale vorhanden
+    rel_strength = [
+        p for p in peers
+        if p["category"] == "relative_strength"
+    ]
+    sympathy = [
+        p for p in peers
+        if p["category"] == "sympathy_run"
+    ]
+
+    if not rel_strength and not sympathy:
+        return
+
+    move_emoji = "📉" if move < 0 else "📈"
+    lines = [
+        f"🔗 <b>PEER-REAKTION: {reporter}</b> "
+        f"{move_emoji} {move:+.1f}%\n"
+    ]
+
+    if rel_strength:
+        lines.append("<b>Relative Stärke (kaufenswert?):</b>")
+        for p in rel_strength:
+            lines.append(
+                f"  ✅ {p['ticker']}: {p['move_pct']:+.1f}% "
+                f"(hält sich während {reporter} fällt)"
+            )
+        lines.append(
+            "\n💡 Strategie: {reporter} hat Earnings-IV-Crush."
+            " Relative Stärke in Peers oft besseres Setup."
+        )
+
+    if sympathy:
+        lines.append("\n<b>Sympathy Run (mitgezogen):</b>")
+        for p in sympathy:
+            lines.append(
+                f"  ↔️ {p['ticker']}: {p['move_pct']:+.1f}%"
+            )
+
+    await send_telegram_alert("\n".join(lines))

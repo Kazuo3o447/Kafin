@@ -18,7 +18,7 @@
 - [x] Watchlist P1 Auto-Update bei neuer Prio
 - [x] DeepSeek Prompts aktualisiert (v0.3)
 - [ ] Reddit Retail vs. Smart Money Divergenz
-- [ ] Sympathy Play Radar (peer_monitor.py erweitern)
+- [x] Sympathy Play Radar (peer_monitor.py erweitern)
 - [ ] GEX Proxy (Gamma Exposure, Erweiterung Max Pain)
 
 ## 🟡 BATCH 3 — Nächste Woche

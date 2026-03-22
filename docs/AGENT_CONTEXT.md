@@ -276,6 +276,13 @@ Kein roher Placeholder-Text mehr im Prompt.
 - Fehlerbehandlung mit `try/except` und Logger
 - Mock-Daten über `fixtures/*.json` verfügbar
 
+### Sympathy Play Radar
+Manuell triggern nach Earnings-Meldung:
+POST /api/data/sympathy-check/{REPORTER_TICKER}?move_pct={REACTION}
+
+Oder n8n: Nach scan-earnings-results den
+Sympathy-Check für jeden gemeldeten Ticker triggern.
+
 ---
 
 ## Nächste Schritte (aus FUTURE.md)

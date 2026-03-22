@@ -2,6 +2,28 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.16.1] - 2026-03-22 - Sympathy Play Radar
+
+### 🔗 Peer-Reaktions-Analyse
+- **check_sympathy_reactions()**: Analysiert Peer-Reaktionen nach Earnings-Meldungen
+  - Klassifiziert: `sympathy_run`, `relative_strength`, `divergence`, `no_signal`
+  - Max 5 Peers mit 2-Tage Kursdaten (yfinance, prepost=True)
+  - Ratio-basierte Erkennung (>50% Bewegung = Sympathy)
+- **send_sympathy_alert()**: Telegram-Alert für relevante Signale
+  - Relative Stärke: "Reporter fällt, Peer hält sich → kaufenswert"
+  - Sympathy Run: "Peer wird mitgezogen"
+  - Strategie-Hinweis: IV-Crush bei Reporter, günstige IV bei Peer
+- **API-Endpoint**: `POST /api/data/sympathy-check/{ticker}?move_pct=X`
+  - Automatische Peer-Ermittlung aus Watchlist cross_signal_tickers
+  - Deduplizierung und bidirektionale Peer-Suche
+  - Sendet Alert bei relevanten Signalen
+
+### 📊 Trading-Edge
+- **Relative Stärke Erkennung**: Wenn Reporter nach Earnings fällt aber Peer stabil bleibt
+- **Sympathy Run**: Mitgezogene Peers bei starken Reporter-Bewegungen
+- **Divergenz**: Reporter steigt, Peer fällt → Warnsignal
+- **Kein API-Key**: Nutzt yfinance (kostenlos) statt teurer Options-Daten
+
 ## [6.0.0] - 2026-03-22 - PostgreSQL + pgvector Docker Setup
 
 ### 🏗️ Architektur-Meilenstein

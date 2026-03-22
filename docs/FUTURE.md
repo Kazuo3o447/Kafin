@@ -134,6 +134,7 @@ n8n: nach Earnings-Scan triggern.
 
 **Aufwand:** ~3h | **Modell:** SWE-1.5
 **Priorität:** Batch 2
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.16.1**
 
 ---
 

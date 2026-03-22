@@ -4020,6 +4020,49 @@ async def api_web_intelligence_cache(ticker: str):
     except Exception as e:
         return {"ticker": ticker, "cached": False, "error": str(e)}
 
+
+@data_router.post("/sympathy-check/{reporter}")
+async def api_sympathy_check(
+    reporter: str,
+    move_pct: float,
+):
+    """
+    Analysiert Peer-Reaktionen nach Earnings.
+    Aufruf: POST /api/data/sympathy-check/ASML?move_pct=-5.2
+    """
+    from backend.app.analysis.peer_monitor import (
+        check_sympathy_reactions,
+        send_sympathy_alert,
+    )
+    from backend.app.memory.watchlist import get_watchlist
+
+    wl = await get_watchlist()
+    # Cross-Signals für Reporter aus Watchlist
+    peers: list[str] = []
+    for item in (wl if isinstance(wl, list) else []):
+        cs = (
+            item.get("cross_signal_tickers")
+            or item.get("cross_signals")
+            or []
+        )
+        if reporter.upper() in [
+            c.upper() for c in cs
+        ]:
+            peers.append(item["ticker"])
+        # Auch umgekehrt: Reporter ist in Watchlist
+        if item.get("ticker", "").upper() == reporter.upper():
+            peers.extend([
+                c.upper() for c in cs
+            ])
+
+    peers = list(set(peers))  # Deduplizieren
+    analysis = await check_sympathy_reactions(
+        reporter.upper(), move_pct, peers
+    )
+    await send_sympathy_alert(analysis)
+    return analysis
+
+
 app.include_router(admin_router)
 app.include_router(data_router)
 app.include_router(google_news_router)

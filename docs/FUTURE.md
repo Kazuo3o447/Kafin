@@ -33,7 +33,215 @@
 
 ---
 
-## 🟠 FEATURE: Max Pain Kalkulation
+## � FEATURE: Reddit Retail vs. Smart Money Divergenz
+
+**Warum (Edge):**
+Insider (SEC Form 4) = Smart Money.
+Reddit WSB/stocks = Retail-Sentiment.
+Divergenz = Contrarian-Signal:
+  Retail extrem gierig + Insider verkaufen massiv
+  → Torpedo-Setup (Short/Put-Kandidat)
+  Retail panik-verkauft + Insider kaufen
+  → Opportunity-Setup (antizyklisch Long)
+
+Das ist kein Sentiment-Indicator — es ist ein
+Divergenz-Detector. Sentiment allein ist wertlos.
+
+**Was konkret:**
+Reddit JSON-Endpoints (kein API-Key):
+  https://www.reddit.com/r/wallstreetbets/search.json
+    ?q={ticker}&sort=new&limit=25&t=day
+  https://www.reddit.com/r/stocks/search.json
+    ?q={ticker}&sort=new&limit=25&t=day
+
+FinBERT läuft bereits lokal → Titel-Analyse kostenlos.
+Insider-Ratio: bereits aus Finnhub/EDGAR.
+
+Neuer Score: "retail_smart_divergence"
+  +1.0 = Retail bullisch & Insider kaufen (Bestätigung)
+  -1.0 = Retail bullisch & Insider verkaufen (Torpedo)
+   0.0 = kein klares Signal
+
+Anzeige: Research Dashboard SentimentBlock,
+Torpedo-Score "leadership_instability" ergänzen.
+Telegram-Alert wenn Divergenz > 0.7.
+
+**Wo integrieren:**
+  sentiment_monitor.py erweitern oder neues
+  reddit_monitor.py
+  scoring.py: retail_smart_divergence als
+  optionaler Torpedo-Faktor
+
+**Aufwand:** ~3h | **Modell:** SWE-1.5
+**Priorität:** Batch 2
+
+---
+
+## 🔴 FEATURE: Sympathy Play Radar
+
+**Warum (Edge):**
+IV-Crush nach Earnings macht direkte Earnings-Trades
+teuer. Profis handeln den Peer: wenn ASML fällt aber
+TSM sich hält → TSM zeigt relative Stärke.
+Bekannter Edge: Sympathy Run (Peer steigt mit)
+oder Divergenz (Peer hält sich → kaufen).
+
+**Was konkret:**
+peer_monitor.py erkennt bereits wenn ein Peer meldet.
+Aber: keine Reaktions-Analyse NACH der Meldung.
+
+Erweitern: calculate_peer_reaction() ausbauen.
+Wenn Ticker X Earnings meldet und sich ±Y% bewegt:
+  1. Lade Top 3 Peers (aus cross_signals in Watchlist)
+  2. Hole deren Kursreaktion (yfinance, prepost=True)
+  3. Klassifiziere:
+     "sympathy_run": Peer bewegt sich gleich
+     "relative_strength": Ticker fällt, Peer stabil/steigt
+     "divergence": Ticker steigt, Peer fällt
+
+Anzeige: Earnings Battle Card + Research Dashboard
+  "NVDA meldet -5% → ASML zeigt relative Stärke (+0.3%)"
+
+Telegram-Alert:
+  "🔗 SYMPATHY: ASML -5% nach Earnings.
+   NVDA hält sich (+0.2%) → Relative Stärke.
+   IV bei NVDA jetzt günstig."
+
+**Technisch:**
+peer_monitor.py: nach check_peer_earnings_today()
+neue Funktion check_sympathy_reaction() hinzufügen.
+n8n: nach Earnings-Scan triggern.
+
+**Aufwand:** ~3h | **Modell:** SWE-1.5
+**Priorität:** Batch 2
+
+---
+
+## 🟠 FEATURE: GEX Proxy (Gamma Exposure)
+
+**Warum (Edge):**
+Market Maker müssen Optionsverkäufe hedgen.
+Positives GEX = Kurs ist "sticky" (MM kaufen bei
+Rückgängen, verkaufen bei Anstiegen → mean reversion).
+Negatives GEX = Kurs ist "explosiv" (MM verstärken
+Bewegungen → Gamma Squeeze möglich).
+
+Das erklärt warum manche Aktien sich kaum bewegen
+und andere in kurzer Zeit 10% machen.
+
+**Was konkret:**
+yfinance option_chain() — bereits implementiert für
+Max Pain (Batch 1). Erweiterung:
+
+GEX-Formel pro Strike:
+  gamma = option.gamma (yfinance liefert das)
+  gex_strike = gamma * openInterest * 100 * price
+  total_gex = sum(call_gex) - sum(put_gex)
+
+Interpretation:
+  total_gex > 0: sticky (MM dämpfen Bewegung)
+  total_gex < 0: explosiv (MM verstärken Bewegung)
+  total_gex nahe 0: Flip-Zone (gefährlich)
+
+Anzeige: Research Dashboard, Options-Block:
+  "GEX: +2.3M (sticky) — Kurs zwischen $140-$155
+   magnetisch. Ausbruch braucht Volumen."
+
+**Technisch:**
+Erweiterung von get_options_oi_analysis() in
+yfinance_data.py. gamma aus option_chain verfügbar.
+
+**Aufwand:** ~2h | **Modell:** SWE-1.5
+**Priorität:** Batch 2 (nach Max Pain live)
+
+---
+
+## 🟠 FEATURE: 10-Q Filing RAG (Tonalitäts-Diff)
+
+**Warum (Edge):**
+In einem 50-seitigen 10-Q verstecken sich die
+wichtigsten Signale in veränderten Formulierungen.
+"We expect margins to remain stable" → "We anticipate
+continued margin pressure" ist ein massives Signal.
+Institutionelle Analysten suchen genau das — manuell.
+Kafin macht das automatisch.
+
+**Modell-Auswahl:**
+Google Gemini Flash: kostenloser Tier,
+1M Token Kontext, ideal für zwei 10-Qs gleichzeitig.
+Claude Haiku: Alternative, günstiger Tier.
+Kimi K2.5: bereits integriert, 256K Kontext.
+
+**Was konkret:**
+  1. SEC EDGAR: letztes + vorletztes 10-Q laden
+     (bereits EDGAR-Integration vorhanden)
+  2. Text extrahieren (pdfplumber oder html parser)
+  3. Gemini Flash Prompt:
+     "Vergleiche diese Dokumente. Nenne die 3
+      Absätze wo Management die Tonalität bezüglich
+      Kosten, Margen oder Wachstum verändert hat.
+      Format: [ABSCHNITT] VORHER vs. NACHHER"
+  4. Output in Research Dashboard: "10-Q Diff" Block
+
+Alert: wenn negativer Tonalitätswechsel erkannt →
+Torpedo-Signal.
+
+**Technisch:**
+Neues Modul: backend/app/analysis/filing_rag.py
+Neuer Endpoint: GET /api/data/filing-diff/{ticker}
+Gemini API Key: kostenlos registrieren.
+Cache: 24h (10-Qs ändern sich nicht).
+
+**Aufwand:** ~4h | **Modell:** Sonnet / SWE-1.5
+**Priorität:** Batch 3
+
+---
+
+## 🟠 FEATURE: Shadow Trading Journal mit KI-Lernschleife
+
+**Warum (Edge):**
+Du triffst die Entscheidungen — aber dein eigener
+Bias ist das größte Risiko. Das System soll dich
+nicht ersetzen sondern optimieren.
+
+Aktueller Stand: shadow_portfolio.py öffnet/schließt
+Trades automatisch aus Audit-Reports. Kein manueller
+Trade-Grund. Keine Performance-Analyse nach Kategorie.
+
+**Was konkret:**
+
+Phase A — Trade-Journal (manuell):
+  Performance-Seite: "Trade eröffnen" Button
+  Pflichtfelder:
+    Ticker, Richtung (Long/Short/Put/Call)
+    Hauptgrund (Dropdown):
+      "IV Mismatch" | "Sentiment Divergenz" |
+      "Relative Stärke" | "Sympathy Play" |
+      "Earnings Beat erwartet" | "Torpedo erkannt" |
+      "Technisches Breakout" | "Contrarian Setup"
+    Notiz (optional)
+  Shadow-Trade wird mit trade_reason gespeichert.
+
+Phase B — Wöchentliche KI-Analyse (Sonntags-Report):
+  DeepSeek analysiert alle abgeschlossenen Trades
+  der letzten 30 Tage nach trade_reason:
+  "Deine Contrarian-Setups: 4/5 profitabel (80%).
+   Deine Technischen Breakouts: 2/6 profitabel (33%).
+   Empfehlung: Fokus auf Contrarian, weniger Breakouts."
+
+**Technisch:**
+shadow_portfolio.py: trade_reason Feld ergänzen.
+DB: shadow_trades Tabelle + trade_reason Spalte.
+Frontend: performance/page.tsx Button + Modal.
+Sunday Report: performance_analysis() Funktion.
+
+**Aufwand:** Phase A ~3h, Phase B ~3h
+**Modell:** SWE-1.5 (Phase A), SWE-1.5 (Phase B)
+**Priorität:** Phase A Batch 3, Phase B Batch 4
+
+---
+
+## �🟠 FEATURE: Max Pain Kalkulation
 
 **Status: ✅ ERLEDIGT (22.03.2026) — v5.13.0**
 

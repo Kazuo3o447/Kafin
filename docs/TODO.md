@@ -16,6 +16,9 @@
 - [ ] FINRA Short Volume (täglich, kostenlos)
 - [ ] Fear & Greed Score (composite, 5 Indikatoren)
 - [ ] Watchlist P1 Auto-Update bei neuer Prio
+- [ ] Reddit Retail vs. Smart Money Divergenz
+- [ ] Sympathy Play Radar (peer_monitor.py erweitern)
+- [ ] GEX Proxy (Gamma Exposure, Erweiterung Max Pain)
 
 ## 🟡 BATCH 3 — Nächste Woche
 - [ ] Marktbreite 5T/20T Verlauf (Supabase history)
@@ -25,12 +28,15 @@
       aber spart API-Calls)
 - [ ] P2b Earnings-Historie Fallback (yfinance)
 - [ ] Earnings-Kalender im Research Dashboard
+- [ ] 10-Q Filing RAG (Gemini Flash)
+- [ ] Shadow Trading Journal Phase A (Trade-Grund Dropdown)
 
 ## 🟢 BATCH 4 — Technische Schuld (wenn Zeit)
 - [ ] P3a main.py Router-Split (3124 Zeilen → 6 Dateien)
 - [ ] SYSTEM_LOGS Cleanup (1 SQL-Statement)
 - [ ] SECTOR_TO_ETF Duplikation → shared utils
 - [ ] P2c FinBERT Batch-Optimierung
+- [ ] Shadow Trading Journal Phase B (KI-Lernschleife)
 
 ## ❌ NICHT UMSETZEN (ohne Polygon.io Key)
 - Level II Orderbook

@@ -20,7 +20,7 @@ venv.bak/
 *.swo
 
 # Docker
-.dockerignore
+
 
 # Test and coverage
 .pytest_cache/

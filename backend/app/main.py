@@ -988,7 +988,7 @@ async def api_research_dashboard(
     import asyncio
     from backend.app.data.yfinance_data import (
         get_technical_setup, get_fundamentals_yf,
-        get_options_metrics, get_atm_implied_volatility,
+        get_options_metrics, get_atm_implied_volatility, get_options_oi_analysis,
     )
     from backend.app.data.fmp import (
         get_company_profile, get_key_metrics,

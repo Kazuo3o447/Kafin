@@ -2,6 +2,25 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.14.1] - 2026-03-22 - Fear & Greed Widget
+
+### 🚀 Trading-Mehrwert
+- **FearGreedBlock**: Neuer Block auf Markets-Seite mit SVG Halbkreis-Gauge
+  - Visueller Score (0-100) mit Farbcodierung: Extreme Fear → Extreme Greed
+  - 5 Komponenten-Balken: VIX, Marktbreite SMA50, SPY/TLT, Credit Spread, Momentum
+  - 30min Refresh synchronisiert mit Backend-Cache
+  - Zeitstempel mit Live-Delta-Anzeige
+
+### 🎨 Frontend
+- **SVG Gauge**: Halbkreis mit dynamischer Füllung und Glow-Effekt
+- **Komponenten-Ansicht**: Farbige Mini-Balken pro Indikator mit Score-Werten
+- **Responsive Design**: BlockHeaderBadge + Clock Icon für Zeitstempel
+
+### 🔧 Integration
+- State Management: FearGreedData + fetchFearGreed()
+- Auto-Refresh: 30min zusammen mit MacroDashboard
+- Error Handling: BlockError bei fehlenden Daten
+
 ## [5.14.0] - 2026-03-22 - Fear & Greed Score Backend
 
 ### 🚀 Trading-Mehrwert

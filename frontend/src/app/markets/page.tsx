@@ -142,6 +142,18 @@ type MarketAudit = {
   message?: string;
 };
 
+type FearGreedData = {
+  score: number;
+  label: string;
+  components: Record<string, {
+    value: number;
+    score: number;
+    weight: number;
+    label: string;
+  }>;
+  coverage: number;
+};
+
 // Composite Regime Calculation
 function calcCompositeRegime(
   vix?: number,
@@ -1481,6 +1493,137 @@ function Skeleton() {
   );
 }
 
+function FearGreedBlock({
+  data,
+  timestamp,
+}: {
+  data?: FearGreedData;
+  timestamp?: string;
+}) {
+  if (!data) return <BlockError title="Fear & Greed" />;
+
+  const score = data.score;
+
+  // Farbe nach Score
+  const color =
+    score <= 25 ? "var(--accent-red)" :
+    score <= 45 ? "#F97316" :         // orange
+    score <= 55 ? "var(--accent-amber)" :
+    score <= 75 ? "#84CC16" :         // lime
+    "var(--accent-green)";
+
+  // SVG Halbkreis-Gauge
+  // Radius 70, stroke-dasharray für Halbkreis
+  const r = 70;
+  const circ = Math.PI * r;           // Halbkreis-Umfang
+  const filled = (score / 100) * circ;
+
+  return (
+    <div className="card p-6">
+      <BlockHeaderBadge block="Fear & Greed" cadence="30min Refresh" />
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-bold
+                        text-[var(--text-primary)]
+                        flex items-center gap-2">
+          Fear & Greed Index
+        </h3>
+        {timestamp && (
+          <div className="flex items-center gap-2
+                           text-xs text-[var(--text-muted)]">
+            <Clock size={12} />
+            <span>{getTimeDelta(timestamp)}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Gauge */}
+      <div className="flex flex-col items-center mb-6">
+        <svg
+          viewBox="0 0 160 90"
+          className="w-48 h-auto"
+        >
+          {/* Hintergrund-Halbkreis */}
+          <path
+            d="M 10 80 A 70 70 0 0 1 150 80"
+            fill="none"
+            stroke="var(--bg-tertiary)"
+            strokeWidth="12"
+            strokeLinecap="round"
+          />
+          {/* Füll-Halbkreis */}
+          <path
+            d="M 10 80 A 70 70 0 0 1 150 80"
+            fill="none"
+            stroke={color}
+            strokeWidth="12"
+            strokeLinecap="round"
+            strokeDasharray={`${filled} ${circ}`}
+            style={{ filter: `drop-shadow(0 0 6px ${color}40)` }}
+          />
+          {/* Score Text */}
+          <text
+            x="80"
+            y="72"
+            textAnchor="middle"
+            fontSize="24"
+            fontWeight="700"
+            fontFamily="DM Mono, monospace"
+            fill="var(--text-primary)"
+          >
+            {Math.round(score)}
+          </text>
+        </svg>
+        <p
+          className="text-base font-bold mt-1"
+          style={{ color }}
+        >
+          {data.label}
+        </p>
+      </div>
+
+      {/* Komponenten */}
+      <div className="space-y-2">
+        {Object.entries(data.components).map(
+          ([key, comp]) => (
+            <div
+              key={key}
+              className="flex items-center gap-3"
+            >
+              <span className="text-[10px] w-32 shrink-0
+                               text-[var(--text-muted)]
+                               truncate">
+                {comp.label}
+              </span>
+              {/* Mini-Balken */}
+              <div className="flex-1 h-1.5 rounded-full
+                               bg-[var(--bg-tertiary)]
+                               overflow-hidden">
+                <div
+                  className="h-full rounded-full
+                               transition-all duration-500"
+                  style={{
+                    width:      `${comp.score}%`,
+                    background: comp.score >= 56
+                      ? "var(--accent-green)"
+                      : comp.score >= 46
+                      ? "var(--accent-amber)"
+                      : "var(--accent-red)",
+                  }}
+                />
+              </div>
+              <span className="text-xs font-mono w-8
+                               text-right
+                               text-[var(--text-secondary)]">
+                {Math.round(comp.score)}
+              </span>
+            </div>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Main Component
 export default function MarketsPage() {
   // Block states with individual refresh intervals
@@ -1523,6 +1666,9 @@ export default function MarketsPage() {
   const [marketOverview, setMarketOverview] = useState<MarketOverview | null>(null);
   const [marketOverviewTs, setMarketOverviewTs] = useState<string | undefined>();
 
+  const [fearGreed, setFearGreed] = useState<FearGreedData | null>(null);
+  const [fearGreedTs, setFearGreedTs] = useState<string | undefined>();
+
   const fetchMarketOverview = useCallback(async () => {
     try {
       const data = await api.getMarketOverview();
@@ -1531,6 +1677,15 @@ export default function MarketsPage() {
     } catch (error) {
       console.error("Market Overview fetch error:", error);
     }
+  }, []);
+
+  const fetchFearGreed = useCallback(async () => {
+    try {
+      const data = await fetch("/api/data/fear-greed")
+        .then(r => r.json());
+      setFearGreed(data);
+      setFearGreedTs(new Date().toISOString());
+    } catch {}
   }, []);
 
   const fetchMarketBreadth = useCallback(async () => {
@@ -1619,6 +1774,7 @@ export default function MarketsPage() {
         fetchCrossAsset(),
         fetchNewsSentiment(),
         fetchEconomicCalendar(),
+        fetchFearGreed(),
       ]);
       
       console.log("All blocks fetched:", results.map(r => r.status));
@@ -1652,10 +1808,11 @@ export default function MarketsPage() {
     // 5min: Market Breadth
     const interval300 = setInterval(fetchMarketBreadth, 300000);
     
-    // 30min: Macro Dashboard only (Economic Calendar now manual)
+    // 30min: Macro Dashboard + Fear & Greed only (Economic Calendar now manual)
     const interval1800 = setInterval(() => {
       Promise.allSettled([
         fetchMacroDashboard(),
+        fetchFearGreed(),
       ]);
     }, 1800000);
     
@@ -1772,6 +1929,12 @@ export default function MarketsPage() {
           timestamp={macroDashboard ? new Date().toISOString() : undefined} 
         />
         <VIXDetailBlock intermarket={crossAsset} macro={macroDashboard} />
+        
+        {/* Fear & Greed Block */}
+        <FearGreedBlock
+          data={fearGreed ?? undefined}
+          timestamp={fearGreedTs}
+        />
         
         {/* Block 5: Cross-Asset Signals */}
         <CrossAssetBlock 

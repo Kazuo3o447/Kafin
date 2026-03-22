@@ -23,6 +23,207 @@ Wird bei jeder Session gepflegt.
 ---
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EINTRAG 1: Index-Chartanalyse auf Markets
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 🟠 FEATURE: Index-Chartanalyse auf Markets-Dashboard
+
+**Warum:**
+SPY -1.85% ist eine Zahl. "SPY testet gerade den
+SMA200 bei $562 — letztes Mal führte das zu einem
+Bounce, diesmal bricht die Marktbreite weg" ist
+eine Entscheidungsgrundlage. Der Trader muss beim
+Öffnen des Markets-Dashboards sofort einschätzen
+können: intakter Trend oder struktureller Bruch?
+
+**Was konkret:**
+Jeder Index (SPY, QQQ, DAX, Nikkei etc.) bekommt
+einen "Analyse"-Button der on-demand aufgerufen wird.
+Ergebnis: Chart-Analyse mit Fokus auf:
+  - Trendintegrität: Ist der Uptrend intakt oder bricht er?
+  - Key Level: Welches Level ist gerade entscheidend?
+  - Nächster Support/Widerstand mit Erklärung
+  - Kein Entry/Stop/Target (macht für Indizes
+    wenig Sinn) — stattdessen Regime-Kontext
+
+**Technisch:**
+chart_analyst.py bereits vorhanden — für Index-Ticker
+(SPY, ^GDAXI etc.) aufrufen. DeepSeek-Prompt
+anpassen: kein Trade-Setup, stattdessen
+strukturelle Marktanalyse.
+Cache: 600s (Indizes bewegen sich langsamer).
+UI: kleiner "Analysieren"-Button pro Index-Karte.
+
+**Aufwand:** ~2h | **Modell:** SWE-1.5
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EINTRAG 2: Chart-Analyse Begründung + Boden/Turnaround
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 🔴 KRITISCH: Chart-Analyse Begründung (Anti-Falling-Knife)
+
+**Warum:**
+"Entry $842, Stop $815, Target $920" — das
+beantwortet NICHT die wichtigste Frage des Traders:
+"Warum diese Levels? Greife ich ins fallende Messer?
+Wo ist der echte Boden? Was muss passieren damit
+sich der Trend dreht?"
+
+Ohne Begründung sind Zahlen wertlos. Ein
+institutioneller Trader würde nie eine Position
+eingehen ohne die Struktur hinter dem Level zu
+kennen.
+
+**Was konkret — neue Felder in chart_analyst.py:**
+
+  trend_context: "Abwärtstrend seit 3 Monaten. Death
+    Cross (SMA50 unter SMA200). 23% unter 52W-Hoch."
+
+  why_entry: "Entry-Zone liegt zwischen 20T-Support
+    ($X) und letztem Swing-Tief ($Y). Zone wo in den
+    letzten 3 Wochen Käufer aufgetaucht sind."
+
+  why_stop: "Stop knapp unter $815 = letztes
+    signifikantes Swing-Tief vom [Datum]. Bruch würde
+    nächste Unterstützungszone bei $X aktivieren."
+
+  floor_scenario: "Nächster harter Support: $780
+    (52W-Tief). Darunter kein struktureller Support
+    bis $720 (Pre-Earnings-Base Juli 2024)."
+
+  turnaround_conditions: "Bullishes Signal wenn:
+    (1) Schlusskurs über SMA50 bei $X mit Volumen
+    >1.5x Durchschnitt ODER (2) positive Überraschung
+    beim nächsten Earnings + Guidance-Erhöhung."
+
+  falling_knife_risk: "HOCH — Abwärtstrend intakt,
+    kein Volumensignal für Bodenbildung, Insiders
+    verkaufen. Warte auf Bestätigung."
+
+**Technisch:**
+DeepSeek-Prompt in chart_analyst.py erweitern.
+Neue Felder im JSON-Schema hinzufügen.
+Frontend: aufklappbarer "Warum?"-Block unter
+den Levels im Trade-Setup-Block.
+
+**Aufwand:** ~2h | **Modell:** Sonnet 4.5
+**Priorität:** Höchste — direkt umsetzbar
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EINTRAG 3: Earnings-Kalender als Battle Card
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 🟠 FEATURE: Earnings Battle Card
+
+**Warum:**
+Der Earnings-Kalender ist das wichtigste Trading-
+Werkzeug der Woche — und zeigt aktuell nur Ticker
+plus Datum. Ein Profitrader braucht in 10 Sekunden
+pro Eintrag: "Kann ich das traden? Was ist das
+Risiko? Was erwartet der Markt?"
+
+**Was konkret — pro Earnings-Eintrag:**
+
+  SETUP-AMPEL (sofort sichtbar):
+    Grün = tradeable Setup (Opp hoch, Torp niedrig)
+    Amber = gemischtes Signal
+    Rot = zu riskant oder kein Setup
+
+  ERWARTUNGEN:
+    EPS-Konsens + Revenue-Konsens
+    Expected Move (±%) aus IV — "Markt erwartet ±8.2%"
+    Put/Call Ratio — ist der Markt bullisch/bärisch positioniert?
+
+  TRACK RECORD (Ampel-Farbe):
+    "6/8 Quartale geschlagen · Ø +11% Surprise"
+    Letzte Reaktion: "+7.3% nach letztem Beat"
+
+  POSITIONIERUNGS-RISIKO:
+    Preis-Performance letzte 30T:
+    "+23% — Buy-the-Rumor-Risiko" (amber Warnung)
+
+  PRE-EARNINGS SENTIMENT:
+    News-Stimmung letzte 7T (bereits vorhanden)
+
+  EMPFEHLUNG (aus Opp/Torp):
+    "Setup: KAUFEN mit engem Stop" /
+    "Setup: MEIDEN — Torpedo zu hoch" /
+    "Setup: BEOBACHTEN"
+
+**Technisch:**
+Earnings-Radar Endpoint bereits vorhanden mit
+Opp/Torp, beats_of_8, avg_surprise_pct,
+pre_earnings_sentiment.
+Fehlt: expected_move (aus IV — schon in Research
+berechnet, in quick_snapshot ergänzen),
+price_change_30d (in quick_snapshot ergänzen),
+put_call_ratio.
+Frontend: kompakte "Battle Card" pro Eintrag
+statt einfacher Listenzeile.
+
+**Aufwand:** ~3h | **Modell:** Sonnet 4.5
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EINTRAG 4: Dashboard als Morning Brief
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 🟠 FEATURE: Dashboard → Morning Brief
+
+**Warum:**
+Das aktuelle Dashboard ist eine Datenseite.
+Ein Trader öffnet die Plattform morgens mit einer
+Frage: "Was muss ich heute wissen und tun?"
+Das Dashboard muss diese Frage in 10 Sekunden
+beantworten — nicht in 10 Minuten Scrollen.
+
+**Was konkret — 5 Sektionen:**
+
+  1. REGIME-PULSE (1 Zeile, ganz oben):
+     Composite-Regime + Score + Dominant-Faktor
+     "Risk-Off · Score −4.2 · Treiber: VIX 28.4"
+     Direkt aus calcCompositeRegime() — kein API-Call
+
+  2. AKTIVE ALERTS (max. 5, priorisiert):
+     Material-News, Torpedo-Alarm, Earnings diese Woche
+     Identisch zu Watchlist-Alert-Streifen —
+     wiederverwendete Logik
+
+  3. EARNINGS DIESE WOCHE (kompakt):
+     Max. 3 Watchlist-Ticker mit Countdown + Setup-Ampel
+     Link → Earnings-Radar für Details
+
+  4. BESTE SETUPS JETZT (2 Kacheln):
+     Watchlist-Ticker mit höchstem Opp-Score
+     + Watchlist-Ticker mit höchstem Torpedo
+     (damit ich weiß was zu traden UND was zu meiden)
+
+  5. OVERNIGHT-KONTEXT (3 Zahlen):
+     SPY, VIX, Credit Spread — aktuelle Werte
+     mit 1T-Veränderung
+
+**Was wegfällt:**
+  - Generische Index-Cards (schon auf Markets)
+  - Opportunities-Block (undifferenziert)
+  - Langer Briefing-Text als Hauptinhalt
+    (bleibt, aber kompakter unten)
+
+**Technisch:**
+Alle Daten bereits vorhanden:
+  - Watchlist enriched (Scores, Earnings, Alerts)
+  - Macro snapshot (VIX, Credit Spread)
+  - Market overview (SPY)
+Kein neuer Backend-Endpoint nötig.
+Reine Frontend-Überarbeitung.
+
+**Aufwand:** ~3h | **Modell:** Sonnet 4.5
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ABSCHLUSS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+---
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EINTRAG: PostgreSQL Migration
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

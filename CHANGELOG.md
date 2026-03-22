@@ -2,6 +2,29 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.13.0] - 2026-03-22 - Batch 1: Options + PreMarket + Groq
+
+### 🚀 Trading-Mehrwert
+- **Max Pain**: yfinance OI-Analyse, nächste 2 Verfallsdaten
+  Max Pain Preis + Top-5 OI-Strikes + PCR
+  Research Dashboard: Max Pain Level mit Distanz-Anzeige
+  GET /api/data/options-oi/{ticker}, Cache 4h
+- **Pre/Post-Market**: fast_info liefert Pre-Market-Preis
+  Research Header: "Pre: $142.30 (+0.8%)" wenn verfügbar
+- **Groq Pipeline**: call_groq() statt call_deepseek() für
+  News-Extraction. Fallback auf DeepSeek wenn kein API-Key.
+  Kostenbremse: 5/h → 20/h (Groq hat großzügige Limits)
+  Entity Extraction möglich (betrifft News wirklich Ticker?)
+
+### 📁 Neue Dateien
+- backend/app/analysis/groq.py
+- docs/TODO.md (priorisierte Aufgabenliste)
+
+### 🔧 Bug Fixes (Kritisch)
+- **chart_analyst.py**: Fallback-Dict enthält jetzt alle 6 Reasoning-Felder (why_entry, why_stop, trend_context, floor_scenario, turnaround_conditions, falling_knife_risk)
+- **markets/page.tsx**: API-Pfad korrigiert von `/api/data/chart-analysis/` zu `/api/chart-analysis/` — Index-Analyse funktioniert jetzt
+- **earnings/page.tsx**: Battle Card zeigt "Kein Rating" für neue Ticker ohne Scores statt fälschlich "Meiden"
+
 ## [5.12.2] - 2026-03-22 - Morning Brief + Index Analysis
 
 ### 🚀 Trading-Mehrwert

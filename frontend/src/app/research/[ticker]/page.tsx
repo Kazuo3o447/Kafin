@@ -34,8 +34,11 @@ type ResearchData = {
   change_pct: number | null;
   price_change_30d: number | null;
   price_change_5d?: number | null;
-  fifty_two_week_high: number | null;
-  fifty_two_week_low: number | null;
+  fifty_two_week_high?: number | null;
+  fifty_two_week_low?: number | null;
+  pre_market_price?: number | null;
+  post_market_price?: number | null;
+  pre_market_change?: number | null;
   pe_ratio: number | null;
   forward_pe: number | null;
   ps_ratio: number | null;
@@ -81,8 +84,10 @@ type ResearchData = {
   iv_atm: number | null;
   put_call_ratio: number | null;
   expected_move_pct: number | null;
-  expected_move_usd: number | null;
-  short_interest_pct: number | null;
+  expected_move_usd?: number | null;
+  max_pain?: number | null;
+  options_oi_url?: string;
+  short_interest_pct?: number | null;
   days_to_cover: number | null;
   squeeze_risk: string | null;
   insider_buys: number;
@@ -216,11 +221,11 @@ type ChartAnalysisData = {
 const fmt = {
   pct: (v: number | null, decimals = 1) =>
     v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(decimals)}%`,
-  num: (v: number | null, decimals = 2) =>
+  num: (v: number | null | undefined, decimals = 2) =>
     v == null ? "—" : v.toFixed(decimals),
-  usd: (v: number | null) =>
+  usd: (v: number | null | undefined) =>
     v == null ? "—" : `$${v.toFixed(2)}`,
-  cap: (v: number | null) => {
+  cap: (v: number | null | undefined) => {
     if (v == null) return "—";
     if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
     if (v >= 1e9)  return `$${(v / 1e9).toFixed(2)}B`;
@@ -1680,6 +1685,21 @@ export default function ResearchDashboard() {
               <span className="text-2xl font-mono text-[var(--text-primary)]">${data.price.toFixed(2)}</span>
             )}
             <PctBadge value={data.change_pct} />
+            {(data.pre_market_price || data.post_market_price) && (
+              <span className={`text-xs font-mono ml-2 ${
+                (data.pre_market_change ?? 0) >= 0
+                  ? "text-[var(--accent-green)]"
+                  : "text-[var(--accent-red)]"
+              }`}>
+                Pre: ${(data.pre_market_price || data.post_market_price)?.toFixed(2)}
+                {data.pre_market_change != null && (
+                  <span>
+                    {" "}({data.pre_market_change >= 0 ? "+" : ""}
+                    {data.pre_market_change.toFixed(2)}%)
+                  </span>
+                )}
+              </span>
+            )}
           </div>
           <p className="text-sm text-[var(--text-secondary)] mt-0.5">
             {data.company_name}
@@ -1750,7 +1770,7 @@ export default function ResearchDashboard() {
         </p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
           <StatCell label="30T Performance" value={<PctBadge value={data.price_change_30d} />} />
-          <StatCell label="52W Hoch" value={fmt.usd(data.fifty_two_week_high)} sub={data.distance_52w_high_pct != null ? `${data.distance_52w_high_pct.toFixed(1)}% entfernt` : undefined} />
+          <StatCell label="52W Hoch" value={fmt.usd(data.fifty_two_week_high)} sub={data.distance_52w_high_pct ? `${data.distance_52w_high_pct.toFixed(1)}% entfernt` : undefined} />
           <StatCell label="52W Tief" value={fmt.usd(data.fifty_two_week_low)} />
           <StatCell label="Market Cap" value={fmt.cap(data.market_cap)} />
           <StatCell label="Beta" value={fmt.num(data.beta)} sub="Marktkorrelation" />
@@ -2031,6 +2051,38 @@ export default function ResearchDashboard() {
                 ? `±${data.expected_move_pct.toFixed(1)}%` 
                 : "—"
             } sub={data.expected_move_usd != null ? `±$${data.expected_move_usd.toFixed(2)}` : undefined} />
+            {data.max_pain != null && data.price != null && (
+              <div className="col-span-2 mt-3 pt-3 border-t border-[var(--border)]">
+                <p className="text-[10px] text-[var(--text-muted)]
+                               uppercase tracking-wider mb-2">
+                  Max Pain (nächster Verfall)
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-bold font-mono
+                                   text-[var(--text-primary)]">
+                    ${data.max_pain.toFixed(2)}
+                  </span>
+                  <span className={`text-xs ${
+                    Math.abs(data.price - data.max_pain)
+                      / data.price < 0.03
+                      ? "text-amber-400"
+                      : "text-[var(--text-muted)]"
+                  }`}>
+                    {data.price > data.max_pain
+                      ? `↓ ${((data.price - data.max_pain)
+                          / data.price * 100).toFixed(1)}%
+                          über Max Pain`
+                      : `↑ ${((data.max_pain - data.price)
+                          / data.price * 100).toFixed(1)}%
+                          unter Max Pain`}
+                  </span>
+                </div>
+                <p className="text-[10px] text-[var(--text-muted)] mt-1">
+                  Magnetisches Level — Market Maker Gravitation
+                  zum Verfallstag
+                </p>
+              </div>
+            )}
             <StatCell label="Short Int." value={data.short_interest_pct != null ? `${data.short_interest_pct.toFixed(1)}%` : "—"} sub={data.squeeze_risk ? `Squeeze: ${data.squeeze_risk}` : undefined} />
           </div>
         </div>

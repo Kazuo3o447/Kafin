@@ -35,6 +35,8 @@
 
 ## 🟠 FEATURE: Max Pain Kalkulation
 
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.13.0**
+
 **Warum:**
 Max Pain ist der Preis bei Optionsverfall wo
 Optionskäufer den maximalen Verlust erleiden —
@@ -64,6 +66,8 @@ Neuer Endpoint: GET /api/data/max-pain/{ticker}
 ---
 
 ## 🟠 FEATURE: Pre/Post-Market Kursdaten
+
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.13.0**
 
 **Warum:**
 Earnings-Reaktionen passieren After-Hours.
@@ -162,6 +166,8 @@ Bereits vorhandenes Short Interest ergänzen.
 ---
 
 ## 🟠 ARCHITEKTUR: News-Pipeline Stufe 2 — Groq statt DeepSeek Chat
+
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.13.0**
 
 **Warum (korrigierte Einschätzung):**
 FinBERT und generative LLMs lösen VERSCHIEDENE Aufgaben:
@@ -342,6 +348,8 @@ URL: https://polygon.io/dashboard/stocks/starter
 ---
 
 ## 🟡 OPTIONEN OPEN INTEREST PRO STRIKE
+
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.13.0**
 
 **Was:** Welche Strike-Preise haben das meiste Open Interest?
 → "Max Pain" Berechnung, magnetische Support/Resistance-Level.

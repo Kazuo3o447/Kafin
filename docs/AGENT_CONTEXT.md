@@ -197,6 +197,15 @@ Kein roher Placeholder-Text mehr im Prompt.
 - **Performance-Optimierung**: Batch-Downloads statt sequentieller yfinance-Calls (83 → 3)
 - **Frontend State-Sharing**: `fetchMarketOverview()` eliminiert Triple-Call auf `getMarketOverview()`
 - **Vollständige UI**: Alle Datenblöcke mit Block-Labels und Timestamps
+
+### Batch 1 (v5.13.0)
+- **Max Pain**: GET /api/data/options-oi/{ticker}, Cache 4h
+  Berechnet Max Pain Preis + Top-5 OI-Strikes + Put/Call Ratio aus yfinance option_chain
+- **Pre/Post-Market**: fast_info.pre_market_price
+  Research Header zeigt "Pre: $142.30 (+0.8%)" wenn verfügbar
+- **Groq Client**: backend/app/analysis/groq.py
+  Fallback auf DeepSeek wenn GROQ_API_KEY nicht gesetzt
+  News-Extraction-Limit: 20/h statt 5/h (Groq hat großzügige Limits)
 - **Sektoren Rotation-Story**: automatisch erkannt (Defensiv vs. Offensiv Gap > 2%)
 - **VIX Term Structure**: Contango/Backwardation sichtbar
 - **Info-Seite**: `/markets/info` mit vollständiger Dokumentation

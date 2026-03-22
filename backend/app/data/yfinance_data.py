@@ -516,3 +516,121 @@ async def get_market_context() -> dict:
         logger.error(f"Genereller yfinance Fehler in get_market_context: {e}")
         
     return result
+
+
+async def get_options_oi_analysis(ticker: str) -> dict:
+    """
+    Berechnet Max Pain + OI-Heatmap aus yfinance option_chain.
+    Max Pain = Strike wo Gesamtschmerz aller Optionskäufer maximal.
+    Kein API-Key nötig.
+    """
+    from backend.app.cache import cache_get, cache_set
+    cache_key = f"options_oi:{ticker.upper()}"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
+
+    def _calc():
+        import yfinance as yf
+        import pandas as pd
+
+        stock = yf.Ticker(ticker)
+        exps = getattr(stock, "options", [])
+        if not exps:
+            return {"error": "Keine Optionsdaten"}
+
+        # Nächsten 2 Verfallsdaten nutzen
+        target_exps = exps[:2]
+        results = []
+
+        for exp in target_exps:
+            try:
+                chain = stock.option_chain(exp)
+                calls = chain.calls[
+                    ["strike","openInterest","volume"]
+                ].copy()
+                puts = chain.puts[
+                    ["strike","openInterest","volume"]
+                ].copy()
+
+                calls.columns = ["strike","call_oi","call_vol"]
+                puts.columns  = ["strike","put_oi","put_vol"]
+
+                merged = pd.merge(
+                    calls, puts, on="strike", how="outer"
+                ).fillna(0)
+                merged = merged.sort_values("strike")
+
+                # Max Pain berechnen
+                total_pain = []
+                for price in merged["strike"]:
+                    call_pain = (
+                        merged[merged["strike"] < price]["call_oi"]
+                        * (price - merged[merged["strike"] < price]["strike"])
+                    ).sum()
+                    put_pain = (
+                        merged[merged["strike"] > price]["put_oi"]
+                        * (merged[merged["strike"] > price]["strike"] - price)
+                    ).sum()
+                    total_pain.append(
+                        float(call_pain + put_pain)
+                    )
+
+                merged["total_pain"] = total_pain
+                max_pain_idx = merged["total_pain"].idxmin()
+                max_pain_price = float(
+                    merged.loc[max_pain_idx, "strike"]
+                )
+
+                # Top 5 OI-Strikes (Magnet-Level)
+                merged["total_oi"] = (
+                    merged["call_oi"] + merged["put_oi"]
+                )
+                top_oi = merged.nlargest(5, "total_oi")[
+                    ["strike","call_oi","put_oi","total_oi"]
+                ].to_dict("records")
+
+                # PCR (Put/Call OI Ratio)
+                total_call_oi = float(merged["call_oi"].sum())
+                total_put_oi  = float(merged["put_oi"].sum())
+                pcr_oi = round(
+                    total_put_oi / total_call_oi, 2
+                ) if total_call_oi > 0 else None
+
+                results.append({
+                    "expiry":        exp,
+                    "max_pain":      round(max_pain_price, 2),
+                    "top_oi_strikes": [
+                        {
+                            "strike":   round(r["strike"], 2),
+                            "call_oi":  int(r["call_oi"]),
+                            "put_oi":   int(r["put_oi"]),
+                            "total_oi": int(r["total_oi"]),
+                        }
+                        for r in top_oi
+                    ],
+                    "pcr_oi":        pcr_oi,
+                    "total_call_oi": int(total_call_oi),
+                    "total_put_oi":  int(total_put_oi),
+                })
+            except Exception as e:
+                results.append({"expiry": exp, "error": str(e)})
+
+        result = {
+            "ticker":  ticker.upper(),
+            "expirations": results,
+            "nearest_max_pain": (
+                results[0]["max_pain"]
+                if results and "max_pain" in results[0]
+                else None
+            ),
+        }
+        return result
+
+    try:
+        import asyncio
+        result = await asyncio.to_thread(_calc)
+        cache_set(cache_key, result, ttl_seconds=14400)
+        return result
+    except Exception as e:
+        return {"error": str(e)}

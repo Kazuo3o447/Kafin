@@ -1,0 +1,39 @@
+# KAFIN — Priorisierte TODO-Liste
+*Letzte Aktualisierung: 22.03.2026*
+*Prinzip: Trading-Mehrwert zuerst. Architektur zuletzt.*
+
+---
+
+## 🔴 BATCH 1 — Sofort (Daten die Trades verbessern)
+- [x] Max Pain + OI-Heatmap (yfinance, kein API-Key)
+- [x] Options OI pro Strike im Research Dashboard
+- [x] Pre/Post-Market Kursdaten (yfinance prepost=True)
+- [x] Groq → News-Extraction statt DeepSeek Chat
+
+## 🟠 BATCH 2 — Diese Woche
+- [ ] Post-Earnings Kontext-Alert (Telegram)
+- [ ] P1c — Firmenprofil (CEO, Mitarbeiter, Peers)
+- [ ] FINRA Short Volume (täglich, kostenlos)
+- [ ] Fear & Greed Score (composite, 5 Indikatoren)
+- [ ] Watchlist P1 Auto-Update bei neuer Prio
+
+## 🟡 BATCH 3 — Nächste Woche
+- [ ] Marktbreite 5T/20T Verlauf (Supabase history)
+- [ ] VWAP Intraday
+- [ ] Options OI Chart (Heatmap)
+- [ ] P2a TickerContext Dataclass (kein Trader-Mehrwert,
+      aber spart API-Calls)
+- [ ] P2b Earnings-Historie Fallback (yfinance)
+- [ ] Earnings-Kalender im Research Dashboard
+
+## 🟢 BATCH 4 — Technische Schuld (wenn Zeit)
+- [ ] P3a main.py Router-Split (3124 Zeilen → 6 Dateien)
+- [ ] SYSTEM_LOGS Cleanup (1 SQL-Statement)
+- [ ] SECTOR_TO_ETF Duplikation → shared utils
+- [ ] P2c FinBERT Batch-Optimierung
+
+## ❌ NICHT UMSETZEN (ohne Polygon.io Key)
+- Level II Orderbook
+
+---
+*Abgearbeitete Items werden in FUTURE.md als ✅ markiert*

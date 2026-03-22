@@ -1026,6 +1026,7 @@ async def api_research_dashboard(
         get_market_overview(),                           # 13 - NEW for relative strength
         get_analyst_grades(effective_ticker),           # 14 - NEW for guidance_trend
         get_market_news_for_sentiment(),                 # 15 - NEW for market sentiment context
+        get_options_oi_analysis(effective_ticker),       # 16 - NEW for Max Pain
         return_exceptions=True,
     )
 
@@ -1049,6 +1050,7 @@ async def api_research_dashboard(
     market_ov  = safe(13)
     analyst_grades = safe(14) or []
     market_sent_data = safe(15) or {}
+    oi_data = safe(16)
 
     # ── Watchlist-Status ───────────────────────────────────────
     is_watchlist = any(
@@ -1075,6 +1077,37 @@ async def api_research_dashboard(
         price = yf_fund.get("price")
         if change_pct is None:
             change_pct = yf_fund.get("change_pct")
+
+    # Pre/Post-Market Preis
+    pre_market_price = None
+    post_market_price = None
+    pre_market_change = None
+    try:
+        def _fetch_extended():
+            import yfinance as yf
+            fi = yf.Ticker(effective_ticker).fast_info
+            pre  = getattr(fi, "pre_market_price", None)
+            post = getattr(fi, "post_market_price", None)
+            reg  = getattr(fi, "last_price", None)
+            return (
+                round(float(pre), 2) if pre else None,
+                round(float(post), 2) if post else None,
+                round(float(reg), 2) if reg else None,
+            )
+        pre_p, post_p, reg_p = await asyncio.to_thread(_fetch_extended)
+        pre_market_price  = pre_p
+        post_market_price = post_p
+        # Pre-Market Change vs. letztem Schlusskurs
+        if pre_p and reg_p and reg_p > 0:
+            pre_market_change = round(
+                (pre_p - reg_p) / reg_p * 100, 2
+            )
+        elif post_p and reg_p and reg_p > 0:
+            pre_market_change = round(
+                (post_p - reg_p) / reg_p * 100, 2
+            )
+    except Exception:
+        pass
 
     # Letzter Fallback: fast_info (nur wenn beide fehlen)
     if price is None:
@@ -1646,6 +1679,9 @@ async def api_research_dashboard(
         "price_change_5d": price_change_5d,
         "fifty_two_week_high": fifty_two_week_high,
         "fifty_two_week_low": fifty_two_week_low,
+        "pre_market_price": pre_market_price,
+        "post_market_price": post_market_price,
+        "pre_market_change": pre_market_change,
 
         # Relative Stärke
         "relative_strength": rel_strength,
@@ -1703,6 +1739,8 @@ async def api_research_dashboard(
         "put_call_ratio": getattr(options, "put_call_ratio_vol", getattr(options, "put_call_ratio_oi", None)) if options else None,
         "expected_move_pct": expected_move_pct,
         "expected_move_usd": expected_move_usd,
+        "max_pain": oi_data.get("nearest_max_pain") if oi_data else None,
+        "options_oi_url": f"/api/data/options-oi/{effective_ticker}",
 
         # Short Interest
         "short_interest_pct": short_interest_pct,
@@ -2063,6 +2101,13 @@ async def api_ohlcv(ticker: str, period: str = "6mo", interval: str = "1d"):
             "sma_200": [],
             "error": str(exc),
         }
+
+
+@data_router.get("/options-oi/{ticker}")
+async def api_options_oi(ticker: str):
+    """Max Pain + OI-Heatmap für Ticker."""
+    from backend.app.data.yfinance_data import get_options_oi_analysis
+    return await get_options_oi_analysis(ticker.upper())
 
 
 @app.get("/api/data/chart-overlays/{ticker}")

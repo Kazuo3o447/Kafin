@@ -14,13 +14,13 @@ from backend.app.config import settings
 from backend.app.logger import get_logger
 from backend.app.data.finnhub import get_company_news
 from backend.app.analysis.finbert import analyze_sentiment_batch
-from backend.app.analysis.deepseek import call_deepseek
+from backend.app.analysis.groq import call_groq
 from backend.app.memory.short_term import save_bullet_points, get_existing_urls
 from backend.app.alerts.telegram import send_telegram_alert, format_narrative_shift_alert
 
 logger = get_logger(__name__)
 
-# Rate Limiting für DeepSeek (Phase 3A Extension)
+# Rate Limiting für Groq (Phase 3A Extension)
 _DEEPSEEK_CALLS: dict[str, list[datetime]] = {}
 _SPIKE_ALERTS_SENT: set[str] = set()
 
@@ -121,13 +121,9 @@ async def process_news_for_ticker(ticker: str) -> dict:
     _DEEPSEEK_CALLS[ticker] = [t for t in _DEEPSEEK_CALLS[ticker] if t > cutoff]
 
     for news_item, score in relevant_news:
-        # Rate Limiting: Max 5 Calls pro Stunde
-        if len(_DEEPSEEK_CALLS[ticker]) >= 5:
-            logger.warning(f"Rate Limit erreicht für {ticker}: >5 DeepSeek-Calls in der letzten Stunde.")
-            if ticker not in _SPIKE_ALERTS_SENT:
-                alert_text = f"⚙️ <b>NEWS SPIKE ALERT: {ticker}</b>\n\nMehr als 5 relevante Nachrichten in 1h. DeepSeek-Extraktion für diesen Zyklus pausiert (Kostenbremse)."
-                await send_telegram_alert(alert_text)
-                _SPIKE_ALERTS_SENT.add(ticker)
+        # Rate Limiting: Max 20 Calls pro Stunde (Groq hat großzügigere Limits)
+        if len(_DEEPSEEK_CALLS[ticker]) >= 20:
+            logger.debug(f"Hohe News-Aktivität für {ticker}")
             break
             
         _SPIKE_ALERTS_SENT.discard(ticker) # Reset bei normalem Volumen
@@ -219,7 +215,7 @@ async def _extract_bullet_points(ticker: str, news_item) -> dict:
         logger.error(f"Fehler beim Laden des news_extraction Prompts: {e}")
         return {"bullet_points": [news_item.headline]}
 
-    result = await call_deepseek(system_prompt, user_prompt)
+    result = await call_groq(system_prompt, user_prompt)
 
     try:
         import json

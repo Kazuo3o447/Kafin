@@ -8,7 +8,9 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **Watchlist Management**: Hinzufügen/Entfernen von Tickern mit automatischer Datenanreicherung
 - **Real-time News**: FinBERT-gestützte Sentiment-Analyse mit Material-Event-Detection
 - **Chart Intelligence**: Interaktive Kurs-Charts mit SMA-Overlays und Event-Markern
-- **KI-Analysen**: Groq (News-Extraktion) + DeepSeek (Reports) mit automatischem Fallback
+- **KI-Analysen**: Groq (News-Extraktion) + DeepSeek (Reports) mit optimierter Modell-Matrix
+- **Prompt Quality v6.1.4**: Vollständige Platzhalter-Befüllung (Max Pain, CEO, Fear & Greed, etc.)
+- **API Usage Tracking**: Echtzeit-Token-Counter und Call-Limits für alle APIs
 - **Automatisierung**: n8n-Workflows für tägliche Briefings und wöchentliche Reports
 - **System Monitoring**: Live Status Dashboard mit Service-Health und Latenz-Tracking
 - **Persistent Logging**: RotatingFileHandler mit Docker-Volume-Persistenz
@@ -111,6 +113,12 @@ docker-compose up -d kafin-frontend
 - **Wochenend-News**: Sa-So 10/14/18/22 Uhr
 - **Sonntags-Report**: Sonntag 19:00 Uhr
 - **Post-Earnings Review**: Mo-Fr 22:00 Uhr
+
+## 🐛 Letzte Fixes (22. März 2026)
+- **Prompt Quality v6.1.4**: Alle TODO-Platzhalter implementiert (Max Pain, CEO, Mitarbeiter, Fear & Greed, etc.)
+- **DeepSeek Modell-Matrix**: Reasoner für komplexe Tasks (Audit/Torpedo), Chat für schnelle (Morning/Weekly/Post-Earnings/Chart)
+- **groq.py API-Key**: Aus settings statt module-level env für bessere Lazy-Load Performance
+- **API Usage Tracking**: Redis-Puffer + PostgreSQL Aggregation mit Echtzeit-Token-Countern und Call-Limits
 
 ## 🐛 Letzte Fixes (20. März 2026)
 - **Bugfix**: Report-Generierung schlug aufgrund von Timeouts (DeepSeek > 120s) und fehlenden Supabase-Spalten (`report_text`) fehl. Next.js Proxy und `httpx` Timeouts auf 300s (5min) angehoben und Insert-Schema für `audit_reports` korrigiert.

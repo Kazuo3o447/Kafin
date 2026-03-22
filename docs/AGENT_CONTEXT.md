@@ -5,7 +5,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 6.0.4 (RAG + DB Migration Complete)
+**Version**: 6.1.4 (Prompt-Qualität + Modell-Optimierung)
 **Stand**: 2026-03-22
 
 ---
@@ -20,6 +20,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
   - `backend/app/data/finnhub.py` - News-Daten
   - `backend/app/analysis/finbert.py` - Sentiment-Analyse
   - `backend/app/memory/short_term.py` - News-Sentiment Storage + Batch-Funktionen
+  - `backend/app/analysis/usage_tracker.py` - API Usage Tracking + Token Counter
 
 ### Frontend (Next.js/React)
 - **Docker Container**: `kafin-frontend` auf Port 3000
@@ -45,7 +46,7 @@ Pool: asyncpg, min=2, max=10
 - earnings_reviews, performance_tracking
 - daily_snapshots, shadow_trades, score_history
 - system_logs, web_intelligence_cache
-- custom_search_terms
+- custom_search_terms, api_usage
 
 pgvector (vector(384)):
 - short_term_memory.embedding (HNSW)
@@ -64,7 +65,7 @@ RAG Endpoints:
 
 ---
 
-## KI-Pipeline (v5.13.6)
+## KI-Pipeline (v6.1.4)
 Stufe 1: FinBERT (lokal) — Sentiment-Filter
 Stufe 2: Groq llama-3.1-8b-instant — News-Extraktion
          Fallback: DeepSeek Chat
@@ -72,6 +73,21 @@ Stufe 2: Groq llama-3.1-8b-instant — News-Extraktion
 Stufe 3: DeepSeek Chat — komplexe Analyse
 Stufe 4: Kimi K2.5 — Earnings-Transkripte
 Stufe 5: DeepSeek Reasoner — Audit-Reports
+
+## API Usage Tracking (v6.1.3)
+- **usage_tracker.py**: Redis-Puffer + DB-Flush (5min)
+- **Token-Counter**: DeepSeek + Groq (input/output/total/cost)
+- **Call-Counter**: FMP (250/Tag), Finnhub (60/min)
+- **Endpoint**: GET /api/admin/api-usage
+- **UI**: Settings → APIs → ApiUsageBlock (Echtzeit + Limits)
+
+## Prompt Quality (v6.1.4)
+- **Prompts v0.4**: Alle TODO-Platzhalter implementiert
+- **audit_report.md**: Max Pain, PCR-OI, Squeeze-Signal, CEO, Mitarbeiter, Peers
+- **post_earnings.md**: AH-Reaktion, Expected Move, Fear & Greed
+- **morning_briefing.md**: Fear & Greed Score/Label
+- **Modell-Matrix**: DeepSeek Reasoner (Audit/Torpedo), Chat (Morning/Weekly/Post-Earnings/Chart)
+- **groq.py**: API-Key aus settings statt module-level env
 
 ---
 

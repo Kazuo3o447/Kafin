@@ -1,5 +1,8 @@
 version: '3.8'
 
+# Kafin v6.1.4 - Prompt Quality + Modell-Optimierung
+# Aktuelle Features: API Usage Tracking, Prompt Quality v0.4, DeepSeek Modell-Matrix
+
 services:
   postgres:
     image: pgvector/pgvector:pg16

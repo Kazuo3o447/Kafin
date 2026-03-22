@@ -8,6 +8,8 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 3. Skimme die historischen Meilensteine nur für Kontext oder Audit-Zwecke.
 
 ## 🟢 Aktueller Stand
+- **Prompt Quality v6.1.4**: Alle TODO-Platzhalter implementiert (audit_report: Max Pain, CEO, Mitarbeiter; post_earnings: AH-Reaktion, Fear & Greed; morning_briefing: Fear & Greed); DeepSeek Modell-Matrix optimiert (Reasoner für komplexe Tasks, Chat für schnelle); groq.py API-Key aus settings statt module-level
+- **API Usage Tracking**: usage_tracker.py mit Redis-Puffer + DB-Flush (5min); Token-Counter für DeepSeek/Groq; Call-Counter für FMP (250/Tag) + Finnhub (60/min); Settings → APIs zeigt Echtzeit-Verbrauch mit Balken und Kosten
 - **FRED**: 5xx-Retries, API-Key-Redaktion und graceful degradation sind im Backend aktiv.
 - **Diagnostics**: `/api/diagnostics/full` und `/api/diagnostics/db` laufen über eigene Next.js-Route-Handler statt Rewrite-Proxy.
 - **Reports**: Report-Generierung hat eigene Route-Handler mit Timeout/Fallback.
@@ -36,20 +38,27 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 | Backend Router | `backend/app/main.py` | API-Router, Log-Endpunkte, Diagnostics, System-Integrationen |
 | Logging | `backend/app/logger.py` | Datei-Logging, In-Memory-Buffer, Ignore-Klassifizierung |
 | Groq Client | `backend/app/analysis/groq.py` | Groq llama-3.1-8b-instant API mit DeepSeek-Fallback |
+| Usage Tracker | `backend/app/analysis/usage_tracker.py` | API Usage Tracking + Token Counter (Redis + PostgreSQL) |
+| Report Generator | `backend/app/analysis/report_generator.py` | Audit/Morning/Weekly Report Generierung mit Prompts v0.4 |
+| Post Earnings | `backend/app/analysis/post_earnings_review.py` | Post-Earnings Reviews mit Fear & Greed Kontext |
+| Prompt Templates | `prompts/audit_report.md`, `prompts/post_earnings.md`, `prompts/morning_briefing.md` | KI-Prompts v0.4 mit vollständigen Platzhaltern |
+| API Usage Endpoint | `GET /api/admin/api-usage` | Aggregierte API Usage mit Echtzeit-Daten und Limits |
 | News Pipeline | `backend/app/data/news_processor.py` | News-Extraction mit Groq, Rate Limit 20/h |
 | FRED Fetch | `backend/app/data/fred.py` | FRED-Abfrage mit Retry, Redaction und Fallbacks |
 | Doku | `STATUS.md`, `CHANGELOG.md`, `docs/apis/fred.md`, `docs/ROADMAP.md` | Status, Changelog, API-Details und Roadmap |
 
-## � Schnellchecks
+## Schnellchecks
 - **Frontend-Logs**: `docker logs kafin-frontend`
 - **Backend-Logs**: `docker logs kafin-backend`
 - **Status-Diagnose**: `GET /api/diagnostics/full`
 - **DB-Diagnose**: `GET /api/diagnostics/db`
 - **Live-Logs**: `GET /api/logs` und `GET /api/logs/file`
+- **API Usage**: `GET /api/admin/api-usage` (Tagesverbrauch + Limits)
+- **Prompt Quality**: `GET /api/reports/generate-morning` (Fear & Greed gefüllt)
 - **FRED-Verifikation**: `backend/app/data/fred.py` und `docs/apis/fred.md`
 - **Groq-Test**: `python backend/tests/test_groq.py` (erfordert `GROQ_API_KEY` in `.env`)
 
-## ⚠️ WICHTIG: KEINE MOCK DATEN ERLAUBT
+## WICHTIG: KEINE MOCK DATEN ERLAUBT
 - **Mock-Daten sind deaktiviert**: `USE_MOCK_DATA=false`
 - **Nur echte API-Daten**: Alle Datenquellen müssen Live-Daten liefern
 - **Fehlerbehandlung**: Bei API-Ausfällen klare Fehlermeldungen statt Fakes

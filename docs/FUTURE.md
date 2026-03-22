@@ -5,9 +5,37 @@
 
 ---
 
-## � FEATURE: Supabase → PostgreSQL Migration
+## ✅ FEATURE: Prompt Quality + Modell-Optimierung
 
-**Status: � ERLEDIGT — v6.0.4 (K6-1 bis K6-4 abgeschlossen)**
+**Status: ✅ ERLEDIGT — v6.1.4 (22.03.2026)**
+
+- ✅ Prompts v0.4: Alle TODO-Platzhalter implementiert
+- ✅ audit_report: Max Pain, PCR-OI, Squeeze-Signal, CEO, Mitarbeiter, Peers
+- ✅ post_earnings: AH-Reaktion, Expected Move, Fear & Greed
+- ✅ morning_briefing: Fear & Greed Score/Label
+- ✅ DeepSeek Modell-Matrix: Reasoner (Audit/Torpedo), Chat (schnelle Tasks)
+- ✅ groq.py: API-Key aus settings statt module-level env
+- ✅ TODO-Kommentare aus allen Prompts entfernt
+
+---
+
+## ✅ FEATURE: API Usage Tracking + Token Counter
+
+**Status: ✅ ERLEDIGT — v6.1.3 (22.03.2026)**
+
+- ✅ usage_tracker.py: Redis-Puffer + async DB-Flush (5min)
+- ✅ DeepSeek: input/output Tokens + Kosten ($/Call) pro Modell
+- ✅ Groq: input/output Tokens (Free Tier = $0.00)
+- ✅ FMP: Call-Counter vs. 250/Tag Limit
+- ✅ Finnhub: Call-Counter vs. 60/min Limit
+- ✅ GET /api/admin/api-usage: Aggregierte Summary
+- ✅ Settings → APIs: ApiUsageBlock mit Balken + Token-Tabelle
+
+---
+
+## ✅ FEATURE: Supabase → PostgreSQL Migration
+
+**Status: ✅ ERLEDIGT — v6.0.4 (K6-1 bis K6-4 abgeschlossen)**
 
 - ✅ PostgreSQL 16 + pgvector läuft lokal als Docker-Container
 - ✅ Drop-in Adapter mit Supabase-kompatibler API

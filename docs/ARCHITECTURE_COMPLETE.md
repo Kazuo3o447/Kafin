@@ -18,11 +18,13 @@ Kafin ist eine moderne Earnings-Trading-Plattform mit KI-Unterstützung, gebaut 
 ### Backend
 - **Runtime**: Python 3.11
 - **Framework**: FastAPI mit AsyncIO
-- **Database**: Supabase (PostgreSQL)
-- **Cache**: Redis
+- **Database**: PostgreSQL 16 + pgvector (lokal)
+- **Cache**: Redis (Session + API + Usage Buffer)
 - **Logging**: structlog mit In-Memory Buffer
 - **Testing**: pytest
 - **Data Processing**: pandas, yfinance, Finnhub API
+- **Usage Tracking**: Redis-Puffer + PostgreSQL Aggregation
+- **Prompt Quality**: v0.4 mit vollständigen Platzhalter-Befüllung
 
 ### Infrastructure
 - **Container**: Docker & Docker Compose

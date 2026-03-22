@@ -1,6 +1,7 @@
 {
   "name": "frontend",
-  "version": "0.1.0",
+  "version": "6.1.4",
+  "description": "Kafin v6.1.4 - Prompt Quality + Modell-Optimierung",
   "private": true,
   "scripts": {
     "dev": "next dev",

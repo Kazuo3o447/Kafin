@@ -1,5 +1,8 @@
 FROM python:3.11-slim
 
+# Kafin v6.1.4 - Prompt Quality + Modell-Optimierung
+# Aktuelle Features: API Usage Tracking, Prompt Quality v0.4, DeepSeek Modell-Matrix
+
 WORKDIR /app
 
 # Python-Abhängigkeiten

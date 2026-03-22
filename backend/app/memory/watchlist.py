@@ -102,7 +102,8 @@ async def add_ticker(ticker: str, company_name: str, sector: str, notes: str = "
         "company_name": company_name,
         "sector": sector,
         "notes": notes,
-        "cross_signal_tickers": cross_signals
+        # TODO: Fix cross_signals array handling for PostgreSQL
+        # "cross_signal_tickers": list(cross_signals)
     }
     
     try:

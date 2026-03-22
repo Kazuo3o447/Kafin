@@ -5,344 +5,182 @@
 
 ---
 
-## Kürzlich abgeschlossen (v5.9.1)
+## Kürzlich abgeschlossen (v5.12.2)
 
-### ✅ P1b Enhanced mit Robustness
-- **FMP Grade-Keys**: Robuste Normalisierung und Sample Gates
-- **Recency-Weighting**: Neuere Analyst-Grades stärker gewichtet
-- **Freshness-Filter**: Management-Events nur 30 Tage relevant
-- **Admin-Tools**: Score Backfill für Watchlist-History
-- **Einschränkungen dokumentiert**: Watchlist vs Live-Scoring
+### ✅ Index-Chartanalyse auf Markets
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.12.2**
+- "⚡ Chart analysieren" Button pro Index-Karte
+- On-demand DeepSeek Analyse mit Bias + Reasoning
+- Cache 600s, Close Button für Analyse
+
+### ✅ Chart-Analyse Begründung (Anti-Falling-Knife)
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.12.0**
+- why_entry/stop, trend_context, floor_scenario
+- falling_knife_risk mit prominenten Warn-Bannern
+- Aufklappbarer "Begründung anzeigen" Block
+
+### ✅ Earnings Battle Card
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.12.1**
+- Setup-Ampel aus Opp+Torp Scores
+- Expected Move mit Break-Even Levels
+- Track Record + Buy-Rumor Warnung
+
+### ✅ Dashboard Morning Brief
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.12.2**
+- RegimePulse (1-Zeile) + AlertStrip + TopSetups
+- Earnings Badges + Overnight-Kontext (SPY/VIX/CS)
+- Aufklappbares Morning Briefing
 
 ---
 
-## Phase 1 — Signal-First UX
-Ideen, geplante Features und technische Schulden die bekannt aber noch nicht implementiert sind.
-Wird bei jeder Session gepflegt.
-
----
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EINTRAG 1: Index-Chartanalyse auf Markets
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-## 🟠 FEATURE: Index-Chartanalyse auf Markets-Dashboard
+## 🟠 FEATURE: Max Pain Kalkulation
 
 **Warum:**
-SPY -1.85% ist eine Zahl. "SPY testet gerade den
-SMA200 bei $562 — letztes Mal führte das zu einem
-Bounce, diesmal bricht die Marktbreite weg" ist
-eine Entscheidungsgrundlage. Der Trader muss beim
-Öffnen des Markets-Dashboards sofort einschätzen
-können: intakter Trend oder struktureller Bruch?
+Max Pain ist der Preis bei Optionsverfall wo
+Optionskäufer den maximalen Verlust erleiden —
+Market Maker haben Anreiz den Kurs dorthin zu
+treiben. Starker kurzfristiger Reversal-Indikator
+vor monatlichem/wöchentlichem Verfallstag.
 
 **Was konkret:**
-Jeder Index (SPY, QQQ, DAX, Nikkei etc.) bekommt
-einen "Analyse"-Button der on-demand aufgerufen wird.
-Ergebnis: Chart-Analyse mit Fokus auf:
-  - Trendintegrität: Ist der Uptrend intakt oder bricht er?
-  - Key Level: Welches Level ist gerade entscheidend?
-  - Nächster Support/Widerstand mit Erklärung
-  - Kein Entry/Stop/Target (macht für Indizes
-    wenig Sinn) — stattdessen Regime-Kontext
+yfinance.option_chain() bereits integriert.
+Daraus pro Verfallsdatum berechnen:
+  max_pain_price = Preis wo (Calls OI * (price - strike))
+    + (Puts OI * (strike - price)) minimal ist
+  oi_heatmap: Strikes mit höchstem Open Interest
+  put_call_oi_ratio: Gesamtes Put OI / Call OI
+
+Anzeige: Research-Dashboard + Earnings Battle Card.
+Telegram-Alert wenn Kurs stark vom Max Pain abweicht
+(>5%) — möglicher Magnet-Effekt.
 
 **Technisch:**
-chart_analyst.py bereits vorhanden — für Index-Ticker
-(SPY, ^GDAXI etc.) aufrufen. DeepSeek-Prompt
-anpassen: kein Trade-Setup, stattdessen
-strukturelle Marktanalyse.
-Cache: 600s (Indizes bewegen sich langsamer).
-UI: kleiner "Analysieren"-Button pro Index-Karte.
+Reines Backend. yfinance option_chain() → pandas.
+Kein neuer API-Key. Cache 4h (OI ändert sich täglich).
+Neuer Endpoint: GET /api/data/max-pain/{ticker}
 
 **Aufwand:** ~2h | **Modell:** SWE-1.5
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EINTRAG 2: Chart-Analyse Begründung + Boden/Turnaround
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
 
-## 🔴 KRITISCH: Chart-Analyse Begründung (Anti-Falling-Knife)
+## 🟠 FEATURE: Pre/Post-Market Kursdaten
 
 **Warum:**
-"Entry $842, Stop $815, Target $920" — das
-beantwortet NICHT die wichtigste Frage des Traders:
-"Warum diese Levels? Greife ich ins fallende Messer?
-Wo ist der echte Boden? Was muss passieren damit
-sich der Trend dreht?"
+Earnings-Reaktionen passieren After-Hours.
+Aktuell sieht der Trader die Reaktion erst am
+nächsten Handelstag im Chart. Mit prepost=True
+in yfinance history() bekommt man die After-Hours
+und Pre-Market Kurse kostenlos.
 
-Ohne Begründung sind Zahlen wertlos. Ein
-institutioneller Trader würde nie eine Position
-eingehen ohne die Struktur hinter dem Level zu
-kennen.
-
-**Was konkret — neue Felder in chart_analyst.py:**
-
-  trend_context: "Abwärtstrend seit 3 Monaten. Death
-    Cross (SMA50 unter SMA200). 23% unter 52W-Hoch."
-
-  why_entry: "Entry-Zone liegt zwischen 20T-Support
-    ($X) und letztem Swing-Tief ($Y). Zone wo in den
-    letzten 3 Wochen Käufer aufgetaucht sind."
-
-  why_stop: "Stop knapp unter $815 = letztes
-    signifikantes Swing-Tief vom [Datum]. Bruch würde
-    nächste Unterstützungszone bei $X aktivieren."
-
-  floor_scenario: "Nächster harter Support: $780
-    (52W-Tief). Darunter kein struktureller Support
-    bis $720 (Pre-Earnings-Base Juli 2024)."
-
-  turnaround_conditions: "Bullishes Signal wenn:
-    (1) Schlusskurs über SMA50 bei $X mit Volumen
-    >1.5x Durchschnitt ODER (2) positive Überraschung
-    beim nächsten Earnings + Guidance-Erhöhung."
-
-  falling_knife_risk: "HOCH — Abwärtstrend intakt,
-    kein Volumensignal für Bodenbildung, Insiders
-    verkaufen. Warte auf Bestätigung."
+**Was konkret:**
+  1. Chart-Endpoint (OHLCV): prepost=True ergänzen
+     damit After-Hours Balken im Chart sichtbar sind
+  2. Earnings Battle Card: "Letzte After-Hours Reaktion"
+     aus post_earnings_review ergänzen
+  3. Research Dashboard: Pre-Market Kurs wenn Markt
+     noch nicht offen (08:00-09:30 ET)
 
 **Technisch:**
-DeepSeek-Prompt in chart_analyst.py erweitern.
-Neue Felder im JSON-Schema hinzufügen.
-Frontend: aufklappbarer "Warum?"-Block unter
-den Levels im Trade-Setup-Block.
+  yf.Ticker(t).history(period="5d", prepost=True)
+  Bereits in chart_endpoint.py — Parameter ergänzen.
+  Pre-Market Kurs: fast_info hat
+    pre_market_price / post_market_price Attribute.
 
-**Aufwand:** ~2h | **Modell:** Sonnet 4.5
-**Priorität:** Höchste — direkt umsetzbar
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EINTRAG 3: Earnings-Kalender als Battle Card
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-## 🟠 FEATURE: Earnings Battle Card
-
-**Warum:**
-Der Earnings-Kalender ist das wichtigste Trading-
-Werkzeug der Woche — und zeigt aktuell nur Ticker
-plus Datum. Ein Profitrader braucht in 10 Sekunden
-pro Eintrag: "Kann ich das traden? Was ist das
-Risiko? Was erwartet der Markt?"
-
-**Was konkret — pro Earnings-Eintrag:**
-
-  SETUP-AMPEL (sofort sichtbar):
-    Grün = tradeable Setup (Opp hoch, Torp niedrig)
-    Amber = gemischtes Signal
-    Rot = zu riskant oder kein Setup
-
-  ERWARTUNGEN:
-    EPS-Konsens + Revenue-Konsens
-    Expected Move (±%) aus IV — "Markt erwartet ±8.2%"
-    Put/Call Ratio — ist der Markt bullisch/bärisch positioniert?
-
-  TRACK RECORD (Ampel-Farbe):
-    "6/8 Quartale geschlagen · Ø +11% Surprise"
-    Letzte Reaktion: "+7.3% nach letztem Beat"
-
-  POSITIONIERUNGS-RISIKO:
-    Preis-Performance letzte 30T:
-    "+23% — Buy-the-Rumor-Risiko" (amber Warnung)
-
-  PRE-EARNINGS SENTIMENT:
-    News-Stimmung letzte 7T (bereits vorhanden)
-
-  EMPFEHLUNG (aus Opp/Torp):
-    "Setup: KAUFEN mit engem Stop" /
-    "Setup: MEIDEN — Torpedo zu hoch" /
-    "Setup: BEOBACHTEN"
-
-**Technisch:**
-Earnings-Radar Endpoint bereits vorhanden mit
-Opp/Torp, beats_of_8, avg_surprise_pct,
-pre_earnings_sentiment.
-Fehlt: expected_move (aus IV — schon in Research
-berechnet, in quick_snapshot ergänzen),
-price_change_30d (in quick_snapshot ergänzen),
-put_call_ratio.
-Frontend: kompakte "Battle Card" pro Eintrag
-statt einfacher Listenzeile.
-
-**Aufwand:** ~3h | **Modell:** Sonnet 4.5
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EINTRAG 4: Dashboard als Morning Brief
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-## 🟠 FEATURE: Dashboard → Morning Brief
-
-**Warum:**
-Das aktuelle Dashboard ist eine Datenseite.
-Ein Trader öffnet die Plattform morgens mit einer
-Frage: "Was muss ich heute wissen und tun?"
-Das Dashboard muss diese Frage in 10 Sekunden
-beantworten — nicht in 10 Minuten Scrollen.
-
-**Was konkret — 5 Sektionen:**
-
-  1. REGIME-PULSE (1 Zeile, ganz oben):
-     Composite-Regime + Score + Dominant-Faktor
-     "Risk-Off · Score −4.2 · Treiber: VIX 28.4"
-     Direkt aus calcCompositeRegime() — kein API-Call
-
-  2. AKTIVE ALERTS (max. 5, priorisiert):
-     Material-News, Torpedo-Alarm, Earnings diese Woche
-     Identisch zu Watchlist-Alert-Streifen —
-     wiederverwendete Logik
-
-  3. EARNINGS DIESE WOCHE (kompakt):
-     Max. 3 Watchlist-Ticker mit Countdown + Setup-Ampel
-     Link → Earnings-Radar für Details
-
-  4. BESTE SETUPS JETZT (2 Kacheln):
-     Watchlist-Ticker mit höchstem Opp-Score
-     + Watchlist-Ticker mit höchstem Torpedo
-     (damit ich weiß was zu traden UND was zu meiden)
-
-  5. OVERNIGHT-KONTEXT (3 Zahlen):
-     SPY, VIX, Credit Spread — aktuelle Werte
-     mit 1T-Veränderung
-
-**Was wegfällt:**
-  - Generische Index-Cards (schon auf Markets)
-  - Opportunities-Block (undifferenziert)
-  - Langer Briefing-Text als Hauptinhalt
-    (bleibt, aber kompakter unten)
-
-**Technisch:**
-Alle Daten bereits vorhanden:
-  - Watchlist enriched (Scores, Earnings, Alerts)
-  - Macro snapshot (VIX, Credit Spread)
-  - Market overview (SPY)
-Kein neuer Backend-Endpoint nötig.
-Reine Frontend-Überarbeitung.
-
-**Aufwand:** ~3h | **Modell:** Sonnet 4.5
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ABSCHLUSS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**Aufwand:** ~1h | **Modell:** SWE-1.5
 
 ---
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EINTRAG: PostgreSQL Migration
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-## 🔴 ARCHITEKTUR: Supabase → Lokales PostgreSQL
+## 🟠 FEATURE: Post-Earnings Kontext-Alert (Telegram)
 
 **Warum:**
-Kafin läuft lokal auf dem NUC. Supabase ist
-eine externe Cloud-Datenbank — das bedeutet:
-- 20-80ms Extra-Latenz bei JEDER DB-Query
-  (Internet-Roundtrip statt lokaler Socket)
-- Externe Abhängigkeit: Supabase-Ausfall =
-  Kafin funktioniert nicht
-- Rate-Limits auf Free-Tier
-- Sensible Trading-Daten auf fremden Servern
-- Kein "Alles-in-einem-Paket" Deployment
+"HIMS schlägt EPS um +15% aber fällt -4% AH" —
+das ist ein klassisches Torpedo-nach-Beat-Setup.
+Der Trader muss das sofort wissen mit Kontext:
+ist das eine Kaufgelegenheit oder der Beginn eines
+Abverkaufs? Aktuell sendet der Torpedo-Monitor nur
+einfache Warnungen ohne Kontext.
 
-**Ziel:**
-PostgreSQL 16 als Docker-Container im selben
-docker-compose.yml wie Backend, Frontend, n8n.
-Lokale Verbindung via Unix-Socket oder localhost.
-Keine externe Abhängigkeit mehr.
+**Was konkret:**
+Nach Earnings-Meldung (post_earnings_review läuft):
+Telegram-Alert mit diesem Kontext:
 
-**Aufwand:** ~3-4 Stunden, einmaliger Migrations-Tag.
-**Zeitpunkt:** Nach stabilem Entwicklungsstand —
-NICHT mitten in aktiver Feature-Entwicklung.
+  🎯 HIMS — Earnings Beat
+  EPS: $0.08 vs $0.07 Konsens (+14%)
+  Revenue: $530M vs $498M (+6%)
 
-**Implementierungsplan (für Windsurf ausführbar):**
+  📊 Marktreaktion (AH): -4.2%
+  IV vorher: 45% | Expected Move war: ±8%
+  → Reaktion INNERHALB Expected Move
 
-SCHRITT 1 — docker-compose.yml: PostgreSQL ergänzen:
-```yaml
-postgres:
-  image: postgres:16-alpine
-  container_name: kafin-postgres
-  environment:
-    POSTGRES_DB: kafin
-    POSTGRES_USER: kafin
-    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kafin_local}
-  volumes:
-    - ./data/postgres:/var/lib/postgresql/data
-    - ./backend/init_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
-  ports:
-    - "5432:5432"
-  restart: unless-stopped
-  healthcheck:
-    test: ["CMD-SHELL", "pg_isready -U kafin"]
-    interval: 10s
-    timeout: 5s
-    retries: 5
-```
+  📈 Historisches Setup-Muster:
+  Beat + AH-Rückgang: 4 von 6 Malen +5%
+  in den nächsten 5 Handelstagen
 
-SCHRITT 2 — backend/app/config.py: DB-URL ergänzen:
-```python
-database_url: str = "postgresql://kafin:kafin_local@postgres:5432/kafin"
-```
+  RSI (14): 38 — überverkauft
+  Opp-Score: 7.4 | Torpedo-Score: 3.1
 
-SCHRITT 3 — backend/app/db.py: neue Verbindungsklasse:
-```python
-import psycopg2
-from backend.app.config import settings
+  ⚡ Mögliche Kaufgelegenheit — prüfen!
 
-def get_db_connection():
-    return psycopg2.connect(settings.database_url)
+**Technisch:**
+post_earnings_review.py bereits vorhanden.
+yfinance prepost=True für AH-Reaktion.
+EarningsHistory aus Supabase für historisches Muster.
+Telegram-Format verbessern.
 
-# Async-Version mit asyncpg:
-import asyncpg
-async def get_async_db():
-    return await asyncpg.connect(settings.database_url)
-```
+**Aufwand:** ~3h | **Modell:** Sonnet / SWE-1.5
 
-SCHRITT 4 — Alle get_supabase_client() Aufrufe
-ersetzen durch get_db_connection().
-Supabase-spezifische Syntax (.table().select().execute())
-durch Standard-SQL ersetzen.
+---
 
-Betroffene Dateien (alle grep nach get_supabase_client):
-  - backend/app/main.py (häufig)
-  - backend/app/memory/watchlist.py
-  - backend/app/memory/short_term.py
-  - backend/app/memory/long_term.py
-  - backend/app/analysis/report_generator.py
+## 🟢 FEATURE: FINRA Short Volume (kostenlos)
 
-SCHRITT 5 — Datenmigration aus Supabase:
-```bash
-# In Supabase Dashboard: Settings → Database → Backups
-# oder via pg_dump gegen Supabase Connection String:
-pg_dump "postgresql://[supabase-url]" > kafin_backup.sql
-psql "postgresql://kafin:kafin_local@localhost:5432/kafin" < kafin_backup.sql
-```
+**Warum:**
+FMP Short Interest (täglich aktualisiert) bereits
+integriert. FINRA veröffentlicht TÄGLICH das
+Short-Volume kostenlos. Unterschied: Short Interest
+= offene Positionen (bi-wöchentlich), Short Volume
+= tägliches Leerverkaufsvolumen.
+Hohes Short-Volume + Earnings Beat = Short Squeeze
+Kandidat (klassisches Setup).
 
-SCHRITT 6 — .env: SUPABASE_URL + SUPABASE_KEY entfernen.
-SCHRITT 7 — Supabase-Projekt pausieren/löschen.
+**Was konkret:**
+FINRA Reg SHO Daily Short Sale Volume:
+  https://www.finra.org/sites/default/files/ftp/
+  short-sale-volume-{YYYYMMDD}.txt
 
-**Abhängigkeiten:**
-- psycopg2-binary oder asyncpg in requirements.txt
-- init_db.sql bereits vorhanden (backend/app/init_db.py
-  muss als .sql exportiert werden)
-- docker-compose.yml: backend depends_on: postgres
+Daily Short Volume Ratio = Short Volume / Total Volume
+Wenn > 50% → erhöhter Short-Druck.
+Integrieren in: Research-Scoring + Torpedo-Monitor.
 
-**Erwartete Verbesserungen nach Migration:**
-- Ladezeit enriched Watchlist: −30-50ms pro Query
-- Audit-Report Generierung: −100-200ms (mehrere Queries)
-- Keine Rate-Limit-Fehler mehr
-- Offline-Betrieb vollständig möglich
-- Deployment: ein einziger docker-compose up
+**Technisch:**
+HTTP GET auf FINRA-URL (kostenlos, kein API-Key).
+CSV parsen. Daily cronjob via n8n.
+Supabase-Tabelle: short_volume_daily (ticker, date, ratio).
+Bereits vorhandenes Short Interest ergänzen.
 
-**Risiken:**
-- Datenverlust wenn Migration nicht korrekt
-  → Backup VOR Migration Pflicht
-- SQL-Syntax-Anpassungen (Supabase-SDK vs. raw SQL)
-- asyncpg/psycopg2 Entscheidung treffen
+**Aufwand:** ~3h | **Modell:** SWE-1.5
 
-**Empfehlung:** psycopg2 für Sync-Calls (bestehender Code),
-asyncpg für neue async-Endpoints. SQLAlchemy als ORM
-ist Overkill für diesen Use-Case — raw SQL reicht.
+---
 
-**Timing:** Erst wenn Research Dashboard P1-P3,
-Watchlist v2 und Markets Dashboard stabil laufen.
-Dann als dedizierter "Infrastructure Day".
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## NOTIZ: KI-Modell-Erweiterungen
+
+Folgende Modelle wurden als potenzielle Ergänzungen
+evaluiert:
+
+  Groq + Llama 3 / Qwen: Hohe Inferenzgeschwindigkeit
+  für News-Parsing. NICHT prioritär da FinBERT bereits
+  lokal auf NUC läuft und kostenlos ist.
+
+  Cohere Command R: Stark für RAG auf Earnings-Calls.
+  Interessant wenn Transkript-Analyse implementiert wird.
+  Dann als Alternative zu Kimi K2.5 evaluieren.
+
+  Groq API: Kostenloser Tier mit großzügigen Limits.
+  Als Fallback wenn DeepSeek Rate-Limits erreicht.
+  BYOK in Windsurf möglich.
+
+Entscheidung: Erst umsetzen wenn FinBERT/DeepSeek
+an ihre Grenzen stoßen. Kein vorzeitiger
+Architektur-Wechsel.
 
 ---
 
@@ -531,39 +369,5 @@ Grüne Balken = bullish, rote Balken = bearish, Trend erkennbar.
 
 ---
 
-## ✅ IMPLEMENTIERT (20. März 2026)
-
-### 52-WOCHEN PREISSPANNE VISUALISIERUNG
-Horizontaler Balken zeigt Position zwischen Jahrestief/hoch mit Farbgradient.
-Implementiert in `components/visualizations/PriceRangeBar.tsx`.
-
-### VOLUMEN-PROFIL CHART
-20-Tage Volumen-Balkendiagramm mit Recharts, grün/rot Farbcodierung.
-Implementiert in `components/visualizations/VolumeProfile.tsx`.
-Backend: `/api/data/volume-profile/{ticker}`.
-
-### PEG RATIO GAUGE
-Halbkreis-Gauge für Bewertung (grün = günstig, rot = teuer).
-Implementiert in `components/visualizations/PEGGauge.tsx`.
-
-### TERMINAL → LOG VIEWER OVERHAUL
-Vollbild-Terminal ersetzt durch dezenten Bottom-Drawer mit Hotkey `Cmd+J`.
-Implementiert in `components/LogViewer.tsx`. `/terminal` Route entfernt.
-
-### WATCHLIST PERFORMANCE OPTIMIZATIONS
-Reloads eliminiert mit Optimistic Updates für CRUD-Operationen.
-Ticker hinzufügen/entfernen/Web-Prio ändern sofort sichtbar, keine API-Calls mehr.
-
-### WATCHLIST PERFORMANCE REVOLUTION
-yfinance Cache + Enriched Cache für 55x schnellere Ladezeiten (2.3s statt 127s).
-
-### WATCHLIST DATA DISPLAY FIX
-Frontend umgestellt auf enriched API - alle Spalten jetzt sichtbar (1T % Opp Torp).
-
-### RESEARCH UX IMPROVEMENTS
-Firmenname verlinkt + bessere Loading States mit User Guidance.
-
----
-
-*Zuletzt aktualisiert: 20. März 2026*
+*Zuletzt aktualisiert: 22. März 2026*
 *Nächste Review: vor dem nächsten Major Feature*

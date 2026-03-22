@@ -26,6 +26,9 @@ type ResearchData = {
   core_fields_available?: number;
   data_sufficient_for_ai?: boolean;
   ai_blocked_reason?: string;
+  is_etf?: boolean;
+  is_index?: boolean;
+  asset_type?: "stock" | "etf" | "index";
   company_name: string;
   sector: string | null;
   industry: string | null;
@@ -728,81 +731,89 @@ function TradeSetupBlock({
         </div>
       </div>
 
-      {/* "Warum?"-Akkordeon */}
+      {/* Begründung — immer sichtbar wenn vorhanden */}
       {(data.why_entry || data.why_stop ||
         data.trend_context ||
         data.turnaround_conditions) && (
-        <details className="mt-3">
-          <summary className="cursor-pointer text-xs
-                               text-[var(--accent-blue)]
-                               hover:opacity-80 select-none">
-            ▸ Begründung anzeigen
-          </summary>
-          <div className="mt-2 space-y-2 rounded-lg
-                          bg-[var(--bg-tertiary)] p-3">
-            {data.trend_context && (
-              <div>
-                <p className="text-[10px] font-semibold
-                               text-[var(--text-muted)] uppercase
-                               tracking-wider mb-0.5">
-                  Trend-Kontext
-                </p>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  {data.trend_context}
-                </p>
-              </div>
-            )}
-            {data.why_entry && (
-              <div>
-                <p className="text-[10px] font-semibold
-                               text-[var(--text-muted)] uppercase
-                               tracking-wider mb-0.5">
-                  Warum diese Entry-Zone?
-                </p>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  {data.why_entry}
-                </p>
-              </div>
-            )}
-            {data.why_stop && (
-              <div>
-                <p className="text-[10px] font-semibold
-                               text-[var(--text-muted)] uppercase
-                               tracking-wider mb-0.5">
-                  Warum dieser Stop?
-                </p>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  {data.why_stop}
-                </p>
-              </div>
-            )}
-            {data.floor_scenario
-             && data.falling_knife_risk !== "high" && (
-              <div>
-                <p className="text-[10px] font-semibold
-                               text-[var(--text-muted)] uppercase
-                               tracking-wider mb-0.5">
-                  Wenn Stop reisst
-                </p>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  {data.floor_scenario}
-                </p>
-              </div>
-            )}
-            {data.turnaround_conditions && (
-              <div>
-                <p className="text-[10px] font-semibold
-                               text-[var(--text-muted)] uppercase
-                               tracking-wider mb-0.5">
-                  Turnaround-Bedingungen
-                </p>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  {data.turnaround_conditions}
-                </p>
-              </div>
-            )}
-          </div>
-        </details>
+        <div className="mt-4 pt-3 border-t
+                         border-[var(--border)]
+                         space-y-3">
+
+          {data.trend_context && (
+            <div>
+              <p className="text-[10px] font-semibold
+                             text-[var(--text-muted)]
+                             uppercase tracking-wider mb-1">
+                Trend-Kontext
+              </p>
+              <p className="text-xs
+                              text-[var(--text-secondary)]
+                              leading-relaxed">
+                {data.trend_context}
+              </p>
+            </div>
+          )}
+
+          {data.why_entry && (
+            <div>
+              <p className="text-[10px] font-semibold
+                             text-[var(--accent-blue)]
+                             uppercase tracking-wider mb-1">
+                Warum diese Entry-Zone?
+              </p>
+              <p className="text-xs
+                              text-[var(--text-secondary)]
+                              leading-relaxed">
+                {data.why_entry}
+              </p>
+            </div>
+          )}
+
+          {data.why_stop && (
+            <div>
+              <p className="text-[10px] font-semibold
+                             text-[var(--accent-red)]
+                             uppercase tracking-wider mb-1">
+                Warum dieser Stop?
+              </p>
+              <p className="text-xs
+                              text-[var(--text-secondary)]
+                              leading-relaxed">
+                {data.why_stop}
+              </p>
+            </div>
+          )}
+
+          {data.floor_scenario && (
+            <div>
+              <p className="text-[10px] font-semibold
+                             text-[var(--text-muted)]
+                             uppercase tracking-wider mb-1">
+                Wenn Stop reisst
+              </p>
+              <p className="text-xs
+                              text-[var(--text-secondary)]
+                              leading-relaxed">
+                {data.floor_scenario}
+              </p>
+            </div>
+          )}
+
+          {data.turnaround_conditions && (
+            <div>
+              <p className="text-[10px] font-semibold
+                             text-[var(--accent-green)]
+                             uppercase tracking-wider mb-1">
+                Turnaround-Bedingungen
+              </p>
+              <p className="text-xs
+                              text-[var(--text-secondary)]
+                              leading-relaxed">
+                {data.turnaround_conditions}
+              </p>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Analyse Text und Bias */}
@@ -2191,6 +2202,15 @@ export default function ResearchDashboard() {
           </div>
           <p className="text-sm text-[var(--text-secondary)] mt-0.5">
             {data.company_name}
+            {data.asset_type && data.asset_type !== "stock" && (
+              <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                data.asset_type === "etf" 
+                  ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                  : "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+              }`}>
+                {data.asset_type.toUpperCase()}
+              </span>
+            )}
             {data.sector && <span className="mx-2 text-[var(--text-muted)]">·</span>}
             {data.sector && <span className="text-[var(--text-muted)]">{data.sector}</span>}
             {data.industry && <span className="text-[var(--text-muted)]"> / {data.industry}</span>}

@@ -131,7 +131,9 @@ Erstelle ein JSON-Objekt mit folgender Struktur:
             "Du bist ein technischer Analyst. Analysiere die gegebenen Marktdaten und antworte "
             "AUSSCHLIESSLICH mit einem validen JSON-Objekt. Kein Text vor oder nach dem JSON. "
             "Keine Markdown-Backticks. Kein Kommentar. Alle Preise als Zahlen (nicht als Strings). "
-            "Deutsch für Textfelder."
+            "Deutsch für Textfelder. "
+            "Schreibe bei why_entry, why_stop, trend_context, floor_scenario und turnaround_conditions "
+            "VOLLSTÄNDIGE 2-3 Sätze. Keine Abkürzungen. Der Trader muss das Setup verstehen ohne die Rohdaten zu sehen."
         )
 
         user_prompt = data_prompt + """
@@ -166,7 +168,13 @@ bias: "bullish"|"bearish"|"neutral"
 falling_knife_risk: "low"|"medium"|"high"
 Alle Preise als Zahlen. Kein Markdown."""
 
-        raw_response = await call_deepseek(system_prompt, user_prompt, model="deepseek-chat")
+        raw_response = await call_deepseek(
+            system_prompt,
+            user_prompt,
+            model="deepseek-chat",
+            max_tokens=2048,    # war 512 → mehr Platz für Begründungen
+            temperature=0.2,
+        )
 
         ai_data = None
         parse_error = False

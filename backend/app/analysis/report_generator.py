@@ -404,6 +404,43 @@ async def generate_audit_report(ticker: str) -> str:
             f"Bias: {chart_data.get('bias', 'N/A')}\n"
             f"Hauptrisiko: {chart_data.get('key_risk', 'N/A')}\n"
         )
+        
+        # NEU: Begründungen ergänzen
+        if chart_data.get("why_entry"):
+            chart_str += (
+                f"Entry-Begründung: "
+                f"{chart_data['why_entry']}\n"
+            )
+        if chart_data.get("why_stop"):
+            chart_str += (
+                f"Stop-Begründung: "
+                f"{chart_data['why_stop']}\n"
+            )
+        if chart_data.get("trend_context"):
+            chart_str += (
+                f"Trend-Kontext: "
+                f"{chart_data['trend_context']}\n"
+            )
+        if chart_data.get("falling_knife_risk"):
+            chart_str += (
+                f"Falling-Knife-Risiko: "
+                f"{chart_data['falling_knife_risk']}\n"
+            )
+        if chart_data.get("floor_scenario"):
+            chart_str += (
+                f"Floor-Szenario: "
+                f"{chart_data['floor_scenario']}\n"
+            )
+        if chart_data.get("turnaround_conditions"):
+            chart_str += (
+                f"Turnaround-Bedingungen: "
+                f"{chart_data['turnaround_conditions']}\n"
+            )
+        if chart_data.get("key_risk"):
+            chart_str += (
+                f"Hauptrisiko: "
+                f"{chart_data['key_risk']}\n"
+            )
         supports = chart_data.get("support_levels", [])
         if supports:
             chart_str += "Support-Level: " + ", ".join(

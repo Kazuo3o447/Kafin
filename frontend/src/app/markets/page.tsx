@@ -523,20 +523,33 @@ function GlobalIndicesBlock({ data, timestamp, indexAnalysis, analysisPending, o
               
               {/* Analyse-Button */}
               {onAnalyze && !indexAnalysis?.[symbol] && (
-                <button
-                  onClick={() => onAnalyze(symbol)}
-                  disabled={analysisPending?.[symbol]}
-                  className="mt-2 w-full text-[10px] rounded
+                <div className="mt-2 flex gap-1">
+                  <button
+                    onClick={() => onAnalyze(symbol)}
+                    disabled={analysisPending?.[symbol]}
+                    className="flex-1 text-[10px] rounded
+                               border border-[var(--border)]
+                               px-2 py-1 text-[var(--text-muted)]
+                               hover:text-[var(--accent-blue)]
+                               hover:border-[var(--accent-blue)]
+                               disabled:opacity-50 transition-colors"
+                  >
+                    {analysisPending?.[symbol]
+                      ? "Analysiere…"
+                      : "⚡ Chart"}
+                  </button>
+                  <Link
+                    href={`/research/${symbol}`}
+                    className="flex-1 text-[10px] rounded
                              border border-[var(--border)]
                              px-2 py-1 text-[var(--text-muted)]
-                             hover:text-[var(--accent-blue)]
-                             hover:border-[var(--accent-blue)]
-                             disabled:opacity-50 transition-colors"
-                >
-                  {analysisPending?.[symbol]
-                    ? "Analysiere…"
-                    : "⚡ Chart analysieren"}
-                </button>
+                             hover:text-[var(--accent-green)]
+                             hover:border-[var(--accent-green)]
+                             transition-colors text-center"
+                  >
+                    Research
+                  </Link>
+                </div>
               )}
 
               {/* Analyse-Ergebnis */}

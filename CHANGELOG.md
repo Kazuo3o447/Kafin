@@ -2,6 +2,34 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [6.1.6] - 2026-03-22 - Chart Analysis Complete Overhaul
+
+### 🚀 Feature: Begründung immer sichtbar
+- **Frontend**: TradeSetupBlock zeigt why_entry/why_stop/trend_context/turnaround_conditions IMMER sichtbar
+- **Kein Akkordeon mehr**: Alle Begründungen direkt ersichtlich ohne Klick
+- **Visuelle Verbesserung**: Farbige Headers (blau/rot/grün) für bessere Unterscheidbarkeit
+
+### 📊 Feature: ETF/Index Research
+- **Backend**: Asset-Type Detection für ETF_TICKERS und INDEX_TICKERS Konstanten
+- **API**: /research/{ticker} liefert is_etf, is_index, asset_type Felder
+- **Frontend**: Badge im Research Header (ETF=blau, Index=lila)
+- **Markets Page**: "Research" Button neben "⚡ Chart" für Indizes
+
+### 🧠 Backend: Vollständige Chart-Daten in Audit-Prompt
+- **report_generator.py**: chart_str enthält jetzt why_entry, why_stop, trend_context, falling_knife_risk, floor_scenario, turnaround_conditions, key_risk
+- **DeepSeek Reasoner**: Erhält vollständige Begründungen für qualitativ bessere Audit Reports
+
+### ⚡ Chart Analyst: Kein Token-Sparen mehr
+- **chart_analyst.py**: max_tokens von 512 auf 2048 erhöht
+- **System Prompt**: Explizite Anweisung für VOLLSTÄNDIGE 2-3 Sätze bei Begründungen
+- **Temperature**: 0.2 für konsistentere Ausgabe
+- **Qualität**: Trader versteht das Setup ohne Rohdaten sehen zu müssen
+
+### 🔧 Technical Changes
+- **Frontend**: ResearchData Type um is_etf, is_index, asset_type erweitert
+- **Backend**: data.py mit ETF/Index Konstanten und Detection
+- **UI/UX**: Bessere Visualisierung und schnellere Navigation
+
 ## [6.1.5] - 2026-03-22 - Bugfix: Audit Report Persistenz
 
 ### 🐛 Kritischer Bugfix

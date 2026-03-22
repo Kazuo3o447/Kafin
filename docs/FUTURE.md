@@ -186,6 +186,32 @@ Stock Price Strength (new 52W highs vs lows).
 Zeigt 0-100 Score analog CNN Fear & Greed.
 Aufwand: ~3h, SWE-1.5.
 
+## 🟡 AUS DEM REVIEW OFFEN
+
+### Zentralisierung von Signal-Konstanten
+- `SECTOR_TO_ETF` ist aktuell noch in `scoring.py`, `main.py` und `report_generator.py` dupliziert.
+- Ziel: eine autoritative Quelle oder ein Shared-Helper für Mapping + Signal-Labels.
+
+### Zentrale Cache-Invalidierung
+- News-Writepfade invalidieren derzeit die abhängigen Caches noch inline.
+- Ziel: ein gemeinsamer Helper für Research-, Watchlist- und Earnings-Invalidierung.
+
+### Gemeinsamer TickerContext
+- `api_research_dashboard` und `generate_audit_report()` bauen den Data-Context noch separat zusammen.
+- Ziel: ein gemeinsames Context-Objekt, damit Scoring, Audit und UI dieselben Datenfelder nutzen.
+
+### Composite-Regime kalibrieren
+- Der Markets-Header ist live, braucht aber historische Kalibrierung auf reale Risk-On/Risk-Off-Phasen.
+- Ziel: Schwellen und Gewichtungen gegen Marktregime-Phasen backtesten und dann stabilisieren.
+
+### Marktbreite-Historie
+- `pct_above_sma50_5d_ago` und `pct_above_sma50_20d_ago` sind noch Platzhalter.
+- Ziel: tägliche Breadth-Historie persistieren, damit der Trend sauberer sichtbar wird.
+
+### Firmenprofil als Research-Modul
+- P1c ist weiterhin offen: CEO, Beschreibung, Mitarbeiterzahl und Gründung sollten als eigener Block im Research-Dashboard erscheinen.
+- Zusätzlich sollte der Firmenkontext in den Audit-Prompt einfließen.
+
 ---
 
 ## 🟡 INTRADAY — VWAP

@@ -2,6 +2,40 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.10.6] - 2026-03-22 - Signal-Consistency Hotfixes
+
+### 🐛 Fixes
+- **Audit Sentiment**: `report_generator.py` nutzt jetzt die gemeinsame Helper-Logik `_calc_sentiment_from_bullets()`
+- **Score History Fairness**: `score_history` wird pro Ticker bei Underfill gezielt nachgeladen, damit Weekly-Deltas stabiler sind
+- **Research Deltas**: Null-Werte werden in der Research-Delta-Anzeige nicht mehr versehentlich unterdrückt
+- **Position Sizer**: Ungültige Stop-Loss-Konstellationen werden im Research-UI sichtbar abgefangen
+
+### 📝 Doku
+- **Future Scope**: Größere Architekturthemen wurden in `docs/FUTURE.md` verschoben
+
+## [5.10.5] - 2026-03-21 - Composite Regime Markets Header
+
+### ✨ Features
+- **Composite Regime Header**: Neuer prominenter Header auf /markets mit gewichteter Regime-Berechnung
+- **Multi-Faktor Scoring**: VIX, Credit Spread, Yield Curve, Market Breadth, Risk Appetite, VIX Structure
+- **Visual Regime Indicator**: Farbcodierte Anzeige (Risk-On/Neutral/Risk-Off) mit Score und Dominant-Faktor
+- **Expandable Details**: Klapbarer Faktor-Grid mit Signalen, Gewichtungen und Methodik-Erklärung
+- **Pure Frontend**: Berechnung läuft vollständig im Frontend, keine neue Backend-API benötigt
+
+### 🔧 Frontend
+- **calcCompositeRegime()**: Pure Funktion mit gewichteten Durchschnitt von 6 Marktfaktoren
+- **RegimeHeader**: Neue React-Komponente mit Mini-Dots und Detail-Ansicht
+- **MacroDashboard**: FRED-Regime jetzt als kleiner Hinweis statt prominenter Badge
+- **Markets Integration**: RegimeHeader vor allen 9 Daten-Blöcken positioniert
+
+### 🔧 Backend
+- **Placeholder**: `composite_regime_score` Feld in `daily_snapshots` für zukünftige historische Analysen
+
+### 📊 Methodik
+- **Score-Berechnung**: Gewichteter Durchschnitt (VIX 25%, Credit 20%, Yield 15%, Breadth 20%, Risk 10%, VIX Structure 10%)
+- **Regime-Schwellen**: Score ≥1.0 = Risk-On, ≤-0.5 = Risk-Off, sonst Neutral
+- **Signal-Stufen**: Jeder Faktor liefert -1, 0, 1, oder 2 Punkte basierend auf Marktschwellen
+
 ## [5.10.4] - 2026-03-21 - Diagnostics Proxy Fix for Frontend
 
 ### 🐛 Fixes

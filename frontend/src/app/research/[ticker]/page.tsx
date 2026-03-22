@@ -311,10 +311,10 @@ function ScoreBlock({ data, delta }: { data: ResearchData; delta?: ScoreDeltaDat
     };
   };
 
-  const oppYesterday = delta?.yesterday?.opportunity_score ? getDeltaDisplay(opp, delta.yesterday.opportunity_score) : null;
-  const oppLastWeek = delta?.last_week?.opportunity_score ? getDeltaDisplay(opp, delta.last_week.opportunity_score) : null;
-  const torpYesterday = delta?.yesterday?.torpedo_score ? getTorpedoDeltaDisplay(torp, delta.yesterday.torpedo_score) : null;
-  const torpLastWeek = delta?.last_week?.torpedo_score ? getTorpedoDeltaDisplay(torp, delta.last_week.torpedo_score) : null;
+  const oppYesterday = delta?.yesterday?.opportunity_score != null ? getDeltaDisplay(opp, delta.yesterday.opportunity_score) : null;
+  const oppLastWeek = delta?.last_week?.opportunity_score != null ? getDeltaDisplay(opp, delta.last_week.opportunity_score) : null;
+  const torpYesterday = delta?.yesterday?.torpedo_score != null ? getTorpedoDeltaDisplay(torp, delta.yesterday.torpedo_score) : null;
+  const torpLastWeek = delta?.last_week?.torpedo_score != null ? getTorpedoDeltaDisplay(torp, delta.last_week.torpedo_score) : null;
 
   return (
     <div className={`rounded-xl border-2 p-5 ${
@@ -680,8 +680,10 @@ function PositionSizerBlock({
   const riskAmount = (accountSize * riskPercent) / 100;
   const stopLossPercent = stopLoss;
   const stopLossPrice = currentPrice * (1 - stopLossPercent / 100);
-  const shares = currentPrice > 0 ? Math.floor(riskAmount / (currentPrice * stopLossPercent / 100)) : 0;
-  const maxLoss = shares * (currentPrice * stopLossPercent / 100);
+  const stopLossDistance = currentPrice - stopLossPrice;
+  const invalidStop = !Number.isFinite(stopLossDistance) || currentPrice <= 0 || stopLossDistance <= 0;
+  const shares = !invalidStop ? Math.floor(riskAmount / stopLossDistance) : 0;
+  const maxLoss = !invalidStop ? shares * stopLossDistance : 0;
   const rrRatio = stopLossPercent > 0 ? (5 / stopLossPercent).toFixed(2) : "0"; // Annahme: 5% Ziel
 
   return (
@@ -732,6 +734,12 @@ function PositionSizerBlock({
 
         {/* Berechnungen */}
         <div className="space-y-3">
+          {invalidStop && (
+            <div className="rounded-lg border border-[var(--accent-red)]/30 bg-[var(--accent-red)]/5 px-3 py-2 text-xs text-[var(--accent-red)]">
+              Stop-Loss / Einstieg ist ungültig — bitte Kursdaten prüfen.
+            </div>
+          )}
+
           <StatCell 
             label="Risiko-Betrag" 
             value={`$${maxLoss.toFixed(2)}`}

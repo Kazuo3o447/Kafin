@@ -14,6 +14,7 @@ from backend.app.data.yfinance_data import get_technical_setup, get_fundamentals
 from backend.app.analysis.scoring import calculate_opportunity_score, calculate_torpedo_score, get_recommendation
 from backend.app.analysis.deepseek import call_deepseek
 from backend.app.memory.long_term import get_all_insights_for_report
+from backend.app.memory.short_term import _calc_sentiment_from_bullets
 from backend.app.analysis.shadow_portfolio import open_shadow_trade
 
 logger = get_logger(__name__)
@@ -505,23 +506,33 @@ async def generate_audit_report(ticker: str) -> str:
     except Exception as e:
         logger.warning(f"Web Intelligence {ticker}: {e}")
         web_intelligence = ""
+
+    now = datetime.now()
+    month_ago = now - timedelta(days=30)
+
+    # 1.5 Try getting news from memory first, else fallback to Finnhub
+    from backend.app.memory.short_term import get_bullet_points
+    news_memory = await get_bullet_points(ticker)
+    
+    google_news_for_ticker: list[str] = []
+    if news_memory:
+        for nm in news_memory:
+            source = str(nm.get("source", ""))
+            if source.startswith("google_news:"):
+                bp_data = nm.get("bullet_points", [])
+                if isinstance(bp_data, list):
+                    google_news_for_ticker.extend(bp_data)
+                elif isinstance(bp_data, str):
+                    google_news_for_ticker.append(bp_data)
+
+    news_list = None
+    if not news_memory:
+        news_list = await get_company_news(ticker, month_ago.strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d"))
     
     # ── Composite Sentiment Score ─────────────────────────────
-    # FinBERT-Score aus News-Memory (reaktiv, vergangene Events)
-    finbert_sentiment = 0.0
-    try:
-        if news_memory:
-            scores = [
-                float(b.get("sentiment_score", 0))
-                for b in news_memory
-                if b.get("sentiment_score") is not None
-            ]
-            if scores:
-                finbert_sentiment = round(
-                    sum(scores) / len(scores), 3
-                )
-    except Exception:
-        pass
+    # Einheitliche Aggregation mit der Plattform-Helper-Logik
+    ticker_sent = _calc_sentiment_from_bullets(news_memory or [])
+    finbert_sentiment = ticker_sent["avg"]
 
     # Web-Sentiment-Score (proaktiv, aktueller Marktdiskurs)
     web_sentiment_score = 0.0
@@ -582,28 +593,6 @@ async def generate_audit_report(ticker: str) -> str:
         f"Composite={composite_sentiment:+.2f}"
         + (" | DIVERGENZ" if sentiment_divergence else "")
     )
-    
-    now = datetime.now()
-    month_ago = now - timedelta(days=30)
-    
-    # 1.5 Try getting news from memory first, else fallback to Finnhub
-    from backend.app.memory.short_term import get_bullet_points
-    news_memory = await get_bullet_points(ticker)
-    
-    google_news_for_ticker: list[str] = []
-    if news_memory:
-        for nm in news_memory:
-            source = str(nm.get("source", ""))
-            if source.startswith("google_news:"):
-                bp_data = nm.get("bullet_points", [])
-                if isinstance(bp_data, list):
-                    google_news_for_ticker.extend(bp_data)
-                elif isinstance(bp_data, str):
-                    google_news_for_ticker.append(bp_data)
-    
-    news_list = None
-    if not news_memory:
-        news_list = await get_company_news(ticker, month_ago.strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d"))
     
     macro = await get_macro_snapshot()
     
@@ -693,28 +682,10 @@ async def generate_audit_report(ticker: str) -> str:
 
         news_str = "\n".join(news_items[:7])
 
-        # Aggregiertes Sentiment
-        scores_list = []
-        for nm in news_memory:
-            raw = nm.get("sentiment_score")
-            if raw is None:
-                continue
-            try:
-                scores_list.append(float(raw))
-            except (TypeError, ValueError):
-                continue
-        if scores_list:
-            avg_sent = sum(scores_list) / len(scores_list)
-            trend = (
-                "mehrheitlich bullish"
-                if avg_sent > 0.15
-                else "mehrheitlich bearish"
-                if avg_sent < -0.15
-                else "neutral"
-            )
+        if ticker_sent["count"] > 0:
             news_str = (
-                f"Aggregiertes News-Sentiment: {avg_sent:+.2f}"
-                f" ({trend}, {len(scores_list)} Artikel)\n\n"
+                f"Aggregiertes News-Sentiment: {ticker_sent['avg']:+.2f}"
+                f" ({ticker_sent['trend']}, {ticker_sent['count']} Artikel)\n\n"
                 + news_str
             )
     else:

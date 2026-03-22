@@ -2,37 +2,51 @@
 
 Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Web-Dashboard).
 
-## 🧭 Agenten-Schnellübersicht
-- **Frontend**: Next.js 16, App Router, Tailwind v4, globale UI-Komponenten im Root-Layout
-- **Backend**: FastAPI + structlog, Datei-Logging nach `logs/kafin.log` und In-Memory-Buffer für Live-Logs
-- **Docker**: `kafin-frontend`, `kafin-backend`, `kafin-redis`, `kafin-n8n` auf `kafin-net`
-- **Diagnostics**: `/api/diagnostics/full` und `/api/diagnostics/db` laufen jetzt über eigene Next.js-Route-Handler
-- **Report Routes**: `/api/reports/generate/[ticker]`, `/api/reports/generate-morning`, `/api/reports/generate-sunday` haben eigene Frontend-Handler mit Timeout/Fallback
-- **Log Viewer**: `Ignore`-Filter zeigt erwartete yfinance-404s separat an
-- **FRED**: 5xx-Retries, API-Key-Redaktion und graceful degradation sind implementiert
+## 🚀 Schnellstart für neue Agents
+1. Lies zuerst **Aktueller Stand** und **Wichtige Dateien / APIs**.
+2. Prüfe bei Fehlern direkt **Schnellchecks** und **Erwartetes Verhalten**.
+3. Skimme die historischen Meilensteine nur für Kontext oder Audit-Zwecke.
 
-## 🔑 Wichtige Einstiegspunkte für Agents
-- `frontend/src/app/layout.tsx`: globaler `LogViewer` und App-Shell
-- `frontend/src/app/status/page.tsx`: Live-Statusseite für Systemdiagnosen
-- `frontend/src/app/settings/page.tsx`: Systemcheck, DB-Status, Telegram/n8n und Diagnose-Auswertung
-- `frontend/src/app/api/diagnostics/full/route.ts`: Frontend-Proxy für die vollständigen Systemdiagnosen
-- `frontend/src/app/api/diagnostics/db/route.ts`: Frontend-Proxy für DB-Diagnosen
-- `frontend/src/app/api/reports/generate/[ticker]/route.ts`: Report-Generierung mit Timeout-Handling
-- `frontend/src/app/api/reports/generate-morning/route.ts`: Morning-Briefing-Proxy mit Timeout-Handling
-- `frontend/src/app/api/reports/generate-sunday/route.ts`: Sunday-Report-Proxy mit Timeout-Handling
-- `frontend/src/components/LogViewer.tsx`: Log-Filter, Suche, Export und Ignore-Kategorie
-- `backend/app/main.py`: API-Router, Log-Endpunkte, Diagnostics und System-Integrationen
-- `backend/app/logger.py`: zentrale Log-Konfiguration, Datei-Logging und Ignore-Klassifizierung
-- `backend/app/data/fred.py`: FRED-Fetching mit Retry, Redaction und Fallbacks
+## 🟢 Aktueller Stand
+- **FRED**: 5xx-Retries, API-Key-Redaktion und graceful degradation sind im Backend aktiv.
+- **Diagnostics**: `/api/diagnostics/full` und `/api/diagnostics/db` laufen über eigene Next.js-Route-Handler statt Rewrite-Proxy.
+- **Reports**: Report-Generierung hat eigene Route-Handler mit Timeout/Fallback.
+- **Signal-Konsistenz**: Audit-Sentiment nutzt jetzt dieselbe Helper-Logik wie Research/Watchlist; Weekly-Deltas sind robuster und die Research-Delta-Anzeige ist null-safe.
+- **Position Sizing**: Ungültige Stop-Loss-Konstellationen werden im Research-UI abgefangen.
+- **Markets**: Der Composite Regime Header bleibt prominent auf `/markets`; die großen Kalibrierungsthemen sind in `docs/FUTURE.md` dokumentiert.
+- **Logs**: `Ignore`-Filter ist im `LogViewer` sichtbar; Backend-Logs liegen in `logs/kafin.log` und via `docker logs`.
+- **Status-/Settings-Seiten**: Diagnose-Responses sind stabil und sollten keine Proxy-Fehler mehr erzeugen.
+
+## �️ Wichtige Dateien / APIs
+| Bereich | Datei / Endpoint | Zweck |
+|---|---|---|
+| Frontend Shell | `frontend/src/app/layout.tsx` | Globale App-Shell und eingebetteter `LogViewer` |
+| Status UI | `frontend/src/app/status/page.tsx` | Live-Systemstatus und Diagnoseanzeige |
+| Settings UI | `frontend/src/app/settings/page.tsx` | Systemcheck, DB-Status, Telegram, n8n, Diagnostics |
+| Frontend API | `frontend/src/lib/api.ts` | Zentrale API-Abstraktion für alle Frontend-Requests |
+| Diagnostics Routes | `frontend/src/app/api/diagnostics/full/route.ts`, `frontend/src/app/api/diagnostics/db/route.ts` | Frontend-seitige Proxy-/Fallback-Schicht für Systemchecks |
+| Report Routes | `frontend/src/app/api/reports/generate/[ticker]/route.ts`, `frontend/src/app/api/reports/generate-morning/route.ts`, `frontend/src/app/api/reports/generate-sunday/route.ts` | Timeouts und Fallbacks für Report-Generierung |
+| Log Viewer | `frontend/src/components/LogViewer.tsx` | Suche, Filter, Export und `Ignore`-Kategorie |
+| Backend Router | `backend/app/main.py` | API-Router, Log-Endpunkte, Diagnostics, System-Integrationen |
+| Logging | `backend/app/logger.py` | Datei-Logging, In-Memory-Buffer, Ignore-Klassifizierung |
+| FRED Fetch | `backend/app/data/fred.py` | FRED-Abfrage mit Retry, Redaction und Fallbacks |
+| Doku | `STATUS.md`, `CHANGELOG.md`, `docs/apis/fred.md`, `docs/ROADMAP.md` | Status, Changelog, API-Details und Roadmap |
+
+## � Schnellchecks
+- **Frontend-Logs**: `docker logs kafin-frontend`
+- **Backend-Logs**: `docker logs kafin-backend`
+- **Status-Diagnose**: `GET /api/diagnostics/full`
+- **DB-Diagnose**: `GET /api/diagnostics/db`
+- **Live-Logs**: `GET /api/logs` und `GET /api/logs/file`
+- **FRED-Verifikation**: `backend/app/data/fred.py` und `docs/apis/fred.md`
+
+## ⚠️ Erwartetes Verhalten / bekannte Signale
+- **yfinance 404s** sind erwartetes Verhalten für delisted oder fehlerhafte Ticker und erscheinen im `Ignore`-Filter.
+- **FRED 5xx** sind als Upstream-Fehler behandelt und werden retry-/fallback-sicher verarbeitet.
+- **Diagnostics-Probleme** deuten zuerst auf Backend-Erreichbarkeit oder falsche Routen hin; direkte Proxy-Fehler im Frontend sollten nach dem Fix nicht mehr auftreten.
 
 ## 📌 Hinweis zur Struktur
-- Die folgenden Meilensteine sind thematisch sortiert; die aktuellsten Ergänzungen stehen oben.
-
-## 🔄 Letzte Ergänzungen (21. März 2026)
-- **FRED-Härtung**: 5xx-Retries + API-Key-Redaktion im Backend
-- **Diagnostics-Fix**: `/api/diagnostics/full` und `/api/diagnostics/db` laufen über eigene Next.js-Route-Handler statt Rewrite-Proxy
-- **Log Viewer**: `Ignore`-Filter ist im Frontend sichtbar und zeigt erwartete yfinance-404s separat
-- **Status-Seite**: Diagnose-Responses sind wieder stabil und produzieren keine Proxy-Fehler mehr im Frontend-Container
+- Oben stehen die wichtigsten Informationen für neue Agents; darunter folgt die thematische Historie.
 
 ## ✅ Abgeschlossene Meilensteine
 
@@ -427,3 +441,9 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - Frontend: Chart-Integration und Error-Handling verbessert
 - Frontend: Watchlist-Modal UX überarbeitet
 - Dokumentation: STATUS.md und README.md aktualisiert
+
+## 🔄 Letzte Ergänzungen (21. März 2026)
+- **FRED-Härtung**: 5xx-Retries + API-Key-Redaktion im Backend
+- **Diagnostics-Fix**: `/api/diagnostics/full` und `/api/diagnostics/db` laufen über eigene Next.js-Route-Handler statt Rewrite-Proxy
+- **Log Viewer**: `Ignore`-Filter ist im Frontend sichtbar und zeigt erwartete yfinance-404s separat
+- **Status-Seite**: Diagnose-Responses sind wieder stabil und produzieren keine Proxy-Fehler mehr im Frontend-Container

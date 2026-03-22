@@ -5,8 +5,8 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 5.10.2 (Ignore-Filter für erwartbare yfinance-404s)
-**Stand**: 2026-03-21
+**Version**: 5.10.6 (Signal-Consistency Hotfixes)
+**Stand**: 2026-03-22
 
 ---
 
@@ -59,6 +59,12 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 - **Null-Safety**: Ticker ohne News erzeugen keine irreführende Market-Divergenz mehr
 - **Batch-Fairness**: Sentiment-Batch lädt fehlende Ticker bei Bedarf gezielt nach
 - **Ignore-Filter**: Erwartbare yfinance-404s werden in `Ignore` einsortiert
+
+### Bugfixes in v5.10.6
+- **Audit Sentiment**: `report_generator.py` nutzt die gemeinsame Helper-Logik `_calc_sentiment_from_bullets()` statt eigener Aggregation
+- **Score History**: Underfilled `score_history`-Ticker werden gezielt nachgeladen, damit Weekly-Deltas stabiler sind
+- **Research Deltas**: Null-Werte werden in der Delta-Anzeige nicht mehr durch truthy-Checks unterdrückt
+- **Position Sizer**: Ungültige Stop-Loss-Konstellationen werden im Research-UI abgefangen
 
 ---
 
@@ -156,7 +162,12 @@ Alle unfilled {{...}} Placeholders werden vor
 DeepSeek-Aufruf via regex auf "N/A" gesetzt.
 Kein roher Placeholder-Text mehr im Prompt.
 
-### Markets Dashboard v2 (/markets)
+### Markets Dashboard v3 (/markets)
+- **Composite Regime Header**: Prominenter Multi-Faktor Regime-Indikator (Risk-On/Neutral/Risk-Off)
+- **Gewichtete Scoring**: VIX (25%), Credit Spread (20%), Yield Curve (15%), Market Breadth (20%), Risk Appetite (10%), VIX Structure (10%)
+- **Visual Indicators**: Farbcodierte Anzeige mit Score, Dominant-Faktor und Mini-Dots für alle 6 Faktoren
+- **Expandable Details**: Klapbarer Faktor-Grid mit Signalen, Gewichtungen und Methodik-Erklärung
+- **Pure Frontend**: Berechnung läuft vollständig im Frontend, keine neue Backend-API benötigt
 - **Granulare Refresh-Zyklen**: 9 Blöcke mit individuellen Intervallen
 - **Vollständige UI**: Alle Datenblöcke mit Block-Labels und Timestamps
 - **Sektoren Rotation-Story**: automatisch erkannt (Defensiv vs. Offensiv Gap > 2%)

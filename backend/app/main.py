@@ -2560,16 +2560,17 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
 def _fetch_all_scores_sync(tickers: list, db) -> dict:
     """
     Lädt score_history für alle Ticker in EINER einzigen Supabase-Query.
-    Gibt ein Dict zurück: {ticker: [latest_row, prev_row]}
+    Gibt ein Dict zurück: {ticker: [latest_row, ...]}
     """
     if not db or not tickers:
         return {}
     try:
-        max_rows = len(tickers) * 8  # 8 statt 7 als Puffer
+        tickers_upper = list(dict.fromkeys(t.upper() for t in tickers if t))
+        max_rows = len(tickers_upper) * 8  # 8 statt 7 als Puffer
         res = (
             db.table("score_history")
             .select("*")
-            .in_("ticker", tickers)
+            .in_("ticker", tickers_upper)
             .order("date", desc=True)
             .limit(max_rows)
             .execute()
@@ -2591,6 +2592,26 @@ def _fetch_all_scores_sync(tickers: list, db) -> dict:
                 reverse=True
             )
             by_ticker[t] = by_ticker[t][:7]
+
+        # Fairness-Fallback: falls ein Ticker durch die globale Limitierung
+        # unterfüllt ist, laden wir ihn einmal gezielt nach.
+        for ticker in tickers_upper:
+            if len(by_ticker.get(ticker, [])) >= 7:
+                continue
+            try:
+                single_res = (
+                    db.table("score_history")
+                    .select("*")
+                    .eq("ticker", ticker)
+                    .order("date", desc=True)
+                    .limit(7)
+                    .execute()
+                )
+                single_rows = single_res.data if single_res and single_res.data else []
+                if single_rows:
+                    by_ticker[ticker] = single_rows[:7]
+            except Exception:
+                continue
 
         return by_ticker
     except Exception as e:

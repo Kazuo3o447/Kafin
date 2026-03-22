@@ -19,6 +19,9 @@ import {
   Clock,
   Timer,
   Info,
+  Brain,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -126,6 +129,203 @@ type MarketAudit = {
   generated_at?: string;
   message?: string;
 };
+
+// Composite Regime Calculation
+function calcCompositeRegime(
+  vix?: number,
+  creditSpread?: number,
+  yieldSpread?: number,
+  breadthPct?: number,
+  riskAppetite?: string,
+  vixStructure?: string
+): {
+  score: number;
+  regime: "Risk-On" | "Neutral" | "Risk-Off";
+  factors: Array<{
+    name: string;
+    signal: number;
+    weight: number;
+    weighted: number;
+  }>;
+  dominant: string;
+} {
+  const factors = [];
+  
+  // VIX Factor (0-2, inverted: low VIX = positive)
+  if (vix !== undefined && vix !== null) {
+    const signal = vix < 15 ? 2 : vix < 25 ? 1 : vix < 35 ? 0 : -1;
+    const weight = 0.25;
+    factors.push({ name: "VIX", signal, weight, weighted: signal * weight });
+  }
+  
+  // Credit Spread Factor (0-2, inverted: low spread = positive)
+  if (creditSpread !== undefined && creditSpread !== null) {
+    const signal = creditSpread < 300 ? 2 : creditSpread < 400 ? 1 : creditSpread < 500 ? 0 : -1;
+    const weight = 0.20;
+    factors.push({ name: "Credit Spread", signal, weight, weighted: signal * weight });
+  }
+  
+  // Yield Curve Factor (0-2, inverted: positive spread = positive)
+  if (yieldSpread !== undefined && yieldSpread !== null) {
+    const signal = yieldSpread > 0.5 ? 2 : yieldSpread > 0 ? 1 : yieldSpread > -0.5 ? 0 : -1;
+    const weight = 0.15;
+    factors.push({ name: "Yield Curve", signal, weight, weighted: signal * weight });
+  }
+  
+  // Market Breadth Factor (0-2)
+  if (breadthPct !== undefined && breadthPct !== null) {
+    const signal = breadthPct > 70 ? 2 : breadthPct > 50 ? 1 : breadthPct > 30 ? 0 : -1;
+    const weight = 0.20;
+    factors.push({ name: "Market Breadth", signal, weight, weighted: signal * weight });
+  }
+  
+  // Risk Appetite Factor (0-2)
+  if (riskAppetite) {
+    const signal = riskAppetite === "risk_on" ? 2 : riskAppetite === "mixed" ? 0 : -1;
+    const weight = 0.10;
+    factors.push({ name: "Risk Appetite", signal, weight, weighted: signal * weight });
+  }
+  
+  // VIX Structure Factor (0-2)
+  if (vixStructure) {
+    const signal = vixStructure === "contango" ? 1 : vixStructure === "flat" ? 0 : -1;
+    const weight = 0.10;
+    factors.push({ name: "VIX Structure", signal, weight, weighted: signal * weight });
+  }
+  
+  // Calculate weighted score
+  const score = factors.reduce((sum, f) => sum + f.weighted, 0);
+  
+  // Determine regime
+  let regime: "Risk-On" | "Neutral" | "Risk-Off";
+  if (score >= 1.0) {
+    regime = "Risk-On";
+  } else if (score <= -0.5) {
+    regime = "Risk-Off";
+  } else {
+    regime = "Neutral";
+  }
+  
+  // Find dominant factor
+  const dominant = factors.reduce((prev, current) => 
+    Math.abs(current.weighted) > Math.abs(prev.weighted) ? current : prev
+  , factors[0])?.name || "Unknown";
+  
+  return { score, regime, factors, dominant };
+}
+
+// Regime Header Component
+function RegimeHeader({ data }: { data: {
+  vix?: number;
+  creditSpread?: number;
+  yieldSpread?: number;
+  breadthPct?: number;
+  riskAppetite?: string;
+  vixStructure?: string;
+}}) {
+  const [expanded, setExpanded] = useState(false);
+  
+  const composite = calcCompositeRegime(
+    data.vix,
+    data.creditSpread,
+    data.yieldSpread,
+    data.breadthPct,
+    data.riskAppetite,
+    data.vixStructure
+  );
+  
+  const regimeColors = {
+    "Risk-On": "bg-green-600/20 border-green-500/50 text-green-400",
+    "Neutral": "bg-amber-600/20 border-amber-500/50 text-amber-400",
+    "Risk-Off": "bg-red-600/20 border-red-500/50 text-red-400"
+  };
+  
+  const regimeTextColors = {
+    "Risk-On": "text-green-400",
+    "Neutral": "text-amber-400", 
+    "Risk-Off": "text-red-400"
+  };
+  
+  return (
+    <div className={`card p-6 border-2 ${regimeColors[composite.regime]}`}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Brain size={24} className={regimeTextColors[composite.regime]} />
+          <div>
+            <h2 className="text-2xl font-bold text-[var(--text-primary)]">
+              Composite Regime: <span className={regimeTextColors[composite.regime]}>{composite.regime}</span>
+            </h2>
+            <p className="text-sm text-[var(--text-secondary)]">
+              Score: {composite.score >= 0 ? "+" : ""}{composite.score.toFixed(1)} | Dominant: {composite.dominant}
+            </p>
+          </div>
+        </div>
+        
+        {/* Mini-Dots */}
+        <div className="flex items-center gap-2">
+          {composite.factors.map((factor, idx) => {
+            const dotColor = factor.signal >= 1 ? "bg-green-500" : 
+                           factor.signal <= -1 ? "bg-red-500" : "bg-amber-500";
+            return (
+              <div
+                key={idx}
+                className={`w-2 h-2 rounded-full ${dotColor}`}
+                title={`${factor.name}: ${factor.signal}`}
+              />
+            );
+          })}
+        </div>
+      </div>
+      
+      {/* Expandable Details */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-2 text-sm text-[var(--accent-blue)] hover:underline"
+        >
+          {expanded ? <><EyeOff size={16} /> Details ausblenden</> : <><Eye size={16} /> Details anzeigen</>}
+        </button>
+      </div>
+      
+      {expanded && (
+        <div className="mt-4 space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {composite.factors.map((factor, idx) => (
+              <div key={idx} className="p-3 rounded-lg bg-[var(--bg-tertiary)]">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-[var(--text-primary)]">{factor.name}</span>
+                  <span className="text-xs px-2 py-1 rounded bg-[var(--bg-secondary)] text-[var(--text-muted)]">
+                    {(factor.weight * 100).toFixed(0)}%
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    factor.signal >= 1 ? "bg-green-500" : 
+                    factor.signal <= -1 ? "bg-red-500" : "bg-amber-500"
+                  }`} />
+                  <span className="text-sm font-mono text-[var(--text-primary)]">
+                    {factor.signal >= 0 ? "+" : ""}{factor.signal}
+                  </span>
+                  <span className="text-xs text-[var(--text-muted)]">
+                    ({factor.weighted >= 0 ? "+" : ""}{factor.weighted.toFixed(2)})
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <div className="p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)]">
+            <p className="text-xs text-[var(--text-secondary)]">
+              <strong>Methodik:</strong> Gewichteter Durchschnitt von 6 Marktfaktoren (VIX, Credit Spread, Yield Curve, 
+              Market Breadth, Risk Appetite, VIX Structure). Score ≥1.0 = Risk-On, ≤-0.5 = Risk-Off, sonst Neutral.
+              Dominant = Faktor mit höchstem absoluten Gewichtungsbeitrag.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Helper functions
 function TrendIcon({ value }: { value?: number }) {
@@ -648,8 +848,8 @@ function MacroDashboardBlock({ data, timestamp }: { data?: MacroSnapshot; timest
         <div className="mt-4 p-3 rounded-lg bg-[var(--bg-tertiary)]">
           <div className="flex items-center gap-2">
             <Activity size={16} className="text-[var(--accent-blue)]" />
-            <span className="font-semibold text-[var(--text-primary)]">
-              Regime: {data.regime.toUpperCase()}
+            <span className="text-xs text-[var(--text-muted)]">
+              FRED Regime: {data.regime.toUpperCase()}
             </span>
           </div>
         </div>
@@ -1379,7 +1579,16 @@ export default function MarketsPage() {
         </div>
       </div>
 
-            
+      {/* Composite Regime Header */}
+      <RegimeHeader data={{
+        vix: macroDashboard?.vix,
+        creditSpread: macroDashboard?.credit_spread_bps,
+        yieldSpread: macroDashboard?.yield_curve_10y_2y,
+        breadthPct: marketBreadth?.pct_above_sma50,
+        riskAppetite: crossAsset?.signals?.risk_appetite,
+        vixStructure: crossAsset?.signals?.vix_structure,
+      }} />
+      
       {/* 9 Data Blocks Grid */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Block 1: Global Indices */}

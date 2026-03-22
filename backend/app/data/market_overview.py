@@ -328,6 +328,7 @@ async def save_daily_snapshot(market_data: dict, macro_data, regime: str = "neut
             "top_sector": ranking[0]["name"] if ranking else None,
             "bottom_sector": ranking[-1]["name"] if ranking else None,
             "regime": regime,
+            "composite_regime_score": None,  # Placeholder for future frontend calculation backend storage
         }
 
         db.table("daily_snapshots").upsert(record, on_conflict="date").execute()

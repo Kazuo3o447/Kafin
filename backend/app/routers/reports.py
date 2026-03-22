@@ -114,6 +114,32 @@ async def api_post_earnings_review(ticker: str, quarter: str | None = None):
     review = await run_post_earnings_review(ticker, quarter)
     return {"status": "success", "review": review}
 
+@router.get("/morning-archive")
+async def api_morning_archive(days: int = 7):
+    """Letzte N Morning Briefings aus daily_snapshots."""
+    try:
+        from backend.app.database import get_pool
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT date, briefing_summary
+                FROM daily_snapshots
+                WHERE briefing_summary IS NOT NULL
+                ORDER BY date DESC
+                LIMIT $1
+            """, days)
+        return {
+            "reports": [
+                {
+                    "date":   str(r["date"]),
+                    "report": r["briefing_summary"],
+                }
+                for r in rows
+            ]
+        }
+    except Exception as e:
+        return {"reports": [], "error": str(e)}
+
 @router.post("/scan-earnings-results")
 async def api_scan_earnings_results():
     """Scannt nach neuen Earnings und triggert Post-Earnings-Reviews."""

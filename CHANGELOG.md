@@ -2,6 +2,28 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [6.2.0] - 2026-03-22 - Report Rendering + Archiv
+
+### 🎨 UI/UX: Strukturiertes Report Rendering
+- **ReportRenderer Komponente**: Parser für Morning Briefing & Sunday Report
+  - Section-Header (REGIME, MARKT, SEKTOREN) mit Mini-Labels
+  - Bullet Points mit ▸ Icons und Leading-Relaxed
+  - Warn-Signale (→) mit roten Alert-Boxen
+  - Aktions-Empfehlungen (Long/Short/Hedge) farbcodiert
+  - Trennlinien und normaler Text mit passendem Layout
+- **Kein neues npm Package**: Plain JavaScript Parser, keine react-markdown Abhängigkeit
+- **Mobile-Optimiert**: Bessere Lesbarkeit auf Phone mit strukturiertem Layout
+
+### 📚 Report-Archiv: Letzte 7 Morning Briefings
+- **GET /api/reports/morning-archive**: Lädt briefing_summary aus daily_snapshots
+- **Accordion UI**: "Letzte 7 Briefings" mit ▸/▾ Toggle im Reports-Tab
+- **Archiv-Rendering**: Jeder archivierte Report nutzt ReportRenderer
+- **On-Demand Loading**: Archive werden nur beim Öffnen geladen
+
+### 🔧 Backend
+- **reports.py**: api_morning_archive() Endpoint implementiert
+- **Database Query**: daily_snapshots.briefing_summary (letzte 7 Tage)
+
 ## [6.1.4] - 2026-03-22 - Prompt-Qualität + Modell-Optimierung
 
 ### 🧠 KI-Prompts

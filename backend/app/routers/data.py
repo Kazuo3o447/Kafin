@@ -838,7 +838,13 @@ async def api_research_dashboard(
             last_surprise_pct = float(getattr(last_q, "eps_surprise_percent", None)) if getattr(last_q, "eps_surprise_percent", None) is not None else None
             last_beat = bool((last_surprise_pct or 0) > 0)
         for q in getattr(history, "all_quarters", [])[:8]:
-            quarterly_history.append({"quarter": getattr(q, "quarter", ""), "eps_actual": float(getattr(q, "eps_actual")) if getattr(q, "eps_actual") is not None else None, "eps_consensus": float(getattr(q, "eps_consensus")) if getattr(q, "eps_consensus") is not None else None, "surprise_pct": float(getattr(q, "eps_surprise_percent")) if getattr(q, "eps_surprise_percent") is not None else None, "reaction_1d": float(getattr(q, "stock_reaction_1d")) if getattr(q, "stock_reaction_1d") is not None else None})
+            quarterly_history.append({
+                "quarter": q.get("quarter", ""),
+                "eps_actual": float(q.get("eps_actual")) if q.get("eps_actual") is not None else None,
+                "eps_consensus": float(q.get("eps_consensus")) if q.get("eps_consensus") is not None else None,
+                "surprise_pct": float(q.get("eps_surprise_percent")) if q.get("eps_surprise_percent") is not None else None,
+                "reaction_1d": float(q.get("stock_reaction_1d")) if q.get("stock_reaction_1d") is not None else None
+            })
 
     earnings_countdown = None
     earnings_today = False

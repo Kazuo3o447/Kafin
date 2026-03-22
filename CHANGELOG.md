@@ -2,6 +2,34 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [6.2.3] - 2026-03-22 - Equity Curve + Fear & Greed Kontext
+
+### 📈 Performance: Equity Curve Visualization
+- **EquityCurveChart Komponente**: SVG-basierte Equity Curve aus Shadow Trades
+  - Kumulierte PnL-Linie über Zeit mit dynamischer Skalierung
+  - Zero-Linie als gestrichelte Referenz
+  - Farbiger Fill-Bereich unter der Kurve (8% Opacity)
+  - Letzter Punkt markiert mit Kreis
+  - Header mit kumuliertem PnL-Wert (+/- Formatierung)
+- **buildEquityCurve()**: Hilfsfunktion für Daten-Verarbeitung
+  - Filter: Nur geschlossene Trades mit PnL und Exit-Datum
+  - Sortierung nach Exit-Datum chronologisch
+  - Kumulative Berechnung mit 1 Dezimal-Präzision
+- **Positionierung**: Nach Win-Rate KPIs, vor Signal-Stats
+- **Fallback**: "Mindestens 2 abgeschlossene Trades nötig" bei insufficient data
+
+### 🎯 Watchlist: Fear & Greed + Regime Kontext
+- **Market Context Banner**: Oben auf Watchlist-Seite (nach Header)
+  - **Regime Badge**: Uppercase, tracking-wider, neutrale Farben
+  - **Fear & Greed Badge**: Farbcodiert nach Score
+    - ≤25: Rot (Extreme Fear)
+    - ≥75: Grün (Extreme Greed)  
+    - 25-75: Neutral (Gray)
+  - **Format**: "F&G 45 — Neutral" mit Score gerundet
+- **State Management**: marketContext mit f_g_score, f_g_label, regime
+- **API Integration**: Parallel-Fetch von /api/data/fear-greed + /api/data/macro
+- **Layout**: Flexbox mit gap, flex-wrap für mobile responsiveness
+
 ## [6.2.2] - 2026-03-22 - Narrative Shift + PreMarket + Quick-Add
 
 ### 🎨 UI/UX: Narrative Shift Filter + Pre/Post-Market + Quick-Add

@@ -54,6 +54,134 @@ type ShadowSummary = {
   closed_trades: ShadowTrade[];
 };
 
+function buildEquityCurve(
+  trades: ShadowTrade[]
+): Array<{ date: string; cumulative: number; label: string }> {
+  // Nur geschlossene Trades mit PnL
+  const closed = trades
+    .filter(t =>
+      t.status === "closed"
+      && t.pnl_percent != null
+      && t.exit_date != null
+    )
+    .sort((a, b) =>
+      new Date(a.exit_date!).getTime()
+      - new Date(b.exit_date!).getTime()
+    );
+
+  if (closed.length === 0) return [];
+
+  let cumulative = 0;
+  return closed.map(t => {
+    cumulative += t.pnl_percent ?? 0;
+    return {
+      date:       t.exit_date?.slice(0, 10) ?? "",
+      cumulative: Math.round(cumulative * 10) / 10,
+      label:      t.ticker,
+    };
+  });
+}
+
+function EquityCurveChart({
+  trades,
+}: {
+  trades: ShadowTrade[];
+}) {
+  const data = buildEquityCurve(trades);
+  if (data.length < 2) return (
+    <div className="rounded-xl border border-dashed
+                     border-[var(--border)] py-8
+                     text-center">
+      <p className="text-xs text-[var(--text-muted)]">
+        Mindestens 2 abgeschlossene Trades nötig
+      </p>
+    </div>
+  );
+
+  const W = 560, H = 120, PAD = 12;
+  const values = data.map(d => d.cumulative);
+  const minV   = Math.min(0, ...values);
+  const maxV   = Math.max(0, ...values);
+  const range  = maxV - minV || 1;
+
+  const toX = (i: number) =>
+    PAD + (i / (data.length - 1)) * (W - PAD * 2);
+  const toY = (v: number) =>
+    H - PAD - ((v - minV) / range) * (H - PAD * 2);
+
+  const zeroY  = toY(0);
+  const isPos  = (data[data.length - 1].cumulative >= 0);
+  const color  = isPos ? "var(--accent-green)"
+                       : "var(--accent-red)";
+
+  // Linien-Path
+  const path = data
+    .map((d, i) => `${i === 0 ? "M" : "L"}
+      ${toX(i).toFixed(1)} ${toY(d.cumulative).toFixed(1)}`)
+    .join(" ");
+
+  // Fill-Path (zurück zur Zero-Linie)
+  const fillPath = path
+    + ` L ${toX(data.length - 1).toFixed(1)} ${zeroY.toFixed(1)}` 
+    + ` L ${toX(0).toFixed(1)} ${zeroY.toFixed(1)} Z`;
+
+  const lastVal = data[data.length - 1].cumulative;
+
+  return (
+    <div>
+      <div className="flex items-baseline
+                       justify-between mb-2">
+        <p className="text-xs text-[var(--text-muted)]">
+          Kumulierte PnL (Shadow Trades)
+        </p>
+        <span className={`text-sm font-bold font-mono ${
+          lastVal >= 0
+            ? "text-[var(--accent-green)]"
+            : "text-[var(--accent-red)]"
+        }`}>
+          {lastVal >= 0 ? "+" : ""}{lastVal.toFixed(1)}%
+        </span>
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        width="100%"
+        className="overflow-visible"
+      >
+        {/* Zero-Linie */}
+        <line
+          x1={PAD} y1={zeroY}
+          x2={W - PAD} y2={zeroY}
+          stroke="var(--border)"
+          strokeWidth="0.5"
+          strokeDasharray="4 4"
+        />
+        {/* Fill */}
+        <path
+          d={fillPath}
+          fill={color}
+          opacity="0.08"
+        />
+        {/* Linie */}
+        <path
+          d={path}
+          fill="none"
+          stroke={color}
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {/* Letzter Punkt */}
+        <circle
+          cx={toX(data.length - 1)}
+          cy={toY(lastVal)}
+          r="3"
+          fill={color}
+        />
+      </svg>
+    </div>
+  );
+}
+
 export default function PerformancePage() {
   const [performance, setPerformance] = useState<PerformanceData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -375,6 +503,13 @@ export default function PerformancePage() {
           {renderShadowKpiCard("Bester Trade", bestTrade, "Top Performance", "text-emerald-300")}
           {renderShadowKpiCard("Schlechtester Trade", worstTrade, "Drawdown", "text-rose-300")}
         </div>
+
+        {/* Equity Curve */}
+        {shadowData && shadowData.closed_count > 0 && (
+          <div className="card p-5">
+            <EquityCurveChart trades={[...shadowData.open_trades, ...shadowData.closed_trades]} />
+          </div>
+        )}
 
         {signalCards.length > 0 && (
           <div>

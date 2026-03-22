@@ -522,6 +522,11 @@ export default function WatchlistPage() {
   const [sortField, setSortField] = useState<SortField>("opportunity_score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>(null);
+  const [marketContext, setMarketContext] = useState<{
+    fear_greed_score: number | null;
+    fear_greed_label: string | null;
+    regime: string | null;
+  } | null>(null);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -625,6 +630,19 @@ export default function WatchlistPage() {
 
   useEffect(() => {
     loadWatchlist();
+  }, []);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/data/fear-greed").then(r => r.json()),
+      fetch("/api/data/macro").then(r => r.json()),
+    ]).then(([fg, macro]) => {
+      setMarketContext({
+        fear_greed_score:  fg?.score ?? null,
+        fear_greed_label:  fg?.label ?? null,
+        regime: macro?.regime ?? null,
+      });
+    }).catch(() => {});
   }, []);
 
   const loadWatchlist = useCallback(async (invalidate = false) => {
@@ -803,6 +821,35 @@ export default function WatchlistPage() {
           </button>
         </div>
       </div>
+
+      {/* Market Context Banner */}
+      {marketContext && (
+        <div className="flex items-center gap-3
+                         flex-wrap py-2 px-1 mb-2">
+          {marketContext.regime && (
+            <span className="rounded-full px-3 py-1
+                              text-[10px] font-semibold
+                              uppercase tracking-wider
+                              bg-[var(--bg-tertiary)]
+                              text-[var(--text-muted)]">
+              {marketContext.regime}
+            </span>
+          )}
+          {marketContext.fear_greed_score != null && (
+            <span className={`rounded-full px-3 py-1
+                               text-[10px] font-semibold ${
+              (marketContext.fear_greed_score ?? 50) <= 25
+                ? "bg-[var(--accent-red)]/10 text-[var(--accent-red)]"
+              : (marketContext.fear_greed_score ?? 50) >= 75
+                ? "bg-[var(--accent-green)]/10 text-[var(--accent-green)]"
+              : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
+            }`}>
+              F&G {Math.round(marketContext.fear_greed_score)}
+              {" — "}{marketContext.fear_greed_label}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* 1. Alert-Streifen */}
       <AlertStrip alerts={alerts} />

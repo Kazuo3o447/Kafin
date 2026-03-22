@@ -151,6 +151,18 @@ def create_test_module_logs():
     
     return True
 
+
+def _logger_matches_module(logger_name: str, expected_names: list[str]) -> bool:
+    """Matches both short logger names and dotted module logger names."""
+    logger_name = (logger_name or "").lower()
+    expected = [name.lower() for name in expected_names]
+    return any(
+        logger_name == name
+        or logger_name.endswith(f".{name}")
+        or logger_name.endswith(name)
+        for name in expected
+    )
+
 def _relative_time(dt: datetime) -> str:
     now = datetime.utcnow()
     diff = now - dt
@@ -193,7 +205,7 @@ def get_module_status() -> Dict[str, Any]:
         # Find logs for this module
         module_logs = [
             log for log in recent_logs
-            if log.get("logger") in config["logger_names"]
+            if _logger_matches_module(str(log.get("logger", "")), config["logger_names"])
         ]
         
         logger.info(f"Module {module_id}: Found {len(module_logs)} logs for loggers {config['logger_names']}")

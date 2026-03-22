@@ -5,15 +5,22 @@ import { Play, CheckCircle, XCircle, AlertTriangle, Database, Plus, Trash2, Acti
 import { api } from "@/lib/api";
 
 // Types
+type ServiceCheck = {
+  status: string;
+  details?: string;
+  latency_ms?: number;
+  error_code?: string;
+};
+
 type DiagnosticResult = {
-  supabase?: { status: string; details?: string };
-  deepseek?: { status: string; details?: string };
-  finnhub?: { status: string; details?: string };
-  fmp?: { status: string; details?: string };
-  fred?: { status: string; details?: string };
-  finbert?: { status: string; details?: string };
-  telegram?: { status: string; details?: string };
-  n8n?: { status: string; details?: string };
+  supabase?: ServiceCheck;
+  deepseek?: ServiceCheck;
+  finnhub?: ServiceCheck;
+  fmp?: ServiceCheck;
+  fred?: ServiceCheck;
+  finbert?: ServiceCheck;
+  telegram?: ServiceCheck;
+  n8n?: ServiceCheck;
 };
 
 type DbStatus = {
@@ -38,6 +45,11 @@ type ModuleStatus = {
   last_error?: { timestamp: string; level: string; event: string } | null;
   stats?: string;
   recent_logs?: any[];
+  debug?: {
+    module_logs_count: number;
+    success_pattern: string;
+    logger_names: string[];
+  };
 };
 
 type ModuleStatusResponse = {
@@ -97,8 +109,6 @@ export default function SettingsPage() {
   
   // Übersicht state
   const [moduleStatus, setModuleStatus] = useState<ModuleStatusResponse | null>(null);
-  const [logStats, setLogStats] = useState<LogStats | null>(null);
-  const [errorLogs, setErrorLogs] = useState<LogEntry[]>([]);
   const [lastSystemCheck, setLastSystemCheck] = useState<Date | null>(null);
   
   // Pipeline state
@@ -147,32 +157,13 @@ export default function SettingsPage() {
     }
   }
 
-  async function loadLogStats() {
-    try {
-      const response = await fetch("/api/logs/stats");
-      const data = await response.json();
-      setLogStats(data);
-    } catch (error) {
-      console.error("Log stats error", error);
-    }
-  }
-
-  async function loadErrorLogs() {
-    try {
-      const response = await fetch("/api/logs/errors");
-      const data = await response.json();
-      setErrorLogs(data.errors || []);
-    } catch (error) {
-      console.error("Error logs error", error);
-    }
-  }
-
   async function runFullSystemCheck() {
     setLoading(true);
     try {
-      const response = await fetch("/api/diagnostics/full", { method: "POST" });
+      const response = await fetch("/api/diagnostics/full");
       const data = await response.json();
-      setApiDiagnostics(data.details || data.services || {});
+      setApiDiagnostics(data.services || data.details || {});
+      await loadModuleStatus();
       setLastSystemCheck(new Date());
       localStorage.setItem("lastSystemCheck", new Date().toISOString());
     } catch (error) {
@@ -201,8 +192,7 @@ export default function SettingsPage() {
     if (!window.confirm("Alle Logs unwiderruflich löschen?")) return;
     try {
       await fetch("/api/logs/file", { method: "DELETE" });
-      await loadLogStats();
-      await loadErrorLogs();
+      await loadModuleStatus();
     } catch (error) {
       console.error("Clear logs error", error);
     }
@@ -316,12 +306,8 @@ export default function SettingsPage() {
   useEffect(() => {
     if (activeTab === "uebersicht") {
       loadModuleStatus();
-      loadLogStats();
-      loadErrorLogs();
       const interval = setInterval(() => {
         loadModuleStatus();
-        loadLogStats();
-        loadErrorLogs();
       }, 30000);
       return () => clearInterval(interval);
     }
@@ -342,6 +328,7 @@ export default function SettingsPage() {
   function getStatusIcon(status?: string) {
     if (status === "ok" || status === "success") return <CheckCircle size={20} className="text-[var(--accent-green)]" />;
     if (status === "warning") return <AlertTriangle size={20} className="text-[var(--accent-amber)]" />;
+    if (status === "unknown") return <Clock size={20} className="text-[var(--accent-amber)]" />;
     return <XCircle size={20} className="text-[var(--accent-red)]" />;
   }
 
@@ -514,7 +501,8 @@ export default function SettingsPage() {
           {(() => {
             const modules = Object.values(moduleStatus?.modules || {}) as ModuleStatus[];
             const okCount = modules.filter(m => m.status === "ok").length;
-            const errorCount = logStats?.stats?.error ?? "—";
+            const problemCount = modules.filter(m => m.status === "error" || m.status === "warning").length;
+            const unknownCount = modules.filter(m => m.status === "unknown").length;
             const allOk = okCount === modules.length && modules.length > 0;
             const color = allOk ? "var(--accent-green)" : "var(--accent-amber)";
             const bg = allOk ? "rgba(34, 197, 94, 0.1)" : "rgba(245, 158, 11, 0.1)";
@@ -539,7 +527,10 @@ export default function SettingsPage() {
                   Module: {okCount}/{modules.length} OK
                 </span>
                 <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                  Errors (24h): {errorCount}
+                  Probleme: {problemCount}
+                </span>
+                <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                  Unbekannt: {unknownCount}
                 </span>
                 {lastSystemCheck && (
                   <span style={{ fontSize: "11px", color: "var(--text-muted)", marginLeft: "auto" }}>
@@ -589,8 +580,18 @@ export default function SettingsPage() {
                     {getStatusIcon(module.status)}
                   </div>
                   <div className="text-xs text-[var(--text-muted)] mb-2">
-                    Zuletzt aktiv: {module.last_run_relative || "unbekannt"}
+                    Zuletzt aktiv: {module.last_run_relative || "Noch keine Ausführung im Log"}
                   </div>
+                  {module.status === "unknown" && (
+                    <div className="text-xs text-[var(--text-muted)] mb-2">
+                      Noch keine verwertbaren Log-Einträge für dieses Modul gefunden.
+                    </div>
+                  )}
+                  {module.last_error && (
+                    <div className="text-xs text-[var(--accent-red)] mb-2 font-mono break-all">
+                      Letzter Fehler: {module.last_error.event}
+                    </div>
+                  )}
                   {module.stats && (
                     <div className="text-xs text-[var(--text-secondary)] mb-2">{module.stats}</div>
                   )}
@@ -625,72 +626,42 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Error Feed */}
-          <div className="card p-6">
-            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Fehler-Feed (letzte 24h)</h3>
-            {errorLogs.length > 0 ? (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {errorLogs.map((log, idx) => (
-                  <div key={idx} className="flex items-center gap-4 text-xs font-mono bg-[var(--bg-tertiary)] p-2 rounded">
-                    <span className="text-[var(--text-muted)]">{log.timestamp}</span>
-                    <span className={`px-2 py-1 rounded ${
-                      log.level === "error" ? "bg-red-500/20 text-red-300" : "bg-amber-500/20 text-amber-300"
-                    }`}>{log.level}</span>
-                    <span className="text-[var(--text-secondary)]">{log.logger}</span>
-                    <span className="text-[var(--text-primary)]">{log.event}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-[var(--text-muted)]">
-                Keine Fehler in den letzten 24 Stunden ✓
-              </div>
-            )}
-          </div>
-
-          {/* Log Statistics */}
-          {logStats && (
+          {/* Systemcheck Details */}
+          {Object.keys(apiDiagnostics).length > 0 && (
             <div className="card p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-[var(--text-primary)]">Log-Statistiken</h3>
-                <button
-                  onClick={clearLogs}
-                  className="flex items-center gap-2 rounded-lg border border-[var(--accent-red)] px-3 py-1 text-xs text-[var(--accent-red)] hover:bg-red-500/10"
-                >
-                  <Trash2 size={14} />
-                  Log-Datei löschen
-                </button>
-              </div>
-              <div className="grid grid-cols-4 gap-4 mb-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-[var(--text-primary)]">{logStats.stats?.total ?? 0}</div>
-                  <div className="text-xs text-[var(--text-muted)]">Gesamt-Logs</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-[var(--accent-red)]">{logStats.stats?.error ?? 0}</div>
-                  <div className="text-xs text-[var(--text-muted)]">Errors</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-[var(--accent-amber)]">{logStats.stats?.warning ?? 0}</div>
-                  <div className="text-xs text-[var(--text-muted)]">Warnings</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-[var(--accent-blue)]">{logStats.stats?.info ?? 0}</div>
-                  <div className="text-xs text-[var(--text-muted)]">Info</div>
-                </div>
-              </div>
-              {logStats.recent_errors && logStats.recent_errors.length > 0 && (
                 <div>
-                  <div className="text-sm font-medium text-[var(--text-primary)] mb-2">Letzte kritische Fehler:</div>
-                  <div className="space-y-1">
-                    {logStats.recent_errors.map((error, idx) => (
-                      <div key={idx} className="text-xs text-[var(--text-secondary)] font-mono bg-[var(--bg-tertiary)] p-2 rounded">
-                        {error}
-                      </div>
-                    ))}
-                  </div>
+                  <h3 className="text-lg font-bold text-[var(--text-primary)]">Systemcheck-Details</h3>
+                  <p className="text-sm text-[var(--text-secondary)]">Ergebnis des manuellen Checks für Infrastruktur, APIs und lokale Modelle.</p>
                 </div>
-              )}
+                <span className="text-xs text-[var(--text-muted)]">Live aus /api/diagnostics/full</span>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { key: "supabase", label: "Supabase" },
+                  { key: "deepseek", label: "DeepSeek" },
+                  { key: "finnhub", label: "Finnhub" },
+                  { key: "fmp", label: "FMP" },
+                  { key: "fred", label: "FRED" },
+                  { key: "finbert", label: "FinBERT" },
+                  { key: "telegram", label: "Telegram" },
+                  { key: "n8n", label: "n8n" },
+                ].map(({ key, label }) => {
+                  const status = apiDiagnostics[key as keyof DiagnosticResult];
+                  return (
+                    <div key={key} className="card p-4 bg-[var(--bg-secondary)] border border-[var(--border)]">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-bold text-[var(--text-primary)]">{label}</h4>
+                        {getStatusIcon(status?.status)}
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)] leading-relaxed">{status?.details || "Nicht geprüft"}</p>
+                      {status?.latency_ms !== undefined && (
+                        <p className="text-[10px] text-[var(--text-muted)] mt-2 font-mono">{status.latency_ms}ms</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

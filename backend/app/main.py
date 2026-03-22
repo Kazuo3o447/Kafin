@@ -998,14 +998,16 @@ async def api_research_dashboard(
     from backend.app.data.finnhub import (
         get_short_interest, get_insider_transactions, get_company_news,
     )
+    from backend.app.data.finra import get_finra_short_volume
     from backend.app.data.market_overview import get_market_overview
     from backend.app.data.market_overview import get_market_news_for_sentiment
     from backend.app.memory.short_term import get_bullet_points
     from backend.app.memory.watchlist import get_watchlist
+    from backend.app.utils.timezone import now_mez, mez_date_string
     from datetime import datetime, timedelta
     import datetime as _dt  # For news fallback timestamp conversion
 
-    now = datetime.now()
+    now = now_mez()
     month_ago = (now - timedelta(days=30)).strftime("%Y-%m-%d")
     today_str = now.strftime("%Y-%m-%d")
 
@@ -1027,6 +1029,7 @@ async def api_research_dashboard(
         get_analyst_grades(effective_ticker),           # 14 - NEW for guidance_trend
         get_market_news_for_sentiment(),                 # 15 - NEW for market sentiment context
         get_options_oi_analysis(effective_ticker),       # 16 - NEW for Max Pain
+        get_finra_short_volume(effective_ticker),        # 17 - NEW for FINRA Short Volume
         return_exceptions=True,
     )
 
@@ -1051,6 +1054,7 @@ async def api_research_dashboard(
     analyst_grades = safe(14) or []
     market_sent_data = safe(15) or {}
     oi_data = safe(16)
+    finra_data = safe(17)
 
     # ── Watchlist-Status ───────────────────────────────────────
     is_watchlist = any(
@@ -1180,10 +1184,40 @@ async def api_research_dashboard(
         number_of_analysts    = yf_fund.get("number_of_analysts")
 
     # FMP Profil
+    ceo = None
+    employees = None
+    description = None
+    website = None
+    ipo_date = None
+    country = None
+    exchange = None
+    peers_list: list[str] = []
+    
     if profile:
         company_name = getattr(profile, "company_name", None)
         sector   = sector or getattr(profile, "sector", None)
         industry = industry or getattr(profile, "industry", None)
+
+        # Company Profile Details for P1c
+        ceo           = getattr(profile, "ceo", None)
+        employees     = getattr(profile, "fullTimeEmployees", None) \
+                        or getattr(profile, "employees", None)
+        description   = getattr(profile, "description", None)
+        website       = getattr(profile, "website", None)
+        ipo_date      = getattr(profile, "ipoDate", None) \
+                        or getattr(profile, "ipo_date", None)
+        country       = getattr(profile, "country", None)
+        exchange      = getattr(profile, "exchange", None)
+
+        # Peers aus FMP (falls vorhanden)
+        try:
+            raw_peers = getattr(profile, "peers", None)
+            if isinstance(raw_peers, list):
+                peers_list = [
+                    str(p).upper() for p in raw_peers[:5]
+                ]
+        except Exception:
+            pass
 
     # PEG berechnen: PE / EPS_Growth (aus FMP key-metrics wenn vorhanden)
     # FMP liefert priceEarningsToGrowthRatioTTM in key-metrics-ttm
@@ -1672,6 +1706,22 @@ async def api_research_dashboard(
         "industry": industry,
         "fetched_at": now.isoformat(),
 
+        # Company Profile (P1c)
+        "company_profile": {
+            "ceo":       ceo,
+            "employees": int(employees) if employees else None,
+            "description": (
+                description[:300].rsplit(" ", 1)[0] + "…"
+                if description and len(description) > 300
+                else description
+            ),
+            "website":   website,
+            "ipo_date":  str(ipo_date) if ipo_date else None,
+            "country":   country,
+            "exchange":  exchange,
+            "peers":     peers_list,
+        },
+
         # Preis & Performance
         "price": price,
         "change_pct": change_pct,
@@ -1746,6 +1796,11 @@ async def api_research_dashboard(
         "short_interest_pct": short_interest_pct,
         "days_to_cover": days_to_cover,
         "squeeze_risk": squeeze_risk,
+        "finra_short_ratio": finra_data.get("short_volume_ratio") if finra_data else None,
+        "squeeze_signal": "high" if (
+            (finra_data.get("short_volume_ratio") or 0) > 0.55
+            and (short_interest_pct or 0) > 10
+        ) else "neutral",
 
         # Insider
         "insider_buys": insider_buys,
@@ -1858,7 +1913,7 @@ async def api_earnings_radar(days: int = 14):
     if cached:
         return cached
 
-    now = datetime.now()
+    now = now_mez()
     from_date = now.strftime("%Y-%m-%d")
     to_date = (now + timedelta(days=days)).strftime("%Y-%m-%d")
 
@@ -2101,6 +2156,22 @@ async def api_ohlcv(ticker: str, period: str = "6mo", interval: str = "1d"):
             "sma_200": [],
             "error": str(exc),
         }
+
+
+@data_router.get("/finra-short/{ticker}")
+async def api_finra_short(ticker: str):
+    """FINRA Daily Short Volume für Ticker."""
+    from backend.app.data.finra import get_finra_short_volume
+    return await get_finra_short_volume(ticker.upper())
+
+
+@data_router.get("/fear-greed")
+async def api_fear_greed():
+    """Composite Fear & Greed Score (0-100)."""
+    from backend.app.data.fear_greed import (
+        get_fear_greed_score
+    )
+    return await get_fear_greed_score()
 
 
 @data_router.get("/options-oi/{ticker}")
@@ -2932,7 +3003,11 @@ async def api_add_watchlist_item(
 async def api_watchlist_earnings_this_week():
     logger.info("API Call: watchlist-earnings-this-week")
     from datetime import datetime, timedelta
-    now = datetime.now()
+    from backend.app.data.finnhub import get_earnings_calendar
+    from backend.app.memory.watchlist import get_watchlist
+    from backend.app.utils.timezone import now_mez
+
+    now = now_mez()
     end_of_week = now + timedelta(days=7)
     from_date = now.strftime("%Y-%m-%d")
     to_date = end_of_week.strftime("%Y-%m-%d")
@@ -3897,9 +3972,9 @@ async def get_log_stats():
 @app.get("/api/logs/export")
 async def export_logs():
     from backend.app.logger import LOG_FILE
-    from datetime import datetime
+    from backend.app.utils.timezone import now_mez
     if not os.path.exists(LOG_FILE): return {"error": "No log file"}
-    filename = f"kafin_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    filename = f"kafin_logs_{now_mez().strftime('%Y%m%d_%H%M%S')}.log"
     return FileResponse(LOG_FILE, media_type="text/plain", filename=filename)
 
 @app.delete("/api/logs/file")
@@ -3996,7 +4071,8 @@ async def full_system_diagnostics():
     # 2. Finnhub API
     logger.info("🔍 Testing Finnhub API...")
     try:
-        now = datetime.now()
+        from backend.app.utils.timezone import now_mez
+        now = now_mez()
         from_date = (now - timedelta(days=7)).strftime("%Y-%m-%d")
         to_date = now.strftime("%Y-%m-%d")
         res, ms = await measure(get_company_news, "AAPL", from_date, to_date)

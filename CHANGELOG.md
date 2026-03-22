@@ -2,6 +2,24 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.14.0] - 2026-03-22 - Fear & Greed Score Backend
+
+### 🚀 Trading-Mehrwert
+- **Fear & Greed Score**: Composite aus 5 Indikatoren ohne neuen API-Key
+  - VIX (30%) + Marktbreite SMA50 (20%) + SPY/TLT (20%) + Credit Spread (20%) + Momentum (10%)
+  - Skala: 0-100 (Extreme Fear → Extreme Greed)
+  - GET /api/data/fear-greed, Cache 30min
+  - Label: Extreme Fear / Fear / Neutral / Greed / Extreme Greed
+
+### 📁 Neue Dateien
+- backend/app/data/fear_greed.py
+
+### 🔧 Backend
+- Keine neuen API-Keys erforderlich - nutzt vorhandene FRED + yfinance Daten
+- Parallel-Abfrage von Macro Snapshot, Market Breadth, Intermarket Signals
+- Robuste Fallback-Logik bei fehlenden Komponenten
+- Coverage-Metrik zeigt wieviele Komponenten verfügbar waren
+
 ## [5.13.0] - 2026-03-22 - Batch 1: Options + PreMarket + Groq
 
 ### 🚀 Trading-Mehrwert

@@ -31,9 +31,18 @@
 - Earnings Badges + Overnight-Kontext (SPY/VIX/CS)
 - Aufklappbares Morning Briefing
 
+### ✅ DeepSeek Prompts v0.3 Update
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.14.3**
+- news_extraction v0.3: Entity-Relevanz-Check mit is_directly_relevant + relevance_reason
+- audit_report v0.3: Max Pain, PCR-OI, Squeeze-Signal, Firmenprofil (CEO, Peers)
+- post_earnings v0.3: AH-Reaktion, Expected Move, Fear & Greed im Kontext
+- morning_briefing v0.3: Fear & Greed bei Extremen (≤25 oder ≥75)
+- chart_analyst: Optionale Pre-Market Parameter für Pre-Market Preise
+- Alle neuen Features sind in Prompts vorbereitet mit TODO-Kommentaten für fehlende Backend-Implementierungen
+
 ---
 
-## � FEATURE: Reddit Retail vs. Smart Money Divergenz
+## 🟠 FEATURE: Reddit Retail vs. Smart Money Divergenz
 
 **Warum (Edge):**
 Insider (SEC Form 4) = Smart Money.

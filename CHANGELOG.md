@@ -2,6 +2,36 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.14.3] - 2026-03-22 - DeepSeek Prompts v0.3
+
+### 🚀 Trading-Mehrwert
+- **news_extraction v0.3**: Entity-Relevanz-Check mit `is_directly_relevant` + `relevance_reason`
+  - Verhindert Fehlinterpretationen wenn Ticker nur am Rande erwähnt wird
+  - Groq-Umstieg vorbereitet mit strengerem Relevanz-Filter
+- **audit_report v0.3**: Max Pain, PCR-OI, Squeeze-Signal, Firmenprofil ergänzt
+  - Options-Struktur: Max Pain als magnetisches Level, Put/Call OI Ratio
+  - Squeeze-Signal "high" + Earnings Beat = besonders starkes Setup
+  - Firmenprofil: CEO, Mitarbeiter, Peers für besseren Unternehmens-Kontext
+- **post_earnings v0.3**: AH-Reaktion, Expected Move, Fear & Greed ergänzt
+  - After-Hours Reaktion vs Expected Move für Sell-the-News Analyse
+  - Fear & Greed Score als Markt-Kontext für Post-Earnings Bewertung
+- **morning_briefing v0.3**: Fear & Greed bei Extremen ergänzt
+  - Fear & Greed Score wird bei Extremen (≤25 oder ≥75) erwähnt
+  - Bessere Marktstimmungs-Einordnung im Pre-Market Briefing
+- **chart_analyst**: Optionale Pre-Market Parameter
+  - `analyze_chart()` akzeptiert jetzt `pre_market_price` + `pre_market_change`
+  - Pre-Market Daten werden im Prompt angezeigt wenn verfügbar
+
+### 🔧 Backend
+- **Neue Platzhalter**: Alle Prompts auf v0.3 aktualisiert mit neuen Datenfeldern
+- **TODO-Kommentare**: Fehlende Backend-Implementierungen dokumentiert
+- **Kompatibilität**: Bestehende Funktionalität bleibt erhalten
+
+### 📊 Vorbereitung
+- **Groq-Migration**: Entity-Relevanz-Check für effizientere News-Extraktion
+- **Platzhalter-Ready**: Alle neuen Features sind in Prompts vorbereitet
+- **Backend-Follow-up**: TODOs zeigen welche Variablen noch implementiert werden müssen
+
 ## [5.14.2] - 2026-03-22 - Watchlist P1 Auto-Update
 
 ### 🚀 Trading-Mehrwert

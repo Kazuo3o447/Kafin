@@ -24,7 +24,11 @@ from backend.app.analysis.deepseek import call_deepseek
 logger = get_logger(__name__)
 
 
-async def analyze_chart(ticker: str) -> Dict:
+async def analyze_chart(
+    ticker: str,
+    pre_market_price: float | None = None,
+    pre_market_change: float | None = None,
+) -> Dict:
     """Erstellt eine detaillierte technische Analyse für einen Ticker."""
     try:
         cache_key = f"chart_analysis:{ticker.upper()}"
@@ -87,8 +91,16 @@ async def analyze_chart(ticker: str) -> Dict:
         sma_50_str = f"${sma_50:.2f}" if sma_50 else "N/A"
         sma_200_str = f"${sma_200:.2f}" if sma_200 else "N/A"
 
+        # Pre-Market String
+        pre_market_str = (
+            f"PRE-MARKET: ${pre_market_price:.2f} "
+            f"({pre_market_change:+.1f}%)\n"
+            if pre_market_price and pre_market_change
+            else ""
+        )
+
         data_prompt = f"""Technische Analyse: {ticker}
-KURS: ${current:.2f} | TREND: {trend} | RSI(14): {rsi_str}
+{pre_market_str}KURS: ${current:.2f} | TREND: {trend} | RSI(14): {rsi_str}
 SMA20: ${sma_20:.2f} | SMA50: {sma_50_str} | SMA200: {sma_200_str}
 SUPPORT: ${support_20d:.2f} (20T) | RESISTANCE: ${resistance_20d:.2f} (20T)
 52W: ${low_52w:.2f} — ${high_52w:.2f} ({((current-low_52w)/(high_52w-low_52w)*100):.0f}% der Range)

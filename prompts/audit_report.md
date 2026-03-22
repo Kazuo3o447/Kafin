@@ -1,10 +1,11 @@
 ---
-version: "0.2"
-date: "2026-03-19"
+version: "0.3"
+date: "2026-03-22"
 model: "deepseek"
 changelog:
   - "0.1: Initiales Template"
   - "0.2: Expected Move & Pre-Earnings Positioning hinzugefügt"
+  - "0.3: Max Pain, Squeeze-Signal, Firmenprofil ergänzt"
 ---
 
 SYSTEM:
@@ -37,6 +38,29 @@ RELATIVE STÄRKE (Ticker vs. Markt):
 SHORT INTEREST:
 SI: {{short_interest}}% des Floats | Days-to-Cover: {{days_to_cover}}
 Trend: {{si_trend}} | Squeeze-Risiko: {{squeeze_risk}}
+
+OPTIONS & MARKTSTRUKTUR:
+Max Pain (nächster Verfall): ${{max_pain}}
+Put/Call OI Ratio: {{pcr_oi}}
+Squeeze-Signal: {{squeeze_signal}}
+FINRA Short Volume Ratio: {{finra_short_ratio}}
+
+## TODO: Backend-Variable fehlt
+## Die folgenden neuen Platzhalter müssen noch in report_generator.py implementiert werden:
+## - {{max_pain}}: Wird bereits in yfinance_data.py berechnet, muss an audit_report übergeben werden
+## - {{pcr_oi}}: Wird bereits in yfinance_data.py berechnet, muss an audit_report übergeben werden  
+## - {{squeeze_signal}}: Wird bereits in main.py berechnet, muss an audit_report übergeben werden
+## - {{ceo}}: Wird bereits in main.py berechnet, muss an audit_report übergeben werden
+## - {{employees}}: Wird bereits in main.py berechnet, muss an audit_report übergeben werden
+## - {{peers}}: Muss noch implementiert werden (company_profile.peers)
+
+UNTERNEHMEN:
+CEO: {{ceo}}
+Mitarbeiter: {{employees}}
+Peers: {{peers}}
+
+Berücksichtige Max Pain als magnetisches Level.
+Ein Squeeze-Signal "high" mit Earnings Beat ist ein besonders starkes Setup.
 
 CHART-ANALYSE (DeepSeek-basiert):
 {{chart_analysis}}

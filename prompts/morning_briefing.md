@@ -1,11 +1,11 @@
 ---
 version: "0.3"
-date: "2026-03-17"
+date: "2026-03-22"
 model: "deepseek"
 changelog:
   - "0.1: Initiales Template"
   - "0.2: Analytischer Tiefgang"
-  - "0.3: Straffere Struktur, Analysten-Ratings, klareres Format, weniger Redundanz"
+  - "0.3: Straffere Struktur, Analysten-Ratings, klareres Format, weniger Redundanz, Fear & Greed ergänzt"
 ---
 
 SYSTEM:
@@ -39,6 +39,13 @@ MAKRO-PROXYS (Kurs, 1T%):
 
 FRED-DATEN:
 Fed Rate: {{fed_rate}} | VIX: {{vix}} | Credit Spread: {{credit_spread}} | Yield Curve: {{yield_spread}} | DXY: {{dxy}}
+
+Fear & Greed Score: {{fear_greed_score}} ({{fear_greed_label}})
+
+## TODO: Backend-Variable fehlt
+## Die folgenden neuen Platzhalter müssen noch in morning_briefing.py implementiert werden:
+## - {{fear_greed_score}}: Muss von /api/data/fear-greed geholt und übergeben werden
+## - {{fear_greed_label}}: Muss von /api/data/fear-greed geholt und übergeben werden
 
 GESTERN:
 {{yesterday_snapshot}}
@@ -83,6 +90,7 @@ CROSS-ASSET:
 • Yield Curve {{yield_spread}} → [Invertiert/Flach/Positiv] [Rezessionssignal?]
 • Dollar {{dxy}} [↑↓→] + Gold + Treasuries = [Risk-On/Off/Widerspruch?]
 • [WENN Divergenzen existieren: Explizit benennen, z.B. "VIX steigt aber Spreads eng = Aktienangst ohne Kreditstress"]
+• Fear & Greed: {{fear_greed_score}} ({{fear_greed_label}}) — [Erwähne wenn Extrem (≤25 oder ≥75)]
 
 ANALYSTEN:
 • [Wichtigste Upgrades/Downgrades der Woche. Welche Firma, welcher Analyst, welche Begründung falls ableitbar]
@@ -97,7 +105,7 @@ HEUTE:
 • [Wirtschaftsdaten mit Konsens-Erwartung. Was passiert wenn besser/schlechter?]
 • [Earnings: Welcher Watchlist-Ticker meldet? Erwartung?]
 
-→ POSITIONIERUNG:
+ POSITIONIERUNG:
 • Risiko-Appetit: [Hoch/Mittel/Niedrig]
 • Long: [Konkreter Sektor-ETF oder Ticker] — [Warum]
 • Hedge: [Konkreter Put oder Pair-Trade] — [Warum]

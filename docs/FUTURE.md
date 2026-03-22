@@ -5,14 +5,15 @@
 
 ---
 
-## 🟠 FEATURE: Supabase → PostgreSQL Migration
+## � FEATURE: Supabase → PostgreSQL Migration
 
-**Status: 🟠 IN ARBEIT — v6.0.0 (K6-1 abgeschlossen)**
+**Status: � ERLEDIGT — v6.0.4 (K6-1 bis K6-4 abgeschlossen)**
 
-- PostgreSQL 16 läuft lokal als Docker-Container mit pgvector
-- `DATABASE_URL` zeigt auf den `postgres`-Service im Compose-Setup
-- Supabase bleibt bis K6-3 als Legacy-Fallback in der Konfiguration erhalten
-- K6-2 bis K6-5 bauen auf diesem Datenbank-Setup auf
+- ✅ PostgreSQL 16 + pgvector läuft lokal als Docker-Container
+- ✅ Drop-in Adapter mit Supabase-kompatibler API
+- ✅ Auto-Embedding Pipeline mit all-MiniLM-L6-v2
+- ✅ RAG Query Endpoints für semantische Suche
+- ✅ Vollständige Migration abgeschlossen, Supabase abgelöst
 
 ---
 

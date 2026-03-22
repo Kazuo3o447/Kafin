@@ -128,11 +128,11 @@ async def _get_web_divergence(ticker: str) -> Optional[tuple[float, float, str]]
             return None
 
         # Web-Score aus Cache
-        res = (
+        res = await (
             db.table("web_intelligence_cache")
             .select("summary, searched_at")
             .eq("ticker", ticker.upper())
-            .execute()
+            .execute_async()
         )
         rows = res.data if res and res.data else []
         if not rows:
@@ -212,14 +212,14 @@ async def _check_alert_cooldown(ticker: str) -> bool:
             datetime.now(timezone.utc) - timedelta(hours=ALERT_COOLDOWN_HOURS)
         ).isoformat()
 
-        res = (
+        res = await (
             db.table("system_logs")
             .select("created_at")
             .eq("component", "sentiment_monitor")
             .eq("message", f"alert_sent:{ticker.upper()}")
             .gte("created_at", cutoff)
             .limit(1)
-            .execute()
+            .execute_async()
         )
         rows = res.data if res and res.data else []
         return len(rows) == 0  # True = kein Cooldown = Alert erlaubt
@@ -235,12 +235,12 @@ async def _log_alert_sent(ticker: str) -> None:
         from backend.app.db import get_supabase_client
         db = get_supabase_client()
         if db:
-            db.table("system_logs").insert({
+            await db.table("system_logs").insert({
                 "component": "sentiment_monitor",
                 "level": "WARNING",
                 "message": f"alert_sent:{ticker.upper()}",
                 "created_at": datetime.now(timezone.utc).isoformat(),
-            }).execute()
+            }).execute_async()
     except Exception as e:
         logger.debug(f"Log alert {ticker}: {e}")
 

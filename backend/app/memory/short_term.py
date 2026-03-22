@@ -64,9 +64,41 @@ async def save_bullet_points(
             _mock_memory.append(record)
             return True
 
-        record["bullet_points"] = json.dumps(bullet_points, ensure_ascii=False)
-        result = db.table("short_term_memory").insert(record).execute()
+        record["bullet_points"] = bullet_points  # Let asyncpg handle JSON encoding
+        result = await db.table("short_term_memory").insert(record).execute_async()
         logger.debug(f"Stichpunkte gespeichert für {ticker} in Supabase")
+        
+        # Embedding im Hintergrund (non-blocking)
+        try:
+            record_id = result.data[0].get("id") if result.data else None
+            if record_id:
+                # Text aus Stichpunkten zusammenbauen
+                bullets = bullet_points if isinstance(
+                    bullet_points, list
+                ) else [str(bullet_points)]
+                embed_text_combined = (
+                    f"{ticker}: " + " | ".join(
+                        str(b) for b in bullets[:3]
+                    )
+                )
+                from backend.app.embeddings import save_embedding
+                # asyncio.create_task mit Guard für Background-Tasks
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        asyncio.create_task(
+                            save_embedding(
+                                "short_term_memory",
+                                record_id,
+                                embed_text_combined,
+                            )
+                        )
+                except RuntimeError:
+                    # Kein Event-Loop (z.B. in Background-Tasks)
+                    pass  # Embedding überspringen, Pipeline nicht blockieren
+        except Exception:
+            pass  # Embedding-Fehler dürfen Pipeline nicht stoppen
+        
         return True
     except Exception as e:
         logger.error(f"Fehler beim Speichern der Stichpunkte für {ticker}: {e}")
@@ -90,7 +122,7 @@ async def get_bullet_points(ticker: str, quarter: Optional[str] = None) -> list[
         query = db.table("short_term_memory").select("*").eq("ticker", ticker)
         if quarter:
             query = query.eq("quarter", quarter)
-        result = query.order("date", desc=True).execute()
+        result = await query.order("date", desc=True).execute_async()
         return result.data
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Stichpunkte für {ticker}: {e}")
@@ -140,7 +172,7 @@ async def get_bullet_points_batch(
             .in_("ticker", tickers_upper)
             .order("date", desc=True)
             .limit(max(limit_per_ticker * len(tickers_upper) * 2, limit_per_ticker))
-            .execute()
+            .execute_async()
         )
         rows = res.data if res and res.data else []
 
@@ -253,7 +285,7 @@ async def get_existing_urls(ticker: str) -> set[str]:
         db = get_supabase_client()
         if db is None:
             return {m.get("url", "") for m in _mock_memory if m["ticker"] == ticker}
-        result = db.table("short_term_memory").select("url").eq("ticker", ticker).execute()
+        result = await db.table("short_term_memory").select("url").eq("ticker", ticker).execute_async()
         return {r.get("url", "") for r in result.data if r.get("url")}
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der URLs für {ticker}: {e}")
@@ -269,7 +301,7 @@ async def get_material_news(ticker: str) -> list[dict]:
         db = get_supabase_client()
         if db is None:
             return [m for m in _mock_memory if m["ticker"] == ticker and m.get("is_material")]
-        result = db.table("short_term_memory").select("*").eq("ticker", ticker).eq("is_material", True).order("date", desc=True).execute()
+        result = await db.table("short_term_memory").select("*").eq("ticker", ticker).eq("is_material", True).order("date", desc=True).execute_async()
         return result.data
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Material-News für {ticker}: {e}")

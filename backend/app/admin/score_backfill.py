@@ -197,26 +197,26 @@ async def _backfill_single_ticker(ticker: str, days: int, market_ov: dict) -> di
             date = today - timedelta(days=days_ago)
             
             # Prüfen ob Eintrag schon existiert
-            existing = (
+            existing = await (
                 db.table("score_history")
                 .select("id")
                 .eq("ticker", ticker)
                 .eq("date", date.isoformat())
-                .execute()
+                .execute_async()
             )
             
             if existing and existing.data:
                 # Eintrag überschreiben
-                db.table("score_history").update({
+                await db.table("score_history").update({
                     "opportunity_score": opp_score.total_score,
                     "torpedo_score": torp_score.total_score,
                     "price": getattr(tech, "current_price", None) if tech else None,
                     "rsi": getattr(tech, "rsi_14", None) if tech else None,
                     "trend": getattr(tech, "trend", None) if tech else None,
-                }).eq("ticker", ticker).eq("date", date.isoformat()).execute()
+                }).eq("ticker", ticker).eq("date", date.isoformat()).execute_async()
             else:
                 # Neuer Eintrag
-                db.table("score_history").insert({
+                await db.table("score_history").insert({
                     "ticker": ticker,
                     "date": date.isoformat(),
                     "opportunity_score": opp_score.total_score,
@@ -224,7 +224,7 @@ async def _backfill_single_ticker(ticker: str, days: int, market_ov: dict) -> di
                     "price": getattr(tech, "current_price", None) if tech else None,
                     "rsi": getattr(tech, "rsi_14", None) if tech else None,
                     "trend": getattr(tech, "trend", None) if tech else None,
-                }).execute()
+                }).execute_async()
             
             entries_created += 1
         

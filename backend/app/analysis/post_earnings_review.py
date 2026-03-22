@@ -154,13 +154,13 @@ async def run_post_earnings_review(ticker: str, quarter: Optional[str] = None) -
     try:
         db = get_supabase_client()
         if db:
-            trades = (
+            trades = await (
                 db.table("shadow_trades")
                 .select("outcome_correct")
                 .eq("ticker", ticker)
                 .eq("status", "closed")
                 .limit(10)
-                .execute()
+                .execute_async()
             )
             if trades.data and len(trades.data) >= 3:
                 wins = sum(
@@ -195,7 +195,7 @@ async def run_post_earnings_review(ticker: str, quarter: Optional[str] = None) -
     try:
         db = get_supabase_client()
         if db:
-            db.table("earnings_reviews").upsert(review_record, on_conflict="ticker,quarter").execute()
+            await db.table("earnings_reviews").upsert(review_record, on_conflict="ticker,quarter").execute_async()
             logger.info(f"Earnings Review gespeichert: {ticker} {quarter}")
             try:
                 await close_shadow_trade(ticker=ticker, quarter=quarter)
@@ -243,10 +243,10 @@ async def run_post_earnings_review(ticker: str, quarter: Optional[str] = None) -
         db = get_supabase_client()
         if db:
             # Hole aktuelle Watchlist-Einträge
-            wl = db.table("watchlist") \
+            wl = await db.table("watchlist") \
                    .select("ticker,web_prio,notes") \
                    .eq("ticker", ticker.upper()) \
-                   .execute()
+                   .execute_async()
 
             if wl.data:
                 entry = wl.data[0]
@@ -303,10 +303,10 @@ async def run_post_earnings_review(ticker: str, quarter: Optional[str] = None) -
                         f"{entry.get('web_prio')} → {new_prio}"
                     )
 
-                db.table("watchlist") \
+                await db.table("watchlist") \
                   .update(updates) \
                   .eq("ticker", ticker.upper()) \
-                  .execute()
+                  .execute_async()
 
                 # Cache invalidieren
                 from backend.app.cache import cache_invalidate
@@ -354,13 +354,13 @@ async def _get_last_audit_report(ticker: str) -> Optional[dict]:
         db = get_supabase_client()
         if db is None:
             return None
-        result = (
+        result = await (
             db.table("audit_reports")
             .select("ticker, recommendation, opportunity_score, torpedo_score, report_text, created_at")
             .eq("ticker", ticker)
             .order("created_at", desc=True)
             .limit(1)
-            .execute()
+            .execute_async()
         )
         if result.data:
             return result.data[0]
@@ -429,7 +429,7 @@ async def _update_performance_tracking(period: str, prediction_correct: bool):
         if db is None:
             return
 
-        result = db.table("performance_tracking").select("*").eq("period", period).execute()
+        result = await db.table("performance_tracking").select("*").eq("period", period).execute_async()
 
         if result.data:
             record = result.data[0]
@@ -441,7 +441,7 @@ async def _update_performance_tracking(period: str, prediction_correct: bool):
             total = record["total_predictions"]
             correct = record.get("correct_predictions", 0)
             record["accuracy_percent"] = (correct / total * 100) if total > 0 else 0
-            db.table("performance_tracking").upsert(record, on_conflict="period").execute()
+            await db.table("performance_tracking").upsert(record, on_conflict="period").execute_async()
         else:
             new_record = {
                 "period": period,
@@ -450,7 +450,7 @@ async def _update_performance_tracking(period: str, prediction_correct: bool):
                 "wrong_predictions": 0 if prediction_correct else 1,
                 "accuracy_percent": 100.0 if prediction_correct else 0.0,
             }
-            db.table("performance_tracking").insert(new_record).execute()
+            await db.table("performance_tracking").insert(new_record).execute_async()
 
         logger.info(f"Performance-Tracking aktualisiert für {period}")
     except Exception as exc:

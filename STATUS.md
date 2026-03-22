@@ -15,7 +15,11 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - **Position Sizing**: Ungültige Stop-Loss-Konstellationen werden im Research-UI abgefangen.
 - **Markets**: Der Composite Regime Header bleibt prominent auf `/markets`; die großen Kalibrierungsthemen sind in `docs/FUTURE.md` dokumentiert.
 - **Logs**: `Ignore`-Filter ist im `LogViewer` sichtbar; Backend-Logs liegen in `logs/kafin.log` und via `docker logs`.
-- **Status-/Settings-Seiten**: Diagnose-Responses sind stabil und sollten keine Proxy-Fehler mehr erzeugen.
+- **Kaskade 6**: Vollständige Migration von Supabase auf PostgreSQL 16 + pgvector; lokales Embedding-Pipeline (all-MiniLM-L6-v2) für semantische Suche (RAG) ist produktiv.
+- **Datenbank-Härtung**: Asyncpg Connection Pooling mit Lazy-Init, Locking und sauberem Shutdown-Handling; native pgvector-Codec Registrierung.
+- **RAG-Endpoints**: Semantische Suche für News und Audits via pgvector-Similarity-Search live.
+- **Async-First**: Alle produktionsrelevanten Datenbank-Aufrufe auf `execute_async()` migriert, um Event-Loop Deadlocks zu verhindern.
+- **Status-/Settings-Seiten**: Diagnose-Responses sind stabil und nutzen die neue lokale PostgreSQL-Infrastruktur.
 - **Kaskade 5**: Reddit Retail Sentiment, Sympathy Play Radar, Shadow Trade Modal und Research-Integration sind live; v5.16.4 Self-Review abgeschlossen.
 
 ## �️ Wichtige Dateien / APIs
@@ -442,6 +446,17 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - Frontend: Chart-Integration und Error-Handling verbessert
 - Frontend: Watchlist-Modal UX überarbeitet
 - Dokumentation: STATUS.md und README.md aktualisiert
+
+## 🔄 Letzte Ergänzungen (22. März 2026)
+- **K6-4 Meilenstein**: PostgreSQL Migration & RAG Pipeline abgeschlossen.
+- **Local Embeddings**: Integration von `sentence-transformers` (all-MiniLM-L6-v2) für lokale Vektor-Generierung ohne externe API-Kosten.
+- **Auto-Embedding**: Hintergrund-Task generiert automatisch Embeddings für neue News-Stichpunkte.
+- **RAG Endpoints**: `/api/data/rag/similar-news` und `/api/data/rag/similar-audits` für semantische Ähnlichkeitssuche.
+- **Backend Härtung**: 
+  - `QueryBuilder.execute()` nutzt jetzt Thread-Fallback in async Contexts zur Deadlock-Prävention.
+  - Alle Hot-Paths auf native `await .execute_async()` umgestellt.
+  - Asyncpg-Pool Lifecycle mit Shutdown-Hook und Locking abgesichert.
+- **Admin Tools**: Backfill-Endpoint zur nachträglichen Embedding-Generierung für Bestandsdaten.
 
 ## 🔄 Letzte Ergänzungen (21. März 2026)
 - **FRED-Härtung**: 5xx-Retries + API-Key-Redaktion im Backend

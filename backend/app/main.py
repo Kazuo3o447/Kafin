@@ -58,6 +58,18 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
+    # PostgreSQL Connection Pool initialisieren
+    try:
+        from backend.app.database import get_pool
+        await get_pool()
+        logger.info(
+            "PostgreSQL Connection Pool initialisiert"
+        )
+    except Exception as e:
+        logger.error(
+            f"PostgreSQL Connection Fehler: {e}"
+        )
+    
     logger.info(f"Starter {settings.app_name} im [{settings.environment}] Modus.")
     logger.info("Admin Panel ist verfügbar bei /admin")
     if settings.use_mock_data:
@@ -91,6 +103,30 @@ async def startup_event():
     # Non-blocking — läuft parallel zum Server-Start
     asyncio.create_task(_warm())
 
+    # Embedding-Modell vorwärmen (läuft im Hintergrund)
+    async def _warm_embeddings():
+        try:
+            from backend.app.embeddings import embed_text
+            await embed_text("Kafin startup test")
+            logger.info("Embedding-Modell bereit.")
+        except Exception as e:
+            logger.warning(
+                f"Embedding-Modell nicht geladen: {e}"
+            )
+
+    asyncio.create_task(_warm_embeddings())
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Schließt externe Ressourcen sauber beim Server-Shutdown."""
+    try:
+        from backend.app.database import close_pool
+        await close_pool()
+        logger.info("PostgreSQL Connection Pool geschlossen")
+    except Exception as e:
+        logger.warning(f"Shutdown Pool Close Fehler: {e}")
+
 app.include_router(admin_router)
 app.include_router(score_backfill_router, prefix="/api/admin/scores", tags=["scores"])
 
@@ -109,6 +145,70 @@ async def api_admin_init_tables():
     log_custom_search_terms_sql()
     logger.info("API Call: admin init tables SQL ausgegeben")
     return {"status": "success", "sql": sql}
+
+@app.post("/api/admin/embeddings/backfill")
+async def api_embeddings_backfill(
+    table: str = Query(
+        "short_term_memory",
+        description="Tabelle: short_term_memory | audit_reports"
+    ),
+    limit: int = Query(100),
+):
+    """
+    Generiert Embeddings für Einträge ohne Embedding.
+    Für Initial-Befüllung nach Migration.
+    """
+    if table not in (
+        "short_term_memory", "audit_reports",
+        "long_term_memory"
+    ):
+        raise HTTPException(400, "Ungültige Tabelle")
+
+    from backend.app.database import get_pool
+    from backend.app.embeddings import save_embedding
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f'SELECT id, ticker, bullet_points, '
+            f'report_text FROM "{table}" '
+            f'WHERE embedding IS NULL '
+            f'LIMIT $1',
+            limit,
+        )
+
+    processed = 0
+    for row in rows:
+        # Text für Embedding zusammenbauen
+        if table == "short_term_memory":
+            bps = row.get("bullet_points") or []
+            text = (
+                f"{row['ticker']}: "
+                + " | ".join(
+                    str(b) for b in
+                    (bps if isinstance(bps, list)
+                     else [bps])[:3]
+                )
+            )
+        elif table == "audit_reports":
+            text = (
+                f"{row.get('ticker', '')}: "
+                + str(row.get("report_text", ""))[:500]
+            )
+        else:
+            text = str(row.get("insight", ""))
+
+        ok = await save_embedding(
+            table, str(row["id"]), text
+        )
+        if ok:
+            processed += 1
+
+    return {
+        "processed": processed,
+        "total":     len(rows),
+        "table":     table,
+    }
 
 @app.get("/api/logs")
 async def api_get_logs(level: str = None, limit: int = 200):
@@ -356,7 +456,7 @@ async def api_ticker_track_record(ticker: str):
         return f"Q{quarter}_{report_dt.year}"
 
     try:
-        reviews_res = (
+        reviews_res = await (
             db.table("earnings_reviews")
             .select(
                 "id,ticker,quarter,pre_earnings_score_opportunity,pre_earnings_score_torpedo,"
@@ -368,7 +468,7 @@ async def api_ticker_track_record(ticker: str):
             .eq("ticker", normalized_ticker)
             .order("created_at", desc=True)
             .limit(8)
-            .execute()
+            .execute_async()
         )
         reviews = reviews_res.data or []
     except Exception as exc:
@@ -376,13 +476,13 @@ async def api_ticker_track_record(ticker: str):
         return base_response
 
     try:
-        audits_res = (
+        audits_res = await (
             db.table("audit_reports")
             .select("id,ticker,report_date,earnings_date,opportunity_score,torpedo_score,recommendation,created_at")
             .eq("ticker", normalized_ticker)
             .order("report_date", desc=True)
             .limit(8)
-            .execute()
+            .execute_async()
         )
         audit_rows = audits_res.data or []
     except Exception as exc:
@@ -541,7 +641,7 @@ async def api_performance():
     try:
         db = get_supabase_client()
         if db:
-            result = db.table("performance_tracking").select("*").order("period", desc=True).execute()
+            result = await db.table("performance_tracking").select("*").order("period", desc=True).execute_async()
             return {"status": "success", "performance": result.data}
         return {"status": "error", "message": "Supabase nicht verbunden"}
     except Exception as e:
@@ -589,13 +689,13 @@ async def api_score_delta(ticker: str):
         return {"error": "Supabase nicht verfügbar"}
 
     try:
-        result = (
+        result = await (
             db.table("score_history")
             .select("*")
             .eq("ticker", ticker)
             .order("date", desc=True)
             .limit(7)
-            .execute()
+            .execute_async()
         )
         history = result.data if result and result.data else []
     except Exception as e:
@@ -806,12 +906,12 @@ async def api_quick_snapshot(ticker: str):
             db = get_supabase_client()
             if db:
                 audit_res = (
-                    db.table("audit_reports")
+                    await db.table("audit_reports")
                     .select("report_date, recommendation, opportunity_score, torpedo_score")
                     .eq("ticker", ticker)
                     .order("report_date", desc=True)
                     .limit(1)
-                    .execute()
+                    .execute_async()
                 )
                 if audit_res and audit_res.data:
                     latest_audit = audit_res.data[0]
@@ -1654,12 +1754,12 @@ async def api_research_dashboard(
         db = get_supabase_client()
         if db:
             res = (
-                db.table("audit_reports")
+                await db.table("audit_reports")
                 .select("report_date, recommendation, opportunity_score, torpedo_score, report_text")
                 .eq("ticker", ticker)
                 .order("report_date", desc=True)
                 .limit(1)
-                .execute()
+                .execute_async()
             )
             rows = res.data if res and res.data else []
             if rows:
@@ -2162,7 +2262,7 @@ async def api_shadow_portfolio_trades(status: str = "all"):
         query = db.table("shadow_trades").select("*").order("created_at", desc=True)
         if status in ("open", "closed"):
             query = query.eq("status", status)
-        result = query.limit(100).execute()
+        result = await query.limit(100).execute_async()
         data = result.data or []
         return {"trades": data, "count": len(data)}
     except Exception as exc:  # noqa: BLE001
@@ -2424,7 +2524,7 @@ async def api_chart_overlays(ticker: str):
 
     try:
         # Schritt 1: earnings_reviews (historisch)
-        reviews = (
+        reviews = await (
             supabase.table("earnings_reviews")
             .select(
                 "quarter,pre_earnings_report_date,pre_earnings_recommendation,"
@@ -2433,7 +2533,7 @@ async def api_chart_overlays(ticker: str):
             .eq("ticker", ticker)
             .order("created_at", desc=True)
             .limit(12)
-            .execute()
+            .execute_async()
         ).data or []
 
         earnings_events = []
@@ -2462,13 +2562,13 @@ async def api_chart_overlays(ticker: str):
             )
 
         # Schritt 2: audit_reports (geplante)
-        audits = (
+        audits = await (
             supabase.table("audit_reports")
             .select("report_date,earnings_date,opportunity_score,torpedo_score,recommendation")
             .eq("ticker", ticker)
             .order("report_date", desc=True)
             .limit(8)
-            .execute()
+            .execute_async()
         ).data or []
 
         def _parse_date(value: Optional[str]) -> Optional[datetime]:
@@ -2519,14 +2619,14 @@ async def api_chart_overlays(ticker: str):
             )
 
         # Torpedo Alerts
-        torpedo_rows = (
+        torpedo_rows = await (
             supabase.table("short_term_memory")
             .select("date,bullet_points,sentiment_score,is_material")
             .eq("ticker", ticker)
             .eq("is_material", True)
             .order("date", desc=True)
             .limit(20)
-            .execute()
+            .execute_async()
         ).data or []
 
         torpedo_alerts = []
@@ -2560,14 +2660,14 @@ async def api_chart_overlays(ticker: str):
             )
 
         # Narrative Shifts
-        narrative_rows = (
+        narrative_rows = await (
             supabase.table("short_term_memory")
             .select("date,shift_type,shift_reasoning,bullet_points,sentiment_score,is_narrative_shift")
             .eq("ticker", ticker)
             .eq("is_narrative_shift", True)
             .order("date", desc=True)
             .limit(15)
-            .execute()
+            .execute_async()
         ).data or []
 
         narrative_shifts = []
@@ -3003,7 +3103,7 @@ def _fetch_all_scores_sync(tickers: list, db) -> dict:
             .in_("ticker", tickers_upper)
             .order("date", desc=True)
             .limit(max_rows)
-            .execute()
+            .execute_async()
         )
         rows = res.data if res and res.data else []
 
@@ -3035,7 +3135,7 @@ def _fetch_all_scores_sync(tickers: list, db) -> dict:
                     .eq("ticker", ticker)
                     .order("date", desc=True)
                     .limit(7)
-                    .execute()
+                    .execute_async()
                 )
                 single_rows = single_res.data if single_res and single_res.data else []
                 if single_rows:
@@ -3253,7 +3353,7 @@ async def api_update_watchlist_item(ticker: str, item: WatchlistItemUpdate):
         from backend.app.db import get_supabase_client
         db = get_supabase_client()
         if db and update_data:
-            db.table("watchlist").update(update_data).eq("ticker", ticker.upper()).execute()
+            await db.table("watchlist").update(update_data).eq("ticker", ticker.upper()).execute_async()
         
         # Cache invalidieren
         from backend.app.cache import cache_invalidate
@@ -3629,7 +3729,7 @@ async def api_economic_calendar():
         now = datetime.utcnow()
         in_48h = now + timedelta(hours=48)
 
-        res = (
+        res = await (
             db.table("short_term_memory")
             .select("*")
             .eq("ticker", "GENERAL_MACRO")
@@ -3637,7 +3737,7 @@ async def api_economic_calendar():
             .lte("date", in_48h.isoformat())
             .order("date")
             .limit(10)
-            .execute()
+            .execute_async()
         )
         rows = res.data if res and res.data else []
         events = []
@@ -4113,11 +4213,11 @@ async def api_web_intelligence_cache(ticker: str):
         db = get_supabase_client()
         if not db:
             return {"ticker": ticker, "cached": False}
-        res = (
+        res = await (
             db.table("web_intelligence_cache")
             .select("*")
             .eq("ticker", ticker.upper())
-            .execute()
+            .execute_async()
         )
         rows = res.data if res and res.data else []
         if rows:
@@ -4167,6 +4267,130 @@ async def api_sympathy_check(
     )
     await send_sympathy_alert(analysis)
     return analysis
+
+
+@data_router.get("/rag/similar-news")
+async def api_rag_similar_news(
+    query: str = Query(..., min_length=5),
+    ticker: Optional[str] = Query(None),
+    limit: int = Query(5, ge=1, le=20),
+):
+    """
+    Semantische Suche in News-Stichpunkten.
+    Findet ähnliche historische News zu einer Anfrage.
+
+    Beispiel:
+      /api/data/rag/similar-news?query=CFO+tritt+zurück
+      → Findet ähnliche Führungswechsel-News
+    """
+    from backend.app.embeddings import embed_text
+    from backend.app.database import get_pool
+
+    vec = await embed_text(query)
+    if vec is None:
+        return {
+            "results": [],
+            "error": "Embedding-Modell nicht verfügbar"
+        }
+
+    vec_str = (
+        "[" + ",".join(f"{v:.6f}" for v in vec) + "]"
+    )
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        if ticker:
+            rows = await conn.fetch(
+                """
+                SELECT ticker, date, bullet_points,
+                  sentiment_score, category,
+                  1 - (embedding <=> $1::vector) AS similarity
+                FROM short_term_memory
+                WHERE embedding IS NOT NULL
+                  AND ticker = $2
+                ORDER BY embedding <=> $1::vector
+                LIMIT $3
+                """,
+                vec_str, ticker.upper(), limit,
+            )
+        else:
+            rows = await conn.fetch(
+                """
+                SELECT ticker, date, bullet_points,
+                  sentiment_score, category,
+                  1 - (embedding <=> $1::vector) AS similarity
+                FROM short_term_memory
+                WHERE embedding IS NOT NULL
+                ORDER BY embedding <=> $1::vector
+                LIMIT $2
+                """,
+                vec_str, limit,
+            )
+
+    results = []
+    for row in rows:
+        bps = row["bullet_points"]
+        results.append({
+            "ticker":          row["ticker"],
+            "date":            row["date"].isoformat()
+                               if row["date"] else None,
+            "bullet_points":   bps,
+            "sentiment_score": row["sentiment_score"],
+            "category":        row["category"],
+            "similarity":      round(
+                float(row["similarity"]), 3
+            ),
+        })
+
+    return {
+        "query":   query,
+        "results": results,
+        "count":   len(results),
+    }
+
+
+@data_router.get("/rag/similar-audits")
+async def api_rag_similar_audits(
+    query: str = Query(..., min_length=5),
+    limit: int = Query(3, ge=1, le=10),
+):
+    """
+    Findet historische Audit-Reports ähnlich
+    zur Anfrage. Nützlich für Muster-Erkennung:
+    "Zeig ähnliche Setups wie dieses"
+    """
+    from backend.app.embeddings import embed_text
+    from backend.app.database import get_pool
+
+    vec = await embed_text(query)
+    if vec is None:
+        return {"results": [], "error": "Kein Embedding"}
+
+    vec_str = (
+        "[" + ",".join(f"{v:.6f}" for v in vec) + "]"
+    )
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT ticker, report_date,
+              recommendation, opportunity_score,
+              torpedo_score,
+              LEFT(report_text, 300) AS preview,
+              1 - (embedding <=> $1::vector) AS similarity
+            FROM audit_reports
+            WHERE embedding IS NOT NULL
+            ORDER BY embedding <=> $1::vector
+            LIMIT $2
+            """,
+            vec_str, limit,
+        )
+
+    return {
+        "query":   query,
+        "results": [dict(r) for r in rows],
+    }
 
 
 app.include_router(admin_router)
@@ -4292,7 +4516,7 @@ async def api_diagnostics_db():
     tables = ["watchlist", "short_term_memory", "daily_snapshots", "macro_snapshots", "audit_reports"]
     for table in tables:
         try:
-            data = db.table(table).select("*", count="exact").limit(0).execute()
+            data = await db.table(table).select("*", count="exact").limit(0).execute_async()
             results[table] = {"count": data.count if hasattr(data, "count") else "unknown", "status": "ok"}
         except Exception as e:
             results[table] = {"count": 0, "status": f"error: {str(e)[:100]}"}
@@ -4330,7 +4554,7 @@ async def full_system_diagnostics():
     try:
         t0 = time.time()
         db = get_supabase_client()
-        wl = db.table("watchlist").select("ticker").limit(1).execute() if db else None
+        wl = await db.table("watchlist").select("ticker").limit(1).execute_async() if db else None
         ms = round((time.time() - t0) * 1000)
         results["services"]["supabase"] = {"status": "ok" if wl else "error", "latency_ms": ms, "details": "DB connected"}
         logger.info(f"✅ Supabase: OK ({ms}ms)")

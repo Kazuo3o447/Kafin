@@ -2,6 +2,124 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [6.0.4] - 2026-03-22 - RAG + DB Migration Complete
+
+### 🏗️ Architektur-Meilenstein abgeschlossen
+- **Supabase → PostgreSQL 16 + pgvector vollständig migriert**
+- **0ms externe DB-Latenz** (lokal, kein Internet erforderlich)
+- **Unbegrenzte API-Calls** (kein Free-Tier Limit mehr)
+- **Datensouveränität** (alle Daten bleiben auf dem NUC)
+
+### 🚀 RAG Query Endpoints
+- **GET /api/data/rag/similar-news**: Semantische Suche in News-Stichpunkten
+  - Cosine-Similarity via pgvector HNSW-Index
+  - Optionaler Ticker-Filter für firmenspezifische Suche
+  - Configurable Limit (1-20 Results)
+  - Beispiel: `?query=CFO+tritt+zurück&limit=5`
+- **GET /api/data/rag/similar-audits**: Ähnliche historische Audit-Reports
+  - Pattern-Matching für Trading-Setup-Erkennung
+  - Preview der Report-Texte (300 Zeichen)
+  - Scores und Recommendation im Result
+
+### 🔧 Stabilitäts-Improvements
+- **asyncio.create_task Guard**: Sicherer Background-Embedding auch ohne Event-Loop
+- **Migration Script**: `database/migrations/03_add_embeddings.sql` für Bestands-Datenbanken
+- **Error Handling**: Embedding-Fehler blockieren nicht die Haupt-Pipeline
+- **Schema-Complete**: Alle embedding Spalten + HNSW-Indizes vorhanden
+
+### 📊 Gesamtsystem nach Migration
+- **14 Tabellen** komplett auf PostgreSQL migriert
+- **177 Supabase-Aufrufe** automatisch über Drop-in Adapter geroutet
+- **384-dimensionale Embeddings** für semantische Suche verfügbar
+- **Auto-Embedding** für neue News-Einträge aktiv
+
+### 📚 Dokumentation
+- **AGENT_CONTEXT.md**: Datenbank-Sektion komplett aktualisiert
+- **FUTURE.md**: PostgreSQL Migration als erledigt markiert
+- **TODO.md**: Batch 4 technische Schuld abgebaut
+
+## [6.0.3] - 2026-03-22 - pgvector Embedding Pipeline
+
+### 🧠 Semantic Search Foundation
+- **embeddings.py**: all-MiniLM-L6-v2 lokal (22MB)
+  - 384 Dimensionen, CPU-optimiert für NUC-Performance
+  - `embed_text()`, `embed_batch()`, `save_embedding()` API
+  - Lazy-Loading mit Graceful Fallback bei fehlenden sentence-transformers
+  - `asyncio.to_thread()` für CPU-bound Embedding-Generation
+
+### 🔄 Auto-Embedding Integration
+- **short_term_memory**: Automatische Embedding-Generierung nach INSERT
+  - Non-blocking `asyncio.create_task()` im Hintergrund
+  - Text-Kombination: `{ticker}: bullet1 | bullet2 | bullet3`
+  - Fehler-resilient: Embedding-Fehler stoppen nicht die Pipeline
+- **Startup**: Modell im Hintergrund vorwärmen
+  - `embed_text("Kafin startup test")` vor dem ersten echten Einsatz
+  - Logging: "Embedding-Modell bereit" bei Erfolg
+
+### 🛠 Admin Tools
+- **POST /api/admin/embeddings/backfill**: Befüllung für Bestandsdaten
+  - Unterstützt: `short_term_memory`, `audit_reports`, `long_term_memory`
+  - Configurable Limit für Batch-Processing
+  - Returns: `processed`, `total`, `table` Statistiken
+  - Text-Extraction pro Tabelle optimiert
+
+### 📊 Technical Implementation
+- **pgvector Integration**: Direkte SQL `UPDATE ... SET embedding = $1::vector`
+  - 384-dimensionale Vektoren als formatierte Strings
+  - UUID-basierte Record-Identifikation
+  - Fehlerbehandlung mit Debug-Logging
+- **Performance**: Non-blocking Architektur
+  - Embeddings laufen parallel zum Haupt-Flow
+  - Keine Latenz-Erhöhung für News-Storage
+
+## [6.0.2] - 2026-03-22 - DB Switch Validierung
+
+### 🚀 Performance & Async Patterns
+- **database.py**: `execute_async()` für native async Execution
+  - `_row_to_dict()` Helper: UUID → str, datetime → isoformat Konvertierung
+  - Alle CRUD-Operationen nutzen `_row_to_dict()` für konsistente Typen
+  - Verhindert Vergleichsprobleme zwischen Supabase (String) und asyncpg (UUID)
+- **memory/watchlist.py**: Migration zu `execute_async()`
+  - Alle DB-Operationen jetzt nativ async statt `asyncio.to_thread()`
+  - Bessere Performance in FastAPI-Routes durch native async I/O
+- **memory/short_term.py**: JSONB Double-Encode Schutz
+  - Entfernt manuelles `json.dumps()` - asyncpg übernimmt automatisch
+  - Verhindert doppelte JSON-Kodierung in bullet_points Feld
+
+### 🔧 Typ-Kompatibilität
+- **UUID Handling**: Konvertiert zu Strings für Abwärtskompatibilität
+- **DateTime Format**: ISO-8601 Strings für konsistente API-Responses
+- **JSONB Felder**: Automatische Kodierung/Dekodierung durch asyncpg
+
+### ✅ Validierung
+- **Compilation Tests**: Alle Python-Module kompilieren erfolgreich
+- **Async-First**: Native async Patterns für optimale Performance
+- **Zero Breaking Changes**: Vollständige Kompatibilität mit bestehendem Code
+
+## [6.0.1] - 2026-03-22 - PostgreSQL Drop-in Adapter
+
+### 🗄️ Database Migration
+- **database.py**: PostgreSQL QueryBuilder mit identischer Supabase-API
+  - `table().select().eq().execute()` Syntax vollständig erhalten
+  - Alle CRUD-Operationen: `insert`, `update`, `upsert`, `delete`
+  - Filter-Methoden: `eq`, `neq`, `gte`, `lte`, `gt`, `lt`, `ilike`, `in_`, `is_`
+  - Modifikatoren: `order`, `limit`
+  - RETURNING * auf allen Schreiboperationen
+  - Synchroner `execute()` Wrapper via asyncio für bestehenden Code
+  - JSON/JSONB Codec auto-registered für Supabase-Kompatibilität
+- **db.py**: Dünne Wrapper-Schicht, `get_supabase_client()` leitet weiter
+  - Alle 177 bestehenden Aufrufe bleiben unverändert
+  - Import-Kompatibilität vollständig gewahrt
+- **main.py**: Connection Pool Initialisierung im `startup_event`
+  - PostgreSQL Pool bei Server-Start automatisch erstellt
+  - Fehlerbehandlung mit Logging bei Verbindungsproblemen
+
+### 🔄 Zero-Code Migration
+- **Drop-in Replacement**: Kein einziger der 177 Supabase-Aufrufe muss geändert werden
+- **API-Kompatibilität**: `ExecuteResult(data=[...])` wie Supabase-Response
+- **Chaining-Syntax**: Volle Unterstützung für Method-Chaining
+- **Async/Sync Bridge**: Funktioniert in beiden Kontexten
+
 ## [5.16.4] - 2026-03-22 - Cascade 5 Self-Review
 
 ### 🧪 Review-Fixes

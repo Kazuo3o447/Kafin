@@ -120,12 +120,12 @@ async def get_custom_search_terms() -> List[Dict]:
     try:
         db = get_supabase_client()
         if db:
-            result = (
+            result = await (
                 db.table("custom_search_terms")
                 .select("*")
                 .eq("is_active", True)
                 .order("created_at", desc=True)
-                .execute()
+                .execute_async()
             )
             return result.data if result and result.data else []
     except Exception as exc:  # pragma: no cover
@@ -138,14 +138,14 @@ async def add_custom_search_term(term: str, category: str = "custom") -> bool:
     try:
         db = get_supabase_client()
         if db:
-            db.table("custom_search_terms").upsert(
+            await db.table("custom_search_terms").upsert(
                 {
                     "term": term,
                     "category": category,
                     "is_active": True,
                 },
                 on_conflict="term",
-            ).execute()
+            ).execute_async()
             logger.info(f"Suchbegriff hinzugefügt: '{term}' ({category})")
             return True
     except Exception as exc:  # pragma: no cover
@@ -158,7 +158,7 @@ async def remove_custom_search_term(term: str) -> bool:
     try:
         db = get_supabase_client()
         if db:
-            db.table("custom_search_terms").update({"is_active": False}).eq("term", term).execute()
+            await db.table("custom_search_terms").update({"is_active": False}).eq("term", term).execute_async()
             logger.info(f"Suchbegriff deaktiviert: '{term}'")
             return True
     except Exception as exc:  # pragma: no cover

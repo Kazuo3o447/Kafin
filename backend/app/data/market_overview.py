@@ -535,7 +535,7 @@ async def save_daily_snapshot(
         }
 
         try:
-            db.table("daily_snapshots").upsert(record, on_conflict="date").execute()
+            await db.table("daily_snapshots").upsert(record, on_conflict="date").execute_async()
         except Exception as exc:
             error_text = str(exc).lower()
             if "pct_above_sma50" in error_text or "pct_above_sma200" in error_text or "column" in error_text:
@@ -546,7 +546,7 @@ async def save_daily_snapshot(
                 logger.warning(
                     "daily_snapshots breadth columns fehlen noch; speichere Snapshot ohne breadth-Felder."
                 )
-                db.table("daily_snapshots").upsert(fallback_record, on_conflict="date").execute()
+                await db.table("daily_snapshots").upsert(fallback_record, on_conflict="date").execute_async()
             else:
                 raise
         logger.info(f"Tages-Snapshot gespeichert/aktualisiert für {date.today()}")
@@ -565,12 +565,12 @@ async def get_yesterday_snapshot() -> dict | None:
             return None
 
         # Versuche die letzten 3 Tage (für Wochenenden/Feiertage)
-        result = db.table("daily_snapshots") \
+        result = await db.table("daily_snapshots") \
             .select("*") \
             .lt("date", date.today().isoformat()) \
             .order("date", desc=True) \
             .limit(1) \
-            .execute()
+            .execute_async()
 
         if result.data:
             return result.data[0]
@@ -675,12 +675,12 @@ async def get_market_breadth() -> dict:
             today = date.today()
             d20 = (today - timedelta(days=40)).isoformat()
 
-            rows = (
+            rows = await (
                 db.table("daily_snapshots")
                 .select("date,pct_above_sma50")
                 .gte("date", d20)
                 .order("date", desc=False)
-                .execute()
+                .execute_async()
             )
             if rows.data:
                 valid_rows = [

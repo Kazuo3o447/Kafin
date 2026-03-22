@@ -479,11 +479,11 @@ async def generate_audit_report(ticker: str) -> str:
             from backend.app.db import get_supabase_client as _get_db
             _db = _get_db()
             if _db:
-                _wl_res = (
+                _wl_res = await (
                     _db.table("watchlist")
                     .select("web_prio")
                     .eq("ticker", ticker.upper())
-                    .execute()
+                    .execute_async()
                 )
                 _wl_rows = _wl_res.data if _wl_res and _wl_res.data else []
                 if _wl_rows and _wl_rows[0].get("web_prio") is not None:
@@ -954,7 +954,7 @@ async def generate_audit_report(ticker: str) -> str:
             elif hasattr(e_date, "strftime"):
                 e_date = e_date.strftime("%Y-%m-%d")
 
-            db.table("audit_reports").insert({
+            await db.table("audit_reports").insert({
                 "ticker": ticker,
                 "report_date": datetime.now().strftime("%Y-%m-%d"),
                 "earnings_date": str(e_date),
@@ -962,7 +962,7 @@ async def generate_audit_report(ticker: str) -> str:
                 "opportunity_score": opp_score.total_score if opp_score else 0,
                 "torpedo_score": torp_score.total_score if torp_score else 0,
                 "created_at": datetime.now().isoformat()
-            }).execute()
+            }).execute_async()
             logger.info(f"Audit-Report für {ticker} in Supabase gespeichert")
             try:
                 await open_shadow_trade(
@@ -984,7 +984,7 @@ async def generate_audit_report(ticker: str) -> str:
 
         db = get_supabase_client()
         if db:
-            db.table("score_history").upsert({
+            await db.table("score_history").upsert({
                 "ticker": ticker,
                 "date": date_type.today().isoformat(),
                 "opportunity_score": opp_score.total_score if opp_score else None,
@@ -992,7 +992,7 @@ async def generate_audit_report(ticker: str) -> str:
                 "price": getattr(technicals, "current_price", None) if technicals else None,
                 "rsi": getattr(technicals, "rsi_14", None) if technicals else None,
                 "trend": getattr(technicals, "trend", None) if technicals else None,
-            }, on_conflict="ticker,date").execute()
+            }, on_conflict="ticker,date").execute_async()
     except Exception as e:
         logger.debug(f"Score-History Speicher-Fehler: {e}")
 
@@ -1107,7 +1107,7 @@ async def generate_sunday_report(tickers: list[str]) -> str:
     try:
         db = get_supabase_client()
         if db:
-            perf = db.table("performance_tracking").select("*").order("period", desc=True).limit(1).execute()
+            perf = await db.table("performance_tracking").select("*").order("period", desc=True).limit(1).execute_async()
             if perf.data:
                 p = perf.data[0]
                 accuracy = p.get("accuracy_percent", 0)

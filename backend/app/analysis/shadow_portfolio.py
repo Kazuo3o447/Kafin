@@ -66,7 +66,7 @@ async def open_shadow_trade(
             .eq("ticker", ticker)
             .eq("quarter", quarter)
             .eq("status", "open")
-            .execute()
+            .execute_async()
         )
         if existing.data:
             logger.info(f"Shadow Trade für {ticker}/{quarter} bereits offen — kein Duplikat")
@@ -107,7 +107,7 @@ async def open_shadow_trade(
         db = get_supabase_client()
         if db is None:
             return {"error": "Supabase nicht verfügbar"}
-        db.table("shadow_trades").insert(record).execute()
+        await db.table("shadow_trades").insert(record).execute_async()
         logger.info(f"Shadow Trade eröffnet: {ticker} {recommendation} @ ${entry_price}")
         return {"success": True, "ticker": ticker, "entry_price": entry_price}
     except Exception as exc:  # noqa: BLE001
@@ -126,7 +126,7 @@ async def close_shadow_trade(ticker: str, quarter: str) -> Dict[str, Any]:
             .eq("ticker", ticker)
             .eq("quarter", quarter)
             .eq("status", "open")
-            .execute()
+            .execute_async()
         )
         if not result.data:
             logger.info(f"Kein offener Shadow Trade für {ticker}/{quarter}")
@@ -195,7 +195,7 @@ async def close_shadow_trade(ticker: str, quarter: str) -> Dict[str, Any]:
         db = get_supabase_client()
         if db is None:
             return {"error": "Supabase nicht verfügbar"}
-        db.table("shadow_trades").update(update_data).eq("id", trade["id"]).execute()
+        await db.table("shadow_trades").update(update_data).eq("id", trade["id"]).execute_async()
         logger.info(
             f"Shadow Trade geschlossen: {ticker} {quarter} PnL={pnl_percent:+.1f}% ({exit_reason})"
         )
@@ -210,7 +210,7 @@ async def get_shadow_portfolio_summary() -> Dict[str, Any]:
         db = get_supabase_client()
         if db is None:
             return {"error": "Supabase nicht verfügbar", "open_trades": [], "closed_trades": []}
-        all_trades = db.table("shadow_trades").select("*").execute().data or []
+        all_trades = (await db.table("shadow_trades").select("*").execute_async()).data or []
     except Exception as exc:  # noqa: BLE001
         logger.error(f"Shadow Portfolio Summary Fehler: {exc}")
         return {"error": str(exc), "open_trades": [], "closed_trades": []}

@@ -165,11 +165,11 @@ async def get_web_intelligence(
             from backend.app.db import get_supabase_client
             db = get_supabase_client()
             if db:
-                res = (
+                res = await (
                     db.table("web_intelligence_cache")
                     .select("summary, expires_at, prio")
                     .eq("ticker", ticker.upper())
-                    .execute()
+                    .execute_async()
                 )
                 rows = res.data if res and res.data else []
                 if rows:
@@ -214,7 +214,7 @@ async def get_web_intelligence(
             _now = datetime.now(_tz.utc)
             ttl_hours = PRIO_TTL_HOURS.get(effective_prio, 24)
             expires_at = _now + timedelta(hours=ttl_hours)
-            db.table("web_intelligence_cache").upsert(
+            await db.table("web_intelligence_cache").upsert(
                 {
                     "ticker": ticker.upper(),
                     "prio": effective_prio,
@@ -224,7 +224,7 @@ async def get_web_intelligence(
                     "expires_at": expires_at.isoformat(),
                 },
                 on_conflict="ticker",
-            ).execute()
+            ).execute_async()
             logger.debug(f"Web Intelligence Cache gespeichert: {ticker}")
     except Exception as e:
         logger.warning(f"Cache-Write Fehler {ticker}: {e}")

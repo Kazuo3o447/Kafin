@@ -167,7 +167,7 @@ async def ensure_daily_snapshots_table():
 
         # Teste ob Tabelle existiert mit einem leeren Select
         try:
-            db.table("daily_snapshots").select("id").limit(1).execute()
+            await db.table("daily_snapshots").select("id").limit(1).execute_async()
             logger.info("Tabelle daily_snapshots existiert bereits.")
         except Exception:
             logger.warning("Tabelle daily_snapshots fehlt. Bitte manuell in Supabase anlegen:")

@@ -24,9 +24,19 @@ _mock_watchlist = [
 ]
 
 
+async def _fetch_watchlist_async() -> List[Dict[str, Any]]:
+    client = get_supabase_client()
+    response = await client.table("watchlist").select("*").execute_async()
+    return response.data
+
 def _fetch_watchlist_sync() -> List[Dict[str, Any]]:
     client = get_supabase_client()
     response = client.table("watchlist").select("*").execute()
+    return response.data
+
+async def _insert_ticker_async(item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    client = get_supabase_client()
+    response = await client.table("watchlist").insert(item).execute_async()
     return response.data
 
 def _insert_ticker_sync(item: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -34,14 +44,19 @@ def _insert_ticker_sync(item: Dict[str, Any]) -> List[Dict[str, Any]]:
     response = client.table("watchlist").insert(item).execute()
     return response.data
 
+async def _delete_ticker_async(ticker: str) -> List[Dict[str, Any]]:
+    client = get_supabase_client()
+    response = await client.table("watchlist").delete().eq("ticker", ticker).execute_async()
+    return response.data
+
 def _delete_ticker_sync(ticker: str) -> List[Dict[str, Any]]:
     client = get_supabase_client()
     response = client.table("watchlist").delete().eq("ticker", ticker).execute()
     return response.data
 
-def _update_ticker_sync(ticker: str, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+async def _update_ticker_async(ticker: str, data: Dict[str, Any]) -> List[Dict[str, Any]]:
     client = get_supabase_client()
-    response = client.table("watchlist").update(data).eq("ticker", ticker).execute()
+    response = await client.table("watchlist").update(data).eq("ticker", ticker).execute_async()
     return response.data
 
 
@@ -50,7 +65,7 @@ async def get_watchlist() -> List[Dict[str, Any]]:
         return _mock_watchlist
 
     try:
-        data = await asyncio.to_thread(_fetch_watchlist_sync)
+        data = await _fetch_watchlist_async()
         # Feld-Mapping von SQL Array zu erwartetem Listen-Feld
         for item in data:
             if "cross_signal_tickers" in item:
@@ -91,7 +106,7 @@ async def add_ticker(ticker: str, company_name: str, sector: str, notes: str = "
     }
     
     try:
-        data = await asyncio.to_thread(_insert_ticker_sync, db_item)
+        data = await _insert_ticker_async(db_item)
         if data:
             result = data[0]
             if "cross_signal_tickers" in result:
@@ -110,7 +125,7 @@ async def remove_ticker(ticker: str) -> bool:
         return len(_mock_watchlist) < initial_len
 
     try:
-        data = await asyncio.to_thread(_delete_ticker_sync, ticker.upper())
+        data = await _delete_ticker_async(ticker.upper())
         return len(data) > 0
     except Exception as e:
         logger.error(f"Fehler beim Löschen des Tickers {ticker} aus Supabase: {e}")
@@ -130,7 +145,7 @@ async def update_ticker(ticker: str, **kwargs) -> Dict[str, Any]:
         db_kwargs["cross_signal_tickers"] = db_kwargs.pop("cross_signals")
         
     try:
-        data = await asyncio.to_thread(_update_ticker_sync, ticker.upper(), db_kwargs)
+        data = await _update_ticker_async(ticker.upper(), db_kwargs)
         if data:
             result = data[0]
             if "cross_signal_tickers" in result:

@@ -78,14 +78,14 @@ async def _check_alert_cooldown(key: str) -> bool:
             datetime.now(timezone.utc)
             - timedelta(hours=PEER_ALERT_COOLDOWN_HOURS)
         ).isoformat()
-        res = (
+        res = await (
             db.table("system_logs")
             .select("created_at")
             .eq("component", "peer_monitor")
             .eq("message", f"alert_sent:{key}")
             .gte("created_at", cutoff)
             .limit(1)
-            .execute()
+            .execute_async()
         )
         rows = res.data if res and res.data else []
         return len(rows) == 0
@@ -99,12 +99,12 @@ async def _log_alert(key: str) -> None:
         from backend.app.db import get_supabase_client
         db = get_supabase_client()
         if db:
-            db.table("system_logs").insert({
+            await db.table("system_logs").insert({
                 "component": "peer_monitor",
                 "level": "INFO",
                 "message": f"alert_sent:{key}",
                 "created_at": datetime.now(timezone.utc).isoformat(),
-            }).execute()
+            }).execute_async()
     except Exception:
         pass
 

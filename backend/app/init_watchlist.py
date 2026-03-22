@@ -30,7 +30,7 @@ async def ensure_watchlist_populated():
             logger.warning("Supabase nicht verfügbar. Watchlist-Init übersprungen.")
             return
 
-        result = db.table("watchlist").select("ticker").limit(1).execute()
+        result = await db.table("watchlist").select("ticker").limit(1).execute_async()
         if result.data:
             logger.info(f"Watchlist enthält bereits Daten. Init übersprungen.")
             return
@@ -38,7 +38,7 @@ async def ensure_watchlist_populated():
         logger.info(f"Watchlist ist leer. Füge {len(DEFAULT_WATCHLIST)} Default-Ticker ein...")
         for item in DEFAULT_WATCHLIST:
             try:
-                db.table("watchlist").insert(item).execute()
+                await db.table("watchlist").insert(item).execute_async()
                 logger.info(f"  ✅ {item['ticker']} eingefügt")
             except Exception as e:
                 logger.warning(f"  ⚠️ {item['ticker']} fehlgeschlagen: {e}")

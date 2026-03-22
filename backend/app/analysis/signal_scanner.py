@@ -157,13 +157,13 @@ async def _check_ticker_signals(ticker: str) -> List[Dict]:
         try:
             db = get_supabase_client()
             if db:
-                result = (
+                result = await (
                     db.table("score_history")
                     .select("*")
                     .eq("ticker", ticker)
                     .order("date", desc=True)
                     .limit(2)
-                    .execute()
+                    .execute_async()
                 )
                 data = result.data if result and result.data else []
                 if len(data) >= 2:

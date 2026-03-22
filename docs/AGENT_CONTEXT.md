@@ -5,7 +5,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 5.16.4 (Cascade 5 self-review + status)
+**Version**: 6.0.4 (RAG + DB Migration Complete)
 **Stand**: 2026-03-22
 
 ---
@@ -33,10 +33,41 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 
 ---
 
-## Sentiment-Integration (neu in v5.10.0)
+## Datenbank (v6.0.0+)
+PostgreSQL 16 + pgvector (lokal, Docker)
+Container: kafin-postgres (pgvector/pgvector:pg16)
+Connection: postgresql://kafin:***@postgres:5432/kafin
+Pool: asyncpg, min=2, max=10
+
+14 Tabellen:
+- watchlist, short_term_memory, long_term_memory
+- macro_snapshots, btc_snapshots, audit_reports
+- earnings_reviews, performance_tracking
+- daily_snapshots, shadow_trades, score_history
+- system_logs, web_intelligence_cache
+- custom_search_terms
+
+pgvector (vector(384)):
+- short_term_memory.embedding (HNSW)
+- long_term_memory.embedding (HNSW)
+- audit_reports.embedding (HNSW)
+Modell: all-MiniLM-L6-v2 (lokal, 22MB)
+
+DB Client: backend/app/database.py (Drop-in Adapter)
+API-kompatibel mit Supabase-Syntax:
+  db.table("x").select("*").eq("k","v").execute()
+Supabase komplett abgelöst.
+
+RAG Endpoints:
+  GET /api/data/rag/similar-news?query=...
+  GET /api/data/rag/similar-audits?query=...
+
+---
+
+## Sentiment-Integration (v5.10.0+)
 
 ### Architektur
-- **Storage**: Supabase `short_term_memory` Tabelle mit FinBERT-Analysen
+- **Storage**: PostgreSQL `short_term_memory` Tabelle mit FinBERT-Analysen
 - **Batch-Processing**: `get_bullet_points_batch()` für effiziente Queries
 - **Aggregation**: `_calc_sentiment_from_bullets()` mit avg, trend, label, count, has_material
 - **Market Context**: S&P-500 Sentiment via `get_market_news_for_sentiment()`

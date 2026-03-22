@@ -46,7 +46,7 @@ async def save_insight(
             logger.warning("Supabase nicht verfügbar. Insight nicht gespeichert.")
             return False
 
-        db.table("long_term_memory").insert(record).execute()
+        await db.table("long_term_memory").insert(record).execute_async()
         logger.info(f"Langzeit-Insight gespeichert: [{ticker}] {category}: {insight[:60]}...")
         return True
     except Exception as e:
@@ -64,7 +64,7 @@ async def get_insights(ticker: str, category: Optional[str] = None) -> list[dict
         query = db.table("long_term_memory").select("*").eq("ticker", ticker)
         if category:
             query = query.eq("category", category)
-        result = query.order("updated_at", desc=True).execute()
+        result = await query.order("updated_at", desc=True).execute_async()
         return result.data
     except Exception as e:
         logger.error(f"Langzeit-Abruf Fehler für {ticker}: {e}")

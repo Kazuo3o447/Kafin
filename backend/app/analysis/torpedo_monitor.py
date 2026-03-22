@@ -8,6 +8,7 @@ Config: Keine
 API:    Keine
 """
 
+import asyncio
 from backend.app.memory.short_term import get_material_news
 from backend.app.memory.watchlist import get_watchlist
 from backend.app.alerts.telegram import send_telegram_alert
@@ -21,10 +22,13 @@ async def check_torpedo_updates():
     Prüft für alle Watchlist-Ticker ob seit dem letzten Scan
     neue Torpedo-Events aufgetaucht sind.
     Wird am Ende jedes News-Pipeline-Laufs aufgerufen.
+    
+    Rate Limiting: Sequential processing mit 1s Delay zwischen Tickern
+    um Finnhub 60/min Limit nicht zu überschreiten.
     """
     wl = await get_watchlist()
-
-    for item in wl:
+    
+    for i, item in enumerate(wl):
         ticker = item["ticker"]
         material_news = await get_material_news(ticker)
 
@@ -36,3 +40,8 @@ async def check_torpedo_updates():
             # But for Phase 3B keeping it simple to just log/alert that a Torpedo event happened recently.
             # Note: The sec_edgar.py and news_processor.py already send direct alerts, so this acts as a 
             # secondary monitor to correlate torpedo events with recent reports.
+        
+        # Rate limiting: 1s delay between tickers (except last ticker)
+        # Prevents Finnhub API rate limit (60/min) when _check_score_jump is added
+        if i < len(wl) - 1:
+            await asyncio.sleep(1.0)

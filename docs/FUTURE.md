@@ -5,6 +5,18 @@
 
 ---
 
+## ✅ FEATURE: Modular Backend Architecture (v6.1.5)
+
+**Status: ✅ ERLEDIGT — v6.1.5 (22.03.2026)**
+
+- ✅ Monolithische `main.py` vollständig in fachliche Router zerlegt
+- ✅ Neue Router-Struktur unter `backend/app/routers/` (data, news, reports, watchlist, analysis, shadow, logs, system, web_intelligence)
+- ✅ Admin-Endpunkte in `backend/app/admin/` zentralisiert
+- ✅ Startup/Shutdown-Logik in `main.py` modernisiert und entschlackt
+- ✅ API-Keys und Settings-Management im Admin-Panel verifiziert
+
+---
+
 ## ✅ FEATURE: Prompt Quality + Modell-Optimierung
 
 **Status: ✅ ERLEDIGT — v6.1.4 (22.03.2026)**

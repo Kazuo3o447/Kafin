@@ -8,6 +8,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 3. Skimme die historischen Meilensteine nur für Kontext oder Audit-Zwecke.
 
 ## 🟢 Aktueller Stand
+- **Modular Architecture v6.1.5**: Monolithische `main.py` vollständig in fachliche Router (`routers/`, `admin/`) zerlegt. Bessere Wartbarkeit und Übersichtlichkeit.
 - **Prompt Quality v6.1.4**: Alle TODO-Platzhalter implementiert (audit_report: Max Pain, CEO, Mitarbeiter; post_earnings: AH-Reaktion, Fear & Greed; morning_briefing: Fear & Greed); DeepSeek Modell-Matrix optimiert (Reasoner für komplexe Tasks, Chat für schnelle); groq.py API-Key aus settings statt module-level
 - **API Usage Tracking**: usage_tracker.py mit Redis-Puffer + DB-Flush (5min); Token-Counter für DeepSeek/Groq; Call-Counter für FMP (250/Tag) + Finnhub (60/min); Settings → APIs zeigt Echtzeit-Verbrauch mit Balken und Kosten
 - **FRED**: 5xx-Retries, API-Key-Redaktion und graceful degradation sind im Backend aktiv.
@@ -24,6 +25,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - **Async-First**: Alle produktionsrelevanten Datenbank-Aufrufe auf `execute_async()` migriert, um Event-Loop Deadlocks zu verhindern.
 - **Status-/Settings-Seiten**: Diagnose-Responses sind stabil und nutzen die neue lokale PostgreSQL-Infrastruktur.
 - **Kaskade 5**: Reddit Retail Sentiment, Sympathy Play Radar, Shadow Trade Modal und Research-Integration sind live; v5.16.4 Self-Review abgeschlossen.
+- **v6.2.4 Critical Bug Fixes**: Torpedo Monitor Rate Limiting (1s Delay), Report Renderer Regex Fix (4+ chars), Morning Briefing Archiv (briefing_summary gespeichert), Equity Curve Stabilität verifiziert
 
 ## �️ Wichtige Dateien / APIs
 | Bereich | Datei / Endpoint | Zweck |
@@ -35,7 +37,9 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 | Diagnostics Routes | `frontend/src/app/api/diagnostics/full/route.ts`, `frontend/src/app/api/diagnostics/db/route.ts` | Frontend-seitige Proxy-/Fallback-Schicht für Systemchecks |
 | Report Routes | `frontend/src/app/api/reports/generate/[ticker]/route.ts`, `frontend/src/app/api/reports/generate-morning/route.ts`, `frontend/src/app/api/reports/generate-sunday/route.ts` | Timeouts und Fallbacks für Report-Generierung |
 | Log Viewer | `frontend/src/components/LogViewer.tsx` | Suche, Filter, Export und `Ignore`-Kategorie |
-| Backend Router | `backend/app/main.py` | API-Router, Log-Endpunkte, Diagnostics, System-Integrationen |
+| Backend Router | `backend/app/main.py` | Minimaler Entrypoint & Router-Registrierung |
+| Routers | `backend/app/routers/` | Fachliche Endpoints (data, news, reports, watchlist, analysis, shadow, logs, system) |
+| Admin Panel | `backend/app/admin/` | Admin-UI und Admin-Operations Endpoints |
 | Logging | `backend/app/logger.py` | Datei-Logging, In-Memory-Buffer, Ignore-Klassifizierung |
 | Groq Client | `backend/app/analysis/groq.py` | Groq llama-3.1-8b-instant API mit DeepSeek-Fallback |
 | Usage Tracker | `backend/app/analysis/usage_tracker.py` | API Usage Tracking + Token Counter (Redis + PostgreSQL) |

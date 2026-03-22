@@ -17,11 +17,12 @@ Kafin ist eine moderne Earnings-Trading-Plattform mit KI-Unterstützung, gebaut 
 
 ### Backend
 - **Runtime**: Python 3.11
-- **Framework**: FastAPI mit AsyncIO
+- **Framework**: FastAPI (Modular Architecture via APIRouter)
 - **Database**: PostgreSQL 16 + pgvector (lokal)
+- **Database Client**: asyncpg (hochperformantes Connection Pooling)
 - **Cache**: Redis (Session + API + Usage Buffer)
 - **Logging**: structlog mit In-Memory Buffer
-- **Testing**: pytest
+- **Embeddings**: sentence-transformers (all-MiniLM-L6-v2) - lokal
 - **Data Processing**: pandas, yfinance, Finnhub API
 - **Usage Tracking**: Redis-Puffer + PostgreSQL Aggregation
 - **Prompt Quality**: v0.4 mit vollständigen Platzhalter-Befüllung
@@ -100,24 +101,19 @@ export const api = {
 
 ## Backend Architektur
 
-### FastAPI Structure
-```
-backend/app/
-├── main.py               # FastAPI App & Routes
-├── data/                 # Data Providers
-│   ├── yfinance_data.py  # Technical Data & Charts
-│   ├── finnhub.py        # Market Data
-│   ├── fmp.py            # Financial Metrics
-│   └── google_news.py    # News Aggregation
-├── analysis/             # AI Analysis
-│   ├── chart_analyst.py  # DeepSeek Chart Analysis
-│   ├── report_generator.py # Morning Briefing
-│   └── post_earnings_review.py # Post-Earnings
-├── alerts/               # Signal Engine
-│   ├── signal_scanner.py # Technical Signals
-│   └── opportunity_scanner.py # Earnings Setups
-└── config.py             # Settings Management
-```
+### Modular Router Structure (backend/app/)
+- **main.py**: Zentraler Entrypoint, Middleware-Konfiguration und Router-Registrierung.
+- **routers/**: Fachlich getrennte API-Module:
+  - `data.py`: Marktdaten, Research, Technicals, Fundamentals.
+  - `news.py`: News-Pipeline, Google News Scans, SEC Edgar.
+  - `analysis.py`: FinBERT, Signale, RAG Search, Market-Audit.
+  - `reports.py`: Generierung von Audit-, Morning- und Sunday-Reports.
+  - `watchlist.py`: Management der Ticker-Watchlist.
+  - `shadow.py`: Shadow Portfolio Tracking und Trade-Management.
+  - `logs.py`: System-Logs, Filtering und Export.
+  - `system.py`: Health-Checks, Diagnostics, n8n/Telegram Setup.
+  - `web_intelligence.py`: Batch-Verarbeitung und Deep-Search Integration.
+- **admin/**: Admin-Panel UI (HTML) und operative Admin-Endpunkte.
 
 ### Robust Watchlist API
 ```python
@@ -150,16 +146,11 @@ GET /api/chart/overlays/{ticker}  # Earnings, Torpedo, Insider
 }
 ```
 
-### Database Schema
-```sql
--- Core Tables
-watchlist                 -- User Watchlist mit optionalen Feldern
-audit_reports            -- AI Analysis (DeepSeek)
-earnings_reviews         -- Post-Earnings Analysis
-news_bullets            -- News Stichpunkte (FinBERT)
-signal_alerts           -- Technical Signals
-chart_data              -- OHLCV Cache für Charts
-```
+### Database Stack
+- **PostgreSQL 16**: Haupt-Datenbank im Docker-Container.
+- **pgvector**: Erweiterung für Vektor-Operationen (Semantische Suche).
+- **asyncpg**: Asynchroner Treiber für maximale Performance.
+- **QueryBuilder**: Custom Abstraktionsschicht für SQL-Abfragen.
 
 ## Data Flow
 
@@ -258,18 +249,11 @@ apis:
 - **Error Messages**: Klare, kontextbezogene Hinweise
 - **Fallbacks**: Graceful Degradation bei fehlenden Daten
 
-## Security
-
-### Authentication
-- Supabase Auth Integration
-- JWT Token Management
-- API Key Protection
-
-### Data Protection
-- Input Validation (Pydantic)
-- SQL Injection Prevention
-- CORS Configuration
-- Rate Limiting (optional)
+### Security
+- **Environment Variables**: Alle API-Keys und DB-Credentials in `.env`.
+- **API Key Protection**: Zentrales Management über `backend/app/config.py`.
+- **CORS Configuration**: Erlaubte Origins für Frontend und lokale Entwicklung.
+- **Input Validation**: Strenge Pydantic-Modelle für alle API-Anfragen.
 
 ## Monitoring & Logging
 
@@ -342,5 +326,5 @@ services:
 
 ---
 
-**Version**: 6.0 - Dark Mode & UX Overhaul Complete  
-**Last Updated**: 2026-03-18
+**Version**: 6.1.5 - Modular Architecture & PostgreSQL Migration Complete
+**Last Updated**: 2026-03-22

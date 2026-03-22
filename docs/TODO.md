@@ -41,10 +41,10 @@
 - [x] Backend DB Switch (K6-3)
 - [x] pgvector Embedding Pipeline (K6-4)
 - [x] RAG Query Endpoint (K6-5)
-- [ ] P3a main.py Router-Split (3124 Zeilen → 6 Dateien)
-- [ ] SYSTEM_LOGS Cleanup (1 SQL-Statement)
-- [ ] SECTOR_TO_ETF Duplikation → shared utils
-- [ ] P2c FinBERT Batch-Optimierung
+- [x] P3a main.py Router-Split (v6.1.5)
+- [x] SYSTEM_LOGS Cleanup (FastAPI Endpoint + Manual SQL)
+- [x] SECTOR_TO_ETF Duplikation → shared utils
+- [ ] P2c FinBERT Batch-Optimierung (GPU/Batching)
 - [ ] Shadow Trading Journal Phase B (KI-Lernschleife)
 
 ## ❌ NICHT UMSETZEN (ohne Polygon.io Key)

@@ -1553,7 +1553,7 @@ async def generate_morning_briefing() -> str:
         except Exception as e:
             logger.debug(f"Breadth für Snapshot nicht geladen: {e}")
 
-        await save_daily_snapshot(market, macro, regime, breadth_data=breadth)
+        await save_daily_snapshot(market, macro, regime, breadth_data=breadth, briefing_summary=result)
     except Exception as e:
         logger.warning(f"Snapshot-Speicherung fehlgeschlagen: {e}")
 

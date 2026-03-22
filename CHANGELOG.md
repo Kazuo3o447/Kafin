@@ -2,6 +2,28 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [6.2.4] - 2026-03-22 - Critical Bug Fixes
+
+### 🔧 Critical Fixes
+- **Torpedo Monitor Rate Limiting**: Sequential processing mit 1s Delay zwischen Tickern
+  - Verhindert Finnhub 60/min Limit Überschreitung
+  - Wichtig für zukünftige _check_score_jump Implementierung
+  - asyncio.sleep() zwischen Watchlist-Ticker-Checks
+
+- **Report Renderer Regex**: Fix für Ticker-Falschpositiv
+  - Altes Regex: `/^[A-ZÄÖÜ][A-ZÄÖÜ\s\-&()]+:/` matchte "NVDA: ..."
+  - Neues Regex: `/^[A-ZÄÖÜ]{4,}[A-ZÄÖÜ\s\-&()]*:/` erfordert 4+ Zeichen
+  - Verhindert dass Ticker als Section-Header erkannt werden
+
+- **Morning Briefing Archiv**: briefing_summary wird jetzt gespeichert
+  - `save_daily_snapshot()` akzeptiert briefing_summary Parameter
+  - Morning Briefing generiert Report aber speichert ihn nicht
+  - Archiv-Endpoint zeigt jetzt tatsächliche Briefings statt leere Liste
+
+### 🛡️ Stabilitäts-Verbesserungen
+- **Equity Curve**: Division-by-zero Schutz bestätigt (`|| 1` Fix)
+- **Watchlist Quick-Add**: company_name Fallback sichergestellt (ticker wenn data null)
+
 ## [6.2.3] - 2026-03-22 - Equity Curve + Fear & Greed Kontext
 
 ### 📈 Performance: Equity Curve Visualization

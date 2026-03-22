@@ -490,6 +490,7 @@ async def save_daily_snapshot(
     macro_data,
     regime: str = "neutral",
     breadth_data: dict | None = None,
+    briefing_summary: str | None = None,
 ):
     """Speichert den Tages-Snapshot für den Vergleich am nächsten Tag."""
     from backend.app.db import get_supabase_client
@@ -532,6 +533,7 @@ async def save_daily_snapshot(
                 breadth_data.get("pct_above_sma200")
                 if breadth_data else None
             ),
+            "briefing_summary": briefing_summary,
         }
 
         try:

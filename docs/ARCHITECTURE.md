@@ -7,12 +7,18 @@ Kafin ist eine quantitative Handelsplattform für Aktienanalyse und automatisier
 ## Infrastruktur
 
 ### Hardware & Umgebung
-- **Version**: v6.1.4
+- **Version**: v6.1.5
 - **Umgebung**: production (Docker Swarm)
 - **Hardware**: NUC i3 / 16GB RAM / ZimaOS
 - **Container**: Backend (FastAPI) + Frontend (Next.js) + n8n
 - **Datenbank**: PostgreSQL 16 + pgvector (lokal)
 - **Cache**: Redis (Session + API Cache + Usage Buffer)
+
+### Backend-Struktur (Modular)
+Das Backend ist modular aufgebaut, um die monolithische `main.py` zu vermeiden:
+- `app/main.py`: Zentraler Entrypoint, Middleware und Router-Registrierung.
+- `app/routers/`: Fachlich getrennte Endpunkte (data, news, reports, watchlist, analysis, shadow, logs, system).
+- `app/admin/`: Admin-Panel UI und Admin-spezifische API-Operationen.
 
 ### Docker-Architektur
 ```
@@ -89,11 +95,11 @@ kafin-n8n         → n8n Automation Platform
 
 ### Backend
 - **Python 3.11** — Haupt-Sprache
-- **FastAPI** — REST API Framework
+- **FastAPI** — REST API Framework (Modular via APIRouter)
 - **asyncio** — Asynchrone Verarbeitung
-- **Supabase Client** — Datenbank-Interface
-- **Transformers** — FinBERT ML-Model
-- **scikit-learn** — ML Utilities
+- **asyncpg** — Hochperformanter PostgreSQL Client
+- **Transformers** — FinBERT ML-Model (lokal)
+- **sentence-transformers** — all-MiniLM-L6-v2 für lokale Embeddings
 
 ### Frontend
 - **React 18** — UI Framework

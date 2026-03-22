@@ -9,7 +9,8 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **Real-time News**: FinBERT-gestützte Sentiment-Analyse mit Material-Event-Detection
 - **Chart Intelligence**: Interaktive Kurs-Charts mit SMA-Overlays und Event-Markern
 - **KI-Analysen**: Groq (News-Extraktion) + DeepSeek (Reports) mit optimierter Modell-Matrix
-- **Prompt Quality v6.1.4**: Vollständige Platzhalter-Befüllung (Max Pain, CEO, Fear & Greed, etc.)
+- **Modular Architecture v6.1.5**: Fachlich getrennte API-Router für bessere Wartbarkeit
+- **PostgreSQL 16 + pgvector**: Lokale Vektordatenbank für semantische Suche (RAG)
 - **API Usage Tracking**: Echtzeit-Token-Counter und Call-Limits für alle APIs
 - **Automatisierung**: n8n-Workflows für tägliche Briefings und wöchentliche Reports
 - **System Monitoring**: Live Status Dashboard mit Service-Health und Latenz-Tracking
@@ -71,9 +72,10 @@ docker-compose up -d kafin-frontend
 ## 📊 Plattform-Architektur
 
 ### Backend (FastAPI)
-- **API-Endpunkte**: RESTful APIs für Watchlist, News, Charts, Reports
+- **Zentraler Entrypoint**: `main.py` für App-Init und Router-Registrierung
+- **Modulare Router**: Fachlich getrennte Logik in `backend/app/routers/`
 - **Datenanreicherung**: yfinance, Finnhub, FRED, SEC EDGAR Integration
-- **KI-Verarbeitung**: FinBERT Sentiment, DeepSeek Analysen
+- **KI-Verarbeitung**: FinBERT Sentiment, DeepSeek Analysen, lokale Embeddings
 - **Automatisierung**: n8n Workflow Integration
 - **Logging**: RotatingFileHandler mit 10MB Limit, 5 Backups, persistente Docker-Volumes
 - **Monitoring**: Diagnostics-Endpoint mit Latenz-Tracking und isolierter Fehlerbehandlung
@@ -84,11 +86,12 @@ docker-compose up -d kafin-frontend
 - **State Management**: React Hooks, Client-Side Caching
 - **Charts**: Lightweight Charts mit Overlays und Markern
 
-### Datenbank (Supabase)
+### Datenbank (PostgreSQL)
+- **Local DB**: PostgreSQL 16 mit `pgvector` Erweiterung
 - **Watchlist**: Ticker und Metadaten
-- **News**: Stichpunkte und Sentiment-Daten
+- **News/Memory**: Stichpunkte mit Vektor-Embeddings für RAG
 - **Reports**: Morning Briefings und Analysen
-- **Performance**: Tracking und Historie
+- **API Usage**: Historische Verbrauchsdaten
 
 ## 📚 Dokumentation
 
@@ -142,6 +145,6 @@ docker-compose up -d kafin-frontend
 
 ---
 
-**Version**: 6.0 - Dark Mode & UX Overhaul Complete  
-**Letztes Update**: 2026-03-18  
+**Version**: 6.1.5 - Modular Architecture & PostgreSQL Migration Complete
+**Letztes Update**: 2026-03-22
 **Status**: Production Ready

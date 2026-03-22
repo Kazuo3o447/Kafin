@@ -29,7 +29,7 @@ function ReportRenderer({ text }: { text: string }) {
     if (!line) continue;
 
     // Haupt-Sections (REGIME:, MARKT:, SEKTOREN: etc.)
-    if (/^[A-ZÄÖÜ][A-ZÄÖÜ\s\-&()]+:/.test(line)
+    if (/^[A-ZÄÖÜ]{4,}[A-ZÄÖÜ\s\-&()]*:/.test(line)
         && line.length < 60) {
       const colonIdx = line.indexOf(":");
       sections.push({

@@ -5,8 +5,9 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 6.1.4 (Prompt-Qualität + Modell-Optimierung)
+**Version**: 6.1.4 (Prompt-Qualität + Modell-Optimierung + API Usage Tracking)
 **Stand**: 2026-03-22
+**Latest Commit**: feat: complete api usage tracking implementation v6.1.3
 
 ---
 

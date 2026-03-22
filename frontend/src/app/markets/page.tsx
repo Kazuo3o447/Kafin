@@ -1346,41 +1346,32 @@ function Skeleton() {
 // Main Component
 export default function MarketsPage() {
   // Block states with individual refresh intervals
-  const [globalIndices, setGlobalIndices] = useState<MarketOverview | undefined>(undefined);
-  const [sectorRotation, setSectorRotation] = useState<MarketOverview | undefined>(undefined);
   const [marketBreadth, setMarketBreadth] = useState<MarketBreadth | undefined>(undefined);
   const [macroDashboard, setMacroDashboard] = useState<MacroSnapshot | undefined>(undefined);
   const [crossAsset, setCrossAsset] = useState<IntermarketData | undefined>(undefined);
   const [newsSentiment, setNewsSentiment] = useState<NewsSentimentData | undefined>(undefined);
   const [economicCalendar, setEconomicCalendar] = useState<EconomicCalendar | undefined>(undefined);
   const [marketAudit, setMarketAudit] = useState<MarketAudit | undefined>(undefined);
-  const [macroProxies, setMacroProxies] = useState<MarketOverview | undefined>(undefined);
   
   const [loading, setLoading] = useState(true);
+  const [economicCalendarLoading, setEconomicCalendarLoading] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  
+
   // Fetch functions for each block
-  const fetchGlobalIndices = useCallback(async () => {
+  const [marketOverview, setMarketOverview] = useState<MarketOverview | null>(null);
+  const [marketOverviewTs, setMarketOverviewTs] = useState<string | undefined>();
+
+  const fetchMarketOverview = useCallback(async () => {
     try {
       const data = await api.getMarketOverview();
-      setGlobalIndices(data);
+      setMarketOverview(data);
+      setMarketOverviewTs(data.timestamp);
     } catch (error) {
-      console.error("Global Indices fetch error:", error);
-      setGlobalIndices(undefined);
+      console.error("Market Overview fetch error:", error);
     }
   }, []);
-  
-  const fetchSectorRotation = useCallback(async () => {
-    try {
-      const data = await api.getMarketOverview();
-      setSectorRotation(data);
-    } catch (error) {
-      console.error("Sector Rotation fetch error:", error);
-      setSectorRotation(undefined);
-    }
-  }, []);
-  
+
   const fetchMarketBreadth = useCallback(async () => {
     try {
       const data = await api.getMarketBreadth();
@@ -1430,16 +1421,19 @@ export default function MarketsPage() {
       setEconomicCalendar(undefined);
     }
   }, []);
-  
-  const fetchMacroProxies = useCallback(async () => {
+
+  const refreshEconomicCalendar = useCallback(async () => {
+    setEconomicCalendarLoading(true);
     try {
-      const data = await api.getMarketOverview();
-      setMacroProxies(data);
+      await api.runMacroScan();
+      await fetchEconomicCalendar();
+      setLastUpdate(new Date());
     } catch (error) {
-      console.error("Macro Proxies fetch error:", error);
-      setMacroProxies(undefined);
+      console.error("Economic Calendar refresh error:", error);
+    } finally {
+      setEconomicCalendarLoading(false);
     }
-  }, []);
+  }, [fetchEconomicCalendar]);
   
   const generateAudit = useCallback(async () => {
     setAuditLoading(true);
@@ -1458,14 +1452,12 @@ export default function MarketsPage() {
     setLoading(true);
     try {
       const results = await Promise.allSettled([
-        fetchGlobalIndices(),
-        fetchSectorRotation(),
+        fetchMarketOverview(),
         fetchMarketBreadth(),
         fetchMacroDashboard(),
         fetchCrossAsset(),
         fetchNewsSentiment(),
         fetchEconomicCalendar(),
-        fetchMacroProxies(),
       ]);
       
       console.log("All blocks fetched:", results.map(r => r.status));
@@ -1476,27 +1468,24 @@ export default function MarketsPage() {
       setLoading(false);
     }
   }, [
-    fetchGlobalIndices,
-    fetchSectorRotation,
+    fetchMarketOverview,
     fetchMarketBreadth,
     fetchMacroDashboard,
     fetchCrossAsset,
     fetchNewsSentiment,
     fetchEconomicCalendar,
-    fetchMacroProxies,
   ]);
+
+  const sharedMarketOverview = marketOverview ?? undefined;
+  const sharedMarketOverviewTs = marketOverview?.timestamp ?? marketOverviewTs;
   
   // Set up individual refresh intervals
   useEffect(() => {
     fetchAll();
     
-    // 60s: Global Indices, Sector Rotation, Macro Proxies
+    // 60s: Market Overview (covers Global Indices, Sector Rotation, Macro Proxies)
     const interval60 = setInterval(() => {
-      Promise.allSettled([
-        fetchGlobalIndices(),
-        fetchSectorRotation(),
-        fetchMacroProxies(),
-      ]);
+      fetchMarketOverview();
     }, 60000);
     
     // 5min: Market Breadth
@@ -1525,12 +1514,9 @@ export default function MarketsPage() {
     };
   }, [
     fetchAll,
-    fetchGlobalIndices,
-    fetchSectorRotation,
-    fetchMacroProxies,
+    fetchMarketOverview,
     fetchMarketBreadth,
     fetchMacroDashboard,
-    fetchEconomicCalendar,
     fetchCrossAsset,
     fetchNewsSentiment,
   ]);
@@ -1593,14 +1579,14 @@ export default function MarketsPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Block 1: Global Indices */}
         <GlobalIndicesBlock 
-          data={globalIndices} 
-          timestamp={globalIndices?.timestamp} 
+          data={sharedMarketOverview} 
+          timestamp={sharedMarketOverviewTs} 
         />
         
         {/* Block 2: Sector Rotation */}
         <SectorRotationBlock 
-          data={sectorRotation} 
-          timestamp={sectorRotation?.timestamp} 
+          data={sharedMarketOverview} 
+          timestamp={sharedMarketOverviewTs} 
         />
         
         {/* Block 3: Market Breadth */}
@@ -1632,8 +1618,8 @@ export default function MarketsPage() {
         <EconomicCalendarBlock 
           data={economicCalendar} 
           timestamp={economicCalendar ? new Date().toISOString() : undefined}
-          onRefresh={fetchEconomicCalendar}
-          loading={loading}
+          onRefresh={refreshEconomicCalendar}
+          loading={economicCalendarLoading}
         />
         
         {/* Block 8: Market Audit */}
@@ -1645,8 +1631,8 @@ export default function MarketsPage() {
         
         {/* Block 9: Macro Proxies */}
         <MacroProxiesBlock 
-          data={macroProxies} 
-          timestamp={macroProxies?.timestamp} 
+          data={sharedMarketOverview} 
+          timestamp={sharedMarketOverviewTs} 
         />
       </div>
     </div>

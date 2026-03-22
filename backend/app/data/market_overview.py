@@ -21,6 +21,172 @@ logger = get_logger(__name__)
 
 FIXTURES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "fixtures")
 
+
+def _batch_download(
+    symbols: list[str],
+    period: str = "6mo",
+) -> dict[str, object]:
+    """
+    Lädt Historien für alle Symbole in EINEM
+    yfinance.download() Call.
+    Gibt {symbol: DataFrame} zurück.
+
+    yfinance.download() mit group_by="ticker" liefert
+    MultiIndex: (Field, Ticker) oder (Ticker, Field)
+    je nach Version. Wir normalisieren das.
+    """
+    import yfinance as yf
+    import pandas as pd
+
+    if not symbols:
+        return {}
+
+    try:
+        download_kwargs = {
+            "tickers": symbols,
+            "period": period,
+            "interval": "1d",
+            "auto_adjust": True,
+            "progress": False,
+            "threads": True,
+            "group_by": "ticker",
+        }
+
+        try:
+            raw = yf.download(**download_kwargs, multi_level_index=True)
+        except TypeError:
+            raw = yf.download(**download_kwargs)
+
+        result = {}
+
+        if len(symbols) == 1:
+            # Einzelner Ticker: kein MultiIndex
+            sym = symbols[0]
+            if not raw.empty:
+                result[sym] = raw
+            return result
+
+        # Mehrere Ticker: MultiIndex (Ticker, Field)
+        # oder (Field, Ticker) — normalisieren
+        if isinstance(raw.columns, pd.MultiIndex):
+            # Prüfe Reihenfolge der Level
+            if raw.columns.get_level_values(0)[0] in symbols:
+                # Level 0 = Ticker
+                for sym in symbols:
+                    if sym in raw.columns.get_level_values(0):
+                        df = raw[sym].dropna(how="all")
+                        if not df.empty:
+                            result[sym] = df
+            else:
+                # Level 1 = Ticker (Field, Ticker)
+                for sym in symbols:
+                    try:
+                        df = raw.xs(sym, axis=1, level=1).dropna(
+                            how="all"
+                        )
+                        if not df.empty:
+                            result[sym] = df
+                    except KeyError:
+                        pass
+
+            if result:
+                return result
+
+        # Fallback: falls yfinance nur Teilmengen oder Single-Frames liefert,
+        # benutze die vorhandenen Spalten soweit möglich.
+        for sym in symbols:
+            if sym in getattr(raw, "columns", []):
+                try:
+                    df = raw.xs(sym, axis=1, level=1).dropna(how="all")
+                except Exception:
+                    df = raw[[sym]].dropna(how="all")
+                if not df.empty:
+                    result[sym] = df
+
+        return result
+
+    except Exception as e:
+        logger.error(f"_batch_download Fehler: {e}")
+        return {}
+
+
+def _analyze_from_hist(
+    ticker_symbol: str,
+    hist,    # DataFrame
+    name: str = "",
+) -> dict:
+    """
+    Berechnet technische Analyse aus VORHANDENEM
+    DataFrame (kein neuer yfinance-Call).
+    Identische Logik wie _analyze_ticker().
+    """
+    try:
+        if hist is None or hist.empty or len(hist) < 5:
+            return {"error": f"Keine Daten für {ticker_symbol}"}
+
+        close = hist["Close"]
+        current = float(close.iloc[-1])
+        prev_close = float(close.iloc[-2]) if len(close) > 1 else current
+
+        perf_1d = ((current - prev_close) / prev_close) * 100
+        perf_5d = (
+            ((current - float(close.iloc[-5]))
+             / float(close.iloc[-5])) * 100
+            if len(close) >= 5 else 0
+        )
+        perf_1m = (
+            ((current - float(close.iloc[-21]))
+             / float(close.iloc[-21])) * 100
+            if len(close) >= 21 else 0
+        )
+
+        sma_20 = float(close.tail(20).mean())
+        sma_50 = float(close.tail(50).mean()) if len(close) >= 50 else None
+        sma_200 = float(close.tail(200).mean()) if len(close) >= 200 else None
+
+        rsi = None
+        if len(close) >= 15:
+            rsi = float(_calc_rsi(close))
+
+        high_52w = float(hist["High"].max())
+        low_52w = float(hist["Low"].min())
+        dist_high = ((current - high_52w) / high_52w) * 100
+
+        trend = "sideways"
+        if sma_50 and sma_200:
+            if current > sma_50 > sma_200:
+                trend = "uptrend"
+            elif current < sma_50 < sma_200:
+                trend = "downtrend"
+        elif sma_50:
+            trend = "uptrend" if current > sma_50 else "downtrend"
+
+        support = float(hist["Low"].tail(20).min())
+        resistance = float(hist["High"].tail(20).max())
+
+        return {
+            "name": name,
+            "price": round(current, 2),
+            "change_1d_pct": round(perf_1d, 2),
+            "change_5d_pct": round(perf_5d, 2),
+            "change_1m_pct": round(perf_1m, 2),
+            "sma_20": round(sma_20, 2),
+            "sma_50": round(sma_50, 2) if sma_50 else None,
+            "sma_200": round(sma_200, 2) if sma_200 else None,
+            "rsi_14": round(rsi, 1) if rsi else None,
+            "trend": trend,
+            "above_sma50": (current > sma_50) if sma_50 else None,
+            "above_sma200": (current > sma_200) if sma_200 else None,
+            "support": round(support, 2),
+            "resistance": round(resistance, 2),
+            "high_52w": round(high_52w, 2),
+            "low_52w": round(low_52w, 2),
+            "dist_52w_high_pct": round(dist_high, 1),
+        }
+    except Exception as e:
+        logger.error(f"Analyse-Fehler für {ticker_symbol}: {e}")
+        return {"error": str(e)}
+
 # Indizes die wir täglich tracken
 INDICES = {
     "SPY": "S&P 500",
@@ -169,31 +335,49 @@ async def get_market_overview() -> dict:
         logger.debug("Marktübersicht aus Cache")
         return cached
 
-    logger.info("Erstelle Marktübersicht...")
+    logger.info("Erstelle Marktübersicht (Batch-Download)...")
 
-    result = {"timestamp": datetime.now().isoformat(), "indices": {}, "sectors": {}, "macro": {}}
+    # ALLE Symbole in EINEM Download
+    all_symbols = (
+        list(INDICES.keys())
+        + list(SECTOR_ETFS.keys())
+        + list(MACRO_TICKERS.keys())
+    )
+    # Deduplizieren (falls Überschneidungen)
+    all_symbols = list(dict.fromkeys(all_symbols))
 
-    # Indizes
+    # Ein einziger HTTP-Request statt 24 einzelne
+    hist_data = await asyncio.to_thread(
+        _batch_download, all_symbols, "1y"
+    )
+
+    result = {
+        "timestamp": datetime.now().isoformat(),
+        "indices": {},
+        "sectors": {},
+        "macro": {},
+    }
+
+    # Indizes aus Batch-Daten
     for symbol, name in INDICES.items():
-        data = _analyze_ticker(symbol)
-        data["name"] = name
+        hist = hist_data.get(symbol)
+        data = _analyze_from_hist(symbol, hist, name)
         result["indices"][symbol] = data
-        logger.debug(f"Index {symbol}: {data.get('price', 'N/A')} ({data.get('change_1d_pct', 'N/A')}%)")
 
-    # Sektoren
+    # Sektoren aus Batch-Daten
     for symbol, name in SECTOR_ETFS.items():
-        data = _analyze_ticker(symbol)
-        data["name"] = name
+        hist = hist_data.get(symbol)
+        data = _analyze_from_hist(symbol, hist, name)
         result["sectors"][symbol] = data
 
     # Sortiere Sektoren nach 5-Tages-Performance (stärkste zuerst)
     sorted_sectors = sorted(
         result["sectors"].items(),
-        key=lambda x: x[1].get("change_5d_pct", 0),
+        key=lambda x: x[1].get("change_5d_pct", 0) if x[1].get("change_5d_pct") is not None else x[1].get("perf_5d", 0),
         reverse=True
     )
     result["sector_ranking_5d"] = [
-        {"symbol": s, "name": d["name"], "perf_5d": d.get("change_5d_pct", 0)}
+        {"symbol": s, "name": d["name"], "perf_5d": d.get("change_5d_pct", 0) if d.get("change_5d_pct") is not None else d.get("perf_5d", 0)}
         for s, d in sorted_sectors
     ]
 
@@ -234,13 +418,15 @@ async def get_market_overview() -> dict:
     result["defensive_avg_5d"] = round(defensive_avg, 2)
     result["offensive_avg_5d"] = round(offensive_avg, 2)
 
-    # Makro-Proxys
+    # Makro-Proxys aus Batch-Daten
     for symbol, name in MACRO_TICKERS.items():
-        data = _analyze_ticker(symbol)
-        data["name"] = name
+        hist = hist_data.get(symbol)
+        data = _analyze_from_hist(symbol, hist, name)
         result["macro"][symbol] = data
 
-    logger.info("Marktübersicht erstellt.")
+    logger.info(
+        f"Marktübersicht erstellt ({len(hist_data)} Ticker)"
+    )
     cache_set(cache_key, result, ttl_seconds=300)
     return result
 
@@ -391,17 +577,15 @@ async def get_market_breadth() -> dict:
         return cached
 
     def _calc_breadth():
-        above_50 = 0
-        above_200 = 0
-        advancing = 0
-        declining = 0
-        total = 0
+        above_50 = above_200 = advancing = declining = total = 0
+
+        # EIN Batch-Download statt 50 einzelne Calls
+        hist_data = _batch_download(SP500_TOP50, period="1y")
 
         for ticker in SP500_TOP50:
             try:
-                stock = yf.Ticker(ticker)
-                hist = stock.history(period="1y")
-                if hist.empty or len(hist) < 10:
+                hist = hist_data.get(ticker)
+                if hist is None or hist.empty or len(hist) < 10:
                     continue
 
                 close = hist["Close"]
@@ -445,8 +629,8 @@ async def get_market_breadth() -> dict:
             "declining": declining,
             "sample_size": total,
             "breadth_index": "S&P 500 Top 50 (Marktkapitalisierung)",
-            "pct_above_sma50_5d_ago": None,   # Placeholder
-            "pct_above_sma50_20d_ago": None,  # Placeholder
+            "pct_above_sma50_5d_ago": None,
+            "pct_above_sma50_20d_ago": None,
         }
 
     result = await asyncio.to_thread(_calc_breadth)
@@ -484,31 +668,63 @@ async def get_intermarket_signals() -> dict:
         return cached
 
     def _fetch():
+        INTERMARKET = {
+            "SPY":    "S&P 500",
+            "TLT":    "20Y Treasuries",
+            "GLD":    "Gold",
+            "USO":    "Öl (WTI)",
+            "UUP":    "US Dollar",
+            "^VIX":   "VIX",
+            "^VIX3M": "VIX 3-Monat",
+            "EEM":    "Emerging Markets",
+            "HYG":    "High Yield Bonds",
+        }
+        symbols = list(INTERMARKET.keys())
+
+        # EIN Batch-Download statt 9 einzelne Calls
+        hist_data = _batch_download(symbols, period="3mo")
+
         results = {}
         for symbol, name in INTERMARKET.items():
             try:
-                stock = yf.Ticker(symbol)
-                hist = stock.history(period="3mo")
-                if hist.empty:
+                hist = hist_data.get(symbol)
+                if hist is None or hist.empty:
                     continue
+
                 close = hist["Close"]
                 current = float(close.iloc[-1])
                 prev = float(close.iloc[-2])
-                week_ago = float(close.iloc[-5]) if len(close) >= 5 else current
-                month_ago = float(close.iloc[-21]) if len(close) >= 21 else current
+                week_ago = (
+                    float(close.iloc[-5])
+                    if len(close) >= 5 else current
+                )
+                month_ago = (
+                    float(close.iloc[-21])
+                    if len(close) >= 21 else current
+                )
                 sma20 = float(close.tail(20).mean())
 
                 results[symbol] = {
                     "name": name,
                     "price": round(current, 2),
-                    "change_1d": round(((current - prev) / prev) * 100, 2),
-                    "change_1w": round(((current - week_ago) / week_ago) * 100, 2),
-                    "change_1m": round(((current - month_ago) / month_ago) * 100, 2),
+                    "change_1d": round(
+                        ((current - prev) / prev) * 100, 2
+                    ),
+                    "change_1w": round(
+                        ((current - week_ago) / week_ago) * 100, 2
+                    ),
+                    "change_1m": round(
+                        ((current - month_ago) / month_ago) * 100, 2
+                    ),
                     "above_sma20": current > sma20,
-                    "trend_1m": "steigend" if current > month_ago else "fallend",
+                    "trend_1m": (
+                        "steigend" if current > month_ago
+                        else "fallend"
+                    ),
                 }
             except Exception:
                 continue
+
         return results
 
     data = await asyncio.to_thread(_fetch)

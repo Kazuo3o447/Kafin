@@ -66,6 +66,31 @@ async def startup_event():
     await ensure_daily_snapshots_table()
     log_schema_extension_sql()
 
+    # Warm-Start für Market-Cache
+    import asyncio
+    
+    async def _warm():
+        try:
+            logger.info("Cache-Warm-Start...")
+            from backend.app.data.market_overview import (
+                get_market_overview,
+                get_market_breadth,
+                get_intermarket_signals,
+            )
+            # Parallel laden
+            await asyncio.gather(
+                get_market_overview(),
+                get_market_breadth(),
+                get_intermarket_signals(),
+                return_exceptions=True,
+            )
+            logger.info("Cache-Warm-Start abgeschlossen.")
+        except Exception as e:
+            logger.warning(f"Warm-Start Fehler: {e}")
+
+    # Non-blocking — läuft parallel zum Server-Start
+    asyncio.create_task(_warm())
+
 app.include_router(admin_router)
 app.include_router(score_backfill_router, prefix="/api/admin/scores", tags=["scores"])
 
@@ -987,22 +1012,35 @@ async def api_research_dashboard(
     price = None
     change_pct = None
     try:
-        import yfinance as yf
-        def _fetch_price():
-            s = yf.Ticker(effective_ticker)
-            fi = s.fast_info
-            p = getattr(fi, "last_price", None)
-            c = getattr(fi, "regular_market_day_change_percent", None)
-            return (
-                round(float(p), 2) if p else None,
-                round(float(c) * 100, 2) if c else None,
-            )
-        price, change_pct = await asyncio.to_thread(_fetch_price)
+        if tech and not isinstance(tech, Exception):
+            price = getattr(tech, "current_price", None)
+            change_pct = getattr(tech, "change_1d_pct", None)
     except Exception:
         pass
 
-    if not price and yf_fund:
+    # Fallback: yf_fund wenn tech kein Preis hat
+    if price is None and isinstance(yf_fund, dict):
         price = yf_fund.get("price")
+        if change_pct is None:
+            change_pct = yf_fund.get("change_pct")
+
+    # Letzter Fallback: fast_info (nur wenn beide fehlen)
+    if price is None:
+        try:
+            import yfinance as yf
+            def _fetch_price_fallback():
+                fi = yf.Ticker(effective_ticker).fast_info
+                p = getattr(fi, "last_price", None)
+                c = getattr(fi, "regular_market_day_change_percent", None)
+                return (
+                    round(float(p), 2) if p is not None else None,
+                    round(float(c) * 100, 2) if c is not None else None,
+                )
+            price, change_pct = await asyncio.to_thread(
+                _fetch_price_fallback
+            )
+        except Exception:
+            pass
 
     # ── Fundamentals zusammenführen (FMP > yfinance) ───────────
     pe_ratio = None
@@ -1103,7 +1141,7 @@ async def api_research_dashboard(
                     )
             except Exception:
                 days_to_earnings = 1
-        if iv and iv > 0 and price and price > 0:
+        if iv is not None and iv > 0 and price is not None and price > 0:
             expected_move_pct = round(iv * math.sqrt(days_to_earnings / 365) * 100, 1)
             expected_move_usd = round(price * iv * math.sqrt(days_to_earnings / 365), 2)
     except Exception:
@@ -1159,17 +1197,16 @@ async def api_research_dashboard(
     # ── 30-Tage Kursperformance ────────────────────────────────
     price_change_30d = None
     try:
-        def _fetch_30d():
-            import yfinance as yf
-            hist = yf.Ticker(effective_ticker).history(period="35d")
-            if hist.empty or len(hist) < 2:
-                return None
-            p0 = float(hist["Close"].iloc[0])
-            p1 = float(hist["Close"].iloc[-1])
-            return round(((p1 - p0) / p0) * 100, 1) if p0 > 0 else None
-        price_change_30d = await asyncio.to_thread(_fetch_30d)
+        if tech and not isinstance(tech, Exception):
+            price_change_30d = getattr(tech, "change_1m_pct", None)
+            if price_change_30d is None:
+                # Fallback: aus yf_fund wenn vorhanden
+                price_change_30d = (
+                    yf_fund.get("change_1m_pct")
+                    if isinstance(yf_fund, dict) else None
+                )
     except Exception:
-        pass
+        price_change_30d = None
 
     # ── Relative Stärke berechnen ───────────────────────────────
     market_ov = market_ov or {}
@@ -1199,17 +1236,15 @@ async def api_research_dashboard(
     # 5-Tage Performance für den Ticker (falls vorhanden)
     price_change_5d = None
     try:
-        def _fetch_5d():
-            import yfinance as yf
-            hist = yf.Ticker(effective_ticker).history(period="7d")
-            if hist.empty or len(hist) < 2:
-                return None
-            p0 = float(hist["Close"].iloc[0])
-            p1 = float(hist["Close"].iloc[-1])
-            return round(((p1 - p0) / p0) * 100, 1) if p0 > 0 else None
-        price_change_5d = await asyncio.to_thread(_fetch_5d)
+        if tech and not isinstance(tech, Exception):
+            price_change_5d = getattr(tech, "change_5d_pct", None)
+            if price_change_5d is None:
+                price_change_5d = (
+                    yf_fund.get("change_5d_pct")
+                    if isinstance(yf_fund, dict) else None
+                )
     except Exception:
-        pass
+        price_change_5d = None
 
     rel_strength = {
         "vs_spy_1d": relative_strength(

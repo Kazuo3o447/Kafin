@@ -74,6 +74,27 @@ async def get_technical_setup(ticker: str) -> TechnicalSetup:
 
         distance_to_52w_high = ((current_price - high_52w) / high_52w) * 100 if high_52w else None
 
+        # ── Performance-Werte für Research Dashboard ─────────────────
+        close = hist["Close"]
+        prev_close = float(close.iloc[-2]) if len(close) > 1 else current_price
+        
+        # 1-Tage Performance
+        change_1d_pct = ((current_price - prev_close) / prev_close) * 100 if len(close) > 1 else None
+        
+        # 5-Tage Performance
+        change_5d_pct = (
+            ((current_price - float(close.iloc[-5]))
+             / float(close.iloc[-5])) * 100
+            if len(close) >= 5 else None
+        )
+        
+        # 1-Monat Performance
+        change_1m_pct = (
+            ((current_price - float(close.iloc[-21]))
+             / float(close.iloc[-21])) * 100
+            if len(close) >= 21 else None
+        )
+
         # ── SMA 20 ──────────────────────────────────────────────
         sma_20 = float(hist["Close"].tail(20).mean()) if len(hist) >= 20 else None
 
@@ -137,28 +158,31 @@ async def get_technical_setup(ticker: str) -> TechnicalSetup:
         result = TechnicalSetup(
             ticker=ticker,
             current_price=current_price,
-            sma_50=round(sma_50, 2) if sma_50 else None,
-            sma_200=round(sma_200, 2) if sma_200 else None,
-            rsi_14=round(rsi_14, 2) if rsi_14 else None,
+            sma_50=round(sma_50, 2) if sma_50 is not None else None,
+            sma_200=round(sma_200, 2) if sma_200 is not None else None,
+            rsi_14=round(rsi_14, 2) if rsi_14 is not None else None,
             high_52w=round(high_52w, 2),
             low_52w=round(low_52w, 2),
-            distance_to_52w_high_percent=round(distance_to_52w_high, 2) if distance_to_52w_high else None,
+            distance_to_52w_high_percent=round(distance_to_52w_high, 2) if distance_to_52w_high is not None else None,
             trend=trend,
-            above_sma50=current_price > sma_50 if sma_50 else False,
-            above_sma200=current_price > sma_200 if sma_200 else False,
-            sma_20=round(sma_20, 2) if sma_20 else None,
-            atr_14=round(atr_14, 2) if atr_14 else None,
-            macd=round(macd_val, 4) if macd_val else None,
-            macd_signal=round(macd_signal, 4) if macd_signal else None,
+            above_sma50=current_price > sma_50 if sma_50 is not None else False,
+            above_sma200=current_price > sma_200 if sma_200 is not None else False,
+            sma_20=round(sma_20, 2) if sma_20 is not None else None,
+            atr_14=round(atr_14, 2) if atr_14 is not None else None,
+            macd=round(macd_val, 4) if macd_val is not None else None,
+            macd_signal=round(macd_signal, 4) if macd_signal is not None else None,
             macd_histogram=macd_hist_val,
             macd_bullish=macd_bullish,
-            obv=round(obv_val, 0) if obv_val else None,
+            obv=round(obv_val, 0) if obv_val is not None else None,
             obv_trend=obv_trend,
-            rvol=rvol,
+            rvol=rvol if rvol is not None else None,
             float_shares=float_shares,
             avg_volume=avg_volume,
             shares_outstanding=shares_out,
             bid_ask_spread=bid_ask_spread,
+            change_1d_pct=round(change_1d_pct, 2) if change_1d_pct is not None else None,
+            change_5d_pct=round(change_5d_pct, 2) if change_5d_pct is not None else None,
+            change_1m_pct=round(change_1m_pct, 2) if change_1m_pct is not None else None,
         )
         cache_set(cache_key, result.dict(), ttl_seconds=300)
         return result

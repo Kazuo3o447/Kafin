@@ -36,6 +36,9 @@ class TechnicalSetup(BaseModel):
     avg_volume: Optional[int] = None
     shares_outstanding: Optional[int] = None
     bid_ask_spread: Optional[float] = None
+    change_1d_pct: Optional[float] = None  # 1-Tage Performance für Research
+    change_5d_pct: Optional[float] = None  # 5-Tage Performance für Research
+    change_1m_pct: Optional[float] = None  # 1-Monat Performance für Research
     model_config = ConfigDict(from_attributes=True)
 
 class OptionsMetrics(BaseModel):

@@ -5,7 +5,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 5.10.6 (Signal-Consistency Hotfixes)
+**Version**: 5.10.10 (Stability: Falsey + Design Cleanup)
 **Stand**: 2026-03-22
 
 ---
@@ -65,6 +65,23 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 - **Score History**: Underfilled `score_history`-Ticker werden gezielt nachgeladen, damit Weekly-Deltas stabiler sind
 - **Research Deltas**: Null-Werte werden in der Delta-Anzeige nicht mehr durch truthy-Checks unterdrückt
 - **Position Sizer**: Ungültige Stop-Loss-Konstellationen werden im Research-UI abgefangen
+
+### Bugfixes in v5.10.7
+- **Economic Calendar Refresh**: Der Aktualisieren-Button im Markets-Dashboard triggert jetzt den Makro-Scan und lädt den gespeicherten Kalender danach neu
+- **UI Feedback**: Der Kalender-Refresh nutzt einen eigenen Loading-State statt den globalen Dashboard-Status
+
+### Bugfixes in v5.10.8
+- **Batch-Download Performance**: _batch_download() lädt alle Ticker in einem yfinance.download() Call statt 83 sequentiellen Calls
+- **Market Overview**: 24 einzelne Ticker-Calls → 1 Batch-Download für alle Indizes/Sektoren/Makro
+- **Market Breadth**: 50 einzelne Ticker-Calls → 1 Batch-Download für S&P 500 Top 50
+- **Intermarket Signals**: 9 einzelne Ticker-Calls → 1 Batch-Download für alle Cross-Assets
+- **Warm-Start**: Backend wärmt Market-Cache beim Docker-Start vor (non-blocking)
+- **Frontend Optimization**: 3× getMarketOverview() → 1× fetchMarketOverview() mit gemeinsamem State
+
+### Bugfixes in v5.10.10
+- **Falsey Values**: `0.0`-Werte bleiben in Research-/Technicals-Antworten erhalten
+- **Market Overview History**: `sma_200` ist mit 1y-Historie jetzt tatsächlich berechenbar
+- **Design System**: Inter wird nur noch über `next/font` geladen
 
 ---
 
@@ -169,11 +186,20 @@ Kein roher Placeholder-Text mehr im Prompt.
 - **Expandable Details**: Klapbarer Faktor-Grid mit Signalen, Gewichtungen und Methodik-Erklärung
 - **Pure Frontend**: Berechnung läuft vollständig im Frontend, keine neue Backend-API benötigt
 - **Granulare Refresh-Zyklen**: 9 Blöcke mit individuellen Intervallen
+- **Economic Calendar Refresh**: On-demand Refresh stößt `runMacroScan()` an und lädt danach `/api/data/economic-calendar` neu
+- **Performance-Optimierung**: Batch-Downloads statt sequentieller yfinance-Calls (83 → 3)
+- **Frontend State-Sharing**: `fetchMarketOverview()` eliminiert Triple-Call auf `getMarketOverview()`
 - **Vollständige UI**: Alle Datenblöcke mit Block-Labels und Timestamps
 - **Sektoren Rotation-Story**: automatisch erkannt (Defensiv vs. Offensiv Gap > 2%)
 - **VIX Term Structure**: Contango/Backwardation sichtbar
 - **Info-Seite**: `/markets/info` mit vollständiger Dokumentation
 - **Robuste Fehlerbehandlung**: BlockError-Komponenten + Fallback-Texte
+
+### Performance-Architektur Markets (v5.10.8)
+- **Batch-Downloads**: `yf.download()` für N Ticker in einem HTTP-Request
+- **Cache-Strategy**: overview 300s, breadth 1800s, intermarket 600s
+- **Warm-Start**: `@app.on_event("startup")` → `asyncio.create_task()` für paralleles Vorladen
+- **Frontend**: Shared State für Market Overview verhindert redundante API-Calls
 
 ### Backend-Features
 - **Marktüberblick**: Indizes, Sektoren, Makro-Proxys

@@ -2,6 +2,62 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.10.10] - 2026-03-22 - Stability: Falsey + Design Cleanup
+
+### 🐛 Fixes
+- **Research Zero Values**: `0.0`-Werte in `change_pct`, `price_change_5d` und `price_change_30d` werden nicht mehr versehentlich zu `None`
+- **Expected Move**: Die Preis-/IV-Berechnung nutzt jetzt explizite `is not None`-Checks
+- **Market Overview**: `sma_200` ist durch `period="1y"` jetzt tatsächlich berechenbar
+- **Frontend State**: `/markets` nutzt für die drei Overview-Blöcke jetzt eine gemeinsame Datenquelle
+
+### 🎨 Design System
+- **Font Loading**: Inter wird nur noch über `next/font` geladen, kein doppelter Google-Fonts-Import mehr
+
+## [5.10.9] - 2026-03-22 - Performance: Research Cleanup
+
+### 🚀 Performance
+- **Research Dashboard**: 3 sequentielle yfinance-Calls
+  nach asyncio.gather() eliminiert
+  price_change_30d: aus TechnicalSetup statt extra 35d-Download
+  price_change_5d: aus TechnicalSetup statt extra 7d-Download
+  price/change_pct: aus TechnicalSetup.current_price statt
+  extra fast_info-Call (fast_info nur als letzter Fallback)
+- Research lädt jetzt ausschliesslich parallel (gather)
+  kein sequentieller yfinance-Overhead mehr
+
+### 🏗️ Architektur
+- TechnicalSetup: change_5d_pct + change_1m_pct ergänzt
+  einmal berechnen, mehrfach verwenden
+
+## [5.10.8] - 2026-03-22 - Performance: Markets Cold-Start Fix
+
+### 🚀 Performance (kritisch)
+Vorher: 1-4 Minuten Cold-Start
+Nachher: ~8-15 Sekunden Cold-Start
+
+- **yf.download() Batch**: 83 sequentielle yfinance-Calls
+  zu 3 parallelen Batch-Downloads
+  fetch_market_overview: 24 Calls → 1 Batch
+  get_market_breadth: 50 Calls → 1 Batch
+  get_intermarket_signals: 9 Calls → 1 Batch
+- **Warm-Start**: Backend wärmt Cache beim Docker-Start
+  vor (non-blocking asyncio.create_task)
+- **Frontend Triple-Call**: 3× getMarketOverview() → 1×
+  fetchMarketOverview() mit gemeinsamem State
+
+### 🏗️ Neue Funktionen in market_overview.py
+- _batch_download(symbols, period): Batch-Download
+  mit MultiIndex-Normalisierung
+- _analyze_from_hist(symbol, hist, name): Analyse aus
+  vorhandenem DataFrame (kein extra API-Call)
+- warm_cache startup event
+
+## [5.10.7] - 2026-03-22 - Markets Economic Calendar Refresh Fix
+
+### 🐛 Fixes
+- **Economic Calendar Refresh**: Der Aktualisieren-Button im Markets-Dashboard triggert jetzt den Makro-Scan und lädt den Kalender danach neu
+- **UI Feedback**: Der Kalender-Refresh hat jetzt einen eigenen Loading-State statt nur den globalen Dashboard-Status zu verwenden
+
 ## [5.10.6] - 2026-03-22 - Signal-Consistency Hotfixes
 
 ### 🐛 Fixes

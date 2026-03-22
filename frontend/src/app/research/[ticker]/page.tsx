@@ -227,6 +227,25 @@ type ChartAnalysisData = {
   error?: boolean;
 } | null;
 
+type OptionsOiData = {
+  ticker: string;
+  nearest_max_pain: number | null;
+  expirations: Array<{
+    expiry: string;
+    max_pain: number;
+    pcr_oi: number | null;
+    total_call_oi: number;
+    total_put_oi: number;
+    top_oi_strikes: Array<{
+      strike: number;
+      call_oi: number;
+      put_oi: number;
+      total_oi: number;
+    }>;
+    error?: string;
+  }>;
+};
+
 // ── Hilfsfunktionen ──────────────────────────────────────────
 const fmt = {
   pct: (v: number | null, decimals = 1) =>
@@ -1506,6 +1525,193 @@ function CompanyProfileBlock({
   );
 }
 
+// Options OI Block Component
+function OptionsOiBlock({
+  data,
+  currentPrice,
+  onLoad,
+  loading,
+}: {
+  data: OptionsOiData | null;
+  currentPrice?: number | null;
+  onLoad: () => void;
+  loading: boolean;
+}) {
+  // Zeige Button wenn noch nicht geladen
+  if (!data && !loading) {
+    return (
+      <div className="card p-4 text-center">
+        <p className="text-xs text-[var(--text-muted)] mb-3">
+          Options Open Interest & Max Pain
+        </p>
+        <button
+          onClick={onLoad}
+          className="text-xs rounded-lg
+                     border border-[var(--border)]
+                     px-4 py-2
+                     text-[var(--accent-blue)]
+                     hover:bg-[var(--bg-tertiary)]
+                     transition-colors"
+        >
+          ⚡ OI-Heatmap laden
+        </button>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="card p-4 text-center">
+        <p className="text-xs text-[var(--text-muted)]
+                       animate-pulse">
+          Lade Optionskette…
+        </p>
+      </div>
+    );
+  }
+
+  if (!data || data.expirations?.length === 0) {
+    return null;
+  }
+
+  // Erste gültige Expiration
+  const exp = data.expirations.find(
+    e => !e.error && e.top_oi_strikes?.length > 0
+  );
+  if (!exp) return null;
+
+  // Max OI für Balken-Normalisierung
+  const maxOi = Math.max(
+    ...exp.top_oi_strikes.map(s => s.total_oi), 1
+  );
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-center
+                       justify-between mb-4">
+        <h3 className="text-xs font-semibold uppercase
+                        tracking-widest
+                        text-[var(--text-muted)]">
+          Options OI — {exp.expiry}
+        </h3>
+        <div className="flex items-center gap-3
+                         text-[10px]
+                         text-[var(--text-muted)]">
+          {exp.pcr_oi != null && (
+            <span>
+              PCR-OI:{" "}
+              <span className={
+                exp.pcr_oi > 1.2
+                  ? "text-[var(--accent-red)]"
+                : exp.pcr_oi < 0.8
+                  ? "text-[var(--accent-green)]"
+                : "text-amber-400"
+              }>
+                {exp.pcr_oi.toFixed(2)}
+              </span>
+            </span>
+          )}
+          <span className="text-[var(--accent-blue)]
+                           font-semibold">
+            Max Pain: ${exp.max_pain.toFixed(0)}
+          </span>
+        </div>
+      </div>
+
+      {/* Strike-Heatmap */}
+      <div className="space-y-1.5">
+        {exp.top_oi_strikes
+          .sort((a, b) => b.strike - a.strike)
+          .map((s) => {
+            const isMaxPain =
+              Math.abs(s.strike - exp.max_pain) < 1;
+            const isAtm = currentPrice
+              && Math.abs(s.strike - currentPrice)
+                 / currentPrice < 0.02;
+            const callPct = s.total_oi > 0
+              ? s.call_oi / maxOi
+              : 0;
+            const putPct = s.total_oi > 0
+              ? s.put_oi / maxOi
+              : 0;
+
+            return (
+              <div
+                key={s.strike}
+                className={`rounded-lg px-3 py-1.5 ${
+                  isMaxPain
+                    ? "border border-[var(--accent-blue)]/40 bg-[var(--accent-blue)]/5"
+                  : isAtm
+                    ? "border border-[var(--border)] bg-[var(--bg-tertiary)]"
+                  : ""
+                }`}
+              >
+                {/* Strike-Label */}
+                <div className="flex items-center
+                                 justify-between mb-1">
+                  <span className={`text-xs font-mono
+                                    font-semibold ${
+                    isMaxPain
+                      ? "text-[var(--accent-blue)]"
+                    : isAtm
+                      ? "text-[var(--text-primary)]"
+                    : "text-[var(--text-secondary)]"
+                  }`}>
+                    ${s.strike.toFixed(0)}
+                    {isMaxPain && " ← Max Pain"}
+                    {isAtm && !isMaxPain && " ← ATM"}
+                  </span>
+                  <span className="text-[10px]
+                                    text-[var(--text-muted)]">
+                    {(s.total_oi / 1000).toFixed(0)}K OI
+                  </span>
+                </div>
+                {/* Call/Put Balken */}
+                <div className="flex gap-1 h-1.5">
+                  {/* Calls (grün, links) */}
+                  <div className="flex-1 flex justify-end">
+                    <div
+                      className="h-full rounded-l-full
+                                  bg-[var(--accent-green)]
+                                  opacity-70"
+                      style={{ width: `${callPct * 100}%` }}
+                    />
+                  </div>
+                  {/* Puts (rot, rechts) */}
+                  <div className="flex-1">
+                    <div
+                      className="h-full rounded-r-full
+                                  bg-[var(--accent-red)]
+                                  opacity-70"
+                      style={{ width: `${putPct * 100}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+      </div>
+
+      <div className="flex justify-between mt-3
+                       text-[10px]
+                       text-[var(--text-muted)]">
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full
+                           bg-[var(--accent-green)]
+                           inline-block" />
+          Calls: {(exp.total_call_oi / 1000).toFixed(0)}K
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full
+                           bg-[var(--accent-red)]
+                           inline-block" />
+          Puts: {(exp.total_put_oi / 1000).toFixed(0)}K
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ── Hauptkomponente ───────────────────────────────────────────
 export default function ResearchDashboard() {
   const { ticker } = useParams() as { ticker: string };
@@ -1540,6 +1746,22 @@ export default function ResearchDashboard() {
     above_vwap: boolean | null;
     is_market_hours: boolean;
   } | null>(null);
+
+  // Feature 5: Options OI
+  const [oiData, setOiData] = useState<OptionsOiData | null>(null);
+  const [oiLoading, setOiLoading] = useState(false);
+
+  const loadOiData = useCallback(async () => {
+    if (!ticker || oiLoading) return;
+    setOiLoading(true);
+    try {
+      const d = await fetch(
+        `/api/data/options-oi/${ticker}` 
+      ).then(r => r.json());
+      setOiData(d);
+    } catch {}
+    finally { setOiLoading(false); }
+  }, [ticker]);
 
   // Feature 3: Position Sizer
   const [accountSize, setAccountSize] = useState<number>(10000);
@@ -2272,6 +2494,14 @@ export default function ResearchDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Options OI Strike-Heatmap */}
+      <OptionsOiBlock
+        data={oiData}
+        currentPrice={data.price}
+        onLoad={loadOiData}
+        loading={oiLoading}
+      />
 
       {/* Block 4: Earnings-Historie + Insider */}
       <div className="grid gap-4 lg:grid-cols-2">

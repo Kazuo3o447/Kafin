@@ -24,7 +24,7 @@
 ## 🟡 BATCH 3 — Nächste Woche
 - [x] Marktbreite 5T/20T Verlauf (Supabase history)
 - [x] VWAP Intraday
-- [ ] Options OI Chart (Heatmap)
+- [x] Options OI Chart (Heatmap)
 - [ ] P2a TickerContext Dataclass (kein Trader-Mehrwert,
       aber spart API-Calls)
 - [ ] P2b Earnings-Historie Fallback (yfinance)

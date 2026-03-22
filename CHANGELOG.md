@@ -2,6 +2,31 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.15.2] - 2026-03-22 - Options OI Strike-Heatmap
+
+### 🚀 Trading-Mehrwert
+- **Options OI Heatmap**: Visualisierung von Call/Put Open Interest pro Strike
+  - On-demand Laden per Button im Research Dashboard
+  - Top 5 Strikes nach OI mit horizontalen Balken
+  - Max Pain Strike hervorgehoben (blau markiert)
+  - ATM Strike markiert bei <2% Abweichung
+  - PCR-OI Ratio und Max Pain im Header
+
+### 🔧 Frontend
+- **OptionsOiBlock**: Neue Komponente mit Loading States
+- **Visual Heatmap**: Call/Put Balken mit prozentualer Breite
+- **Smart Highlighting**: Max Pain und ATM Strikes automatisch erkannt
+- **Type Safety**: Vollständiges OptionsOiData Interface
+
+### 📊 API
+- **GET /api/data/options-oi/{ticker}**: Verwendet bestehenden Endpoint
+- **Response Format**: expirations mit top_oi_strikes und Metriken
+
+### 🎨 UI/UX
+- **On-Demand Loading**: Button vermeidet unnötige API Calls
+- **Kompakte Darstellung**: Strike-Preis, OI-Menge, Call/Put Verteilung
+- **Farbcodierung**: Grün für Calls, Rot für Puts, Blau für Max Pain
+
 ## [5.15.1] - 2026-03-22 - VWAP Intraday Indikator
 
 ### 🚀 Trading-Mehrwert

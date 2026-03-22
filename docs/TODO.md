@@ -30,7 +30,7 @@
 - [x] P2b Earnings-Historie Fallback (yfinance)
 - [x] Earnings-Kalender im Research Dashboard
 - [ ] 10-Q Filing RAG (Gemini Flash)
-- [ ] Shadow Trading Journal Phase A (Trade-Grund Dropdown)
+- [x] Shadow Trading Journal Phase A (Trade-Grund Dropdown)
 
 ## 🟢 BATCH 4 — Technische Schuld (wenn Zeit)
 - [x] PostgreSQL + pgvector Docker Setup

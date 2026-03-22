@@ -2150,6 +2150,68 @@ async def api_shadow_portfolio_weekly():
     return {"report": report}
 
 
+from pydantic import BaseModel, HTTPException
+
+class ManualTradeRequest(BaseModel):
+    ticker: str
+    direction: str          # "long" | "short"
+    trade_reason: str       # aus Dropdown
+    opportunity_score: float = 5.0
+    torpedo_score: float = 5.0
+    notes: str | None = None
+
+VALID_TRADE_REASONS = [
+    "IV Mismatch",
+    "Sentiment Divergenz",
+    "Relative Stärke",
+    "Sympathy Play",
+    "Earnings Beat erwartet",
+    "Torpedo erkannt",
+    "Technisches Breakout",
+    "Contrarian Setup",
+    "Reddit vs. Insider Divergenz",
+    "Max Pain Magnet",
+    "Short Squeeze Setup",
+]
+
+@app.post("/api/shadow/manual-trade")
+async def api_manual_shadow_trade(
+    req: ManualTradeRequest,
+):
+    """Manueller Shadow-Trade mit Trade-Grund."""
+    if req.trade_reason not in VALID_TRADE_REASONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ungültiger Grund. Erlaubt: "
+                   f"{VALID_TRADE_REASONS}"
+        )
+
+    from backend.app.analysis.shadow_portfolio import (
+        open_shadow_trade,
+    )
+    # Richtung → Recommendation mapping
+    rec_map = {
+        "long":  "STRONG BUY",
+        "short": "STRONG SELL",
+    }
+    rec = rec_map.get(req.direction, "STRONG BUY")
+
+    result = await open_shadow_trade(
+        ticker=req.ticker.upper(),
+        recommendation=rec,
+        opportunity_score=req.opportunity_score,
+        torpedo_score=req.torpedo_score,
+        trade_reason=req.trade_reason,
+        manual_entry=True,
+    )
+    return result
+
+@app.get("/api/shadow/trade-reasons")
+async def api_trade_reasons():
+    """Liste aller validen Trade-Gründe."""
+    return {"reasons": VALID_TRADE_REASONS}
+
+
 @app.post("/api/signals/scan")
 async def api_signal_scan():
     """Manueller Signal-Scan für alle Watchlist-Ticker."""

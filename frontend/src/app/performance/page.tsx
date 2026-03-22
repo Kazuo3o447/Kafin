@@ -38,6 +38,8 @@ type ShadowTrade = {
   status: string;
   current_price?: number | null;
   unrealized_pct?: number | null;
+  trade_reason?: string | null;  // NEU
+  manual_entry?: boolean | null; // NEU
 };
 
 type ShadowSummary = {
@@ -63,6 +65,18 @@ export default function PerformancePage() {
   const [dataAge, setDataAge] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Trade Modal State
+  const [showTradeModal, setShowTradeModal] = useState(false);
+  const [tradeForm, setTradeForm] = useState({
+    ticker: "",
+    direction: "long" as "long" | "short",
+    trade_reason: "",
+    notes: "",
+  });
+  const [tradeReasons, setTradeReasons] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [tradeResult, setTradeResult] = useState<string | null>(null);
+
   useEffect(() => {
     loadPerformance();
   }, []);
@@ -76,6 +90,54 @@ export default function PerformancePage() {
       .catch((err) => console.error("Shadow portfolio fetch error", err))
       .finally(() => setLoadingShadow(false));
   }, [activeTab, shadowData]);
+
+  // Load trade reasons
+  useEffect(() => {
+    fetch("/api/shadow/trade-reasons")
+      .then(r => r.json())
+      .then(d => setTradeReasons(d.reasons || []))
+      .catch(() => {});
+  }, []);
+
+  // Submit handler
+  const submitTrade = async () => {
+    if (!tradeForm.ticker || !tradeForm.trade_reason) {
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const resp = await fetch(
+        "/api/shadow/manual-trade",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ticker:         tradeForm.ticker.toUpperCase(),
+            direction:      tradeForm.direction,
+            trade_reason:   tradeForm.trade_reason,
+          }),
+        }
+      );
+      const data = await resp.json();
+      if (data.success) {
+        setTradeResult(
+          `✓ Trade eröffnet: ${tradeForm.ticker} ` 
+          + `${tradeForm.direction.toUpperCase()}` 
+        );
+        setShowTradeModal(false);
+        // Reload
+        loadPerformance(true);
+      } else {
+        setTradeResult(
+          `Fehler: ${data.reason || data.error || "?"}` 
+        );
+      }
+    } catch {
+      setTradeResult("Verbindungsfehler");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const loadPerformance = useCallback(async (invalidate = false) => {
     setLoading(!invalidate && performance.length === 0);
@@ -366,7 +428,16 @@ export default function PerformancePage() {
                       trade.current_price <= trade.stop_loss_price * 1.03;
                     return (
                       <tr key={trade.id} className="border-b border-[var(--border)]">
-                        <td className="px-3 py-3 font-semibold text-[var(--text-primary)]">{trade.ticker}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-semibold text-[var(--text-primary)]">{trade.ticker}</span>
+                            {trade.trade_reason && (
+                              <span className="text-[10px] rounded px-1.5 py-0.5 bg-[var(--bg-elevated)] text-[var(--text-muted)]">
+                                {trade.trade_reason}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-3 py-3 text-[var(--text-primary)]">{trade.signal_type}</td>
                         <td className="px-3 py-3 capitalize text-[var(--text-secondary)]">{trade.trade_direction}</td>
                         <td className="px-3 py-3 text-right">${trade.entry_price?.toFixed(2) ?? "-"}</td>
@@ -417,7 +488,16 @@ export default function PerformancePage() {
                     const reason = trade.exit_reason === "stop_loss" ? "Stop-Loss" : "Nach Earnings";
                     return (
                       <tr key={trade.id} className="border-b border-[var(--border)]">
-                        <td className="px-3 py-3 font-semibold text-[var(--text-primary)]">{trade.ticker}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-semibold text-[var(--text-primary)]">{trade.ticker}</span>
+                            {trade.trade_reason && (
+                              <span className="text-[10px] rounded px-1.5 py-0.5 bg-[var(--bg-elevated)] text-[var(--text-muted)]">
+                                {trade.trade_reason}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-3 py-3 text-[var(--text-primary)]">{trade.signal_type}</td>
                         <td className="px-3 py-3 text-right">{trade.opportunity_score?.toFixed(1) ?? "-"}</td>
                         <td className="px-3 py-3 text-right">{trade.torpedo_score?.toFixed(1) ?? "-"}</td>
@@ -444,11 +524,134 @@ export default function PerformancePage() {
     );
   };
 
+  // Trade Modal Component
+  if (showTradeModal) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+        onClick={() => setShowTradeModal(false)}
+      >
+        <div
+          className="card p-6 w-full max-w-md mx-4"
+          onClick={e => e.stopPropagation()}
+        >
+          <h2 className="text-base font-bold text-[var(--text-primary)] mb-4">
+            Shadow-Trade eröffnen
+          </h2>
+
+          {/* Ticker */}
+          <div className="mb-3">
+            <label className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] block mb-1">
+              Ticker
+            </label>
+            <input
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm font-mono text-[var(--text-primary)] uppercase placeholder:normal-case placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent-blue)]"
+              placeholder="z.B. NVDA"
+              value={tradeForm.ticker}
+              onChange={e => setTradeForm(f => ({
+                ...f, ticker: e.target.value
+              }))}
+            />
+          </div>
+
+          {/* Richtung */}
+          <div className="mb-3">
+            <label className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] block mb-1">
+              Richtung
+            </label>
+            <div className="flex gap-2">
+              {(["long", "short"] as const).map(d => (
+                <button
+                  key={d}
+                  onClick={() => setTradeForm(f =>
+                    ({ ...f, direction: d })
+                  )}
+                  className={`flex-1 rounded-lg py-2 text-sm font-semibold border transition-colors ${
+                    tradeForm.direction === d
+                      ? d === "long"
+                        ? "border-[var(--accent-green)] bg-[var(--accent-green)]/10 text-[var(--accent-green)]"
+                        : "border-[var(--accent-red)] bg-[var(--accent-red)]/10 text-[var(--accent-red)]"
+                      : "border-[var(--border)] text-[var(--text-muted)]"
+                  }`}
+                >
+                  {d === "long" ? "Long ▲" : "Short ▼"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Trade-Grund */}
+          <div className="mb-4">
+            <label className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] block mb-1">
+              Hauptgrund *
+            </label>
+            <select
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+              value={tradeForm.trade_reason}
+              onChange={e => setTradeForm(f => ({
+                ...f, trade_reason: e.target.value
+              }))}
+            >
+              <option value="">— Grund wählen —</option>
+              {tradeReasons.map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowTradeModal(false)}
+              className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]"
+            >
+              Abbrechen
+            </button>
+            <button
+              onClick={submitTrade}
+              disabled={
+                submitting
+                || !tradeForm.ticker
+                || !tradeForm.trade_reason
+              }
+              className="flex-1 rounded-lg bg-[var(--accent-blue)] py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {submitting ? "Öffne…" : "Trade eröffnen"}
+            </button>
+          </div>
+
+          {tradeResult && (
+            <p className={`text-xs mt-3 text-center ${
+              tradeResult.startsWith("✓")
+                ? "text-[var(--accent-green)]"
+                : "text-[var(--accent-red)]"
+            }`}>
+              {tradeResult}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 p-8">
       <div>
-        <h1 className="text-4xl font-bold text-[var(--text-primary)]">Performance</h1>
-        <p className="text-sm text-[var(--text-secondary)] mt-2">Track Record & Shadow Portfolio</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-[var(--text-primary)]">Performance</h1>
+            <p className="text-sm text-[var(--text-secondary)] mt-2">Track Record & Shadow Portfolio</p>
+          </div>
+          <button
+            onClick={() => {
+              setTradeResult(null);
+              setShowTradeModal(true);
+            }}
+            className="flex items-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-xs font-semibold text-white hover:opacity-90"
+          >
+            + Trade eröffnen
+          </button>
+        </div>
         <div className="mt-2"><CacheStatus fromCache={fromCache} ageSeconds={dataAge} onRefresh={() => loadPerformance(true)} refreshing={refreshing || loading} /></div>
       </div>
 

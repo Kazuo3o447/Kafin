@@ -2,6 +2,34 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.16.2] - 2026-03-22 - Shadow Journal Phase A
+
+### 📝 Trade-Grund Dropdown
+- **open_shadow_trade()**: Erweitert um `trade_reason` und `manual_entry` Parameter
+  - Speichert manuelle Trade-Gründe in shadow_trades Tabelle
+  - DB-Migration: `ALTER TABLE shadow_trades ADD COLUMN trade_reason TEXT, manual_entry BOOLEAN`
+- **POST /api/shadow/manual-trade**: Manueller Shadow-Trade mit Pydantic-Validierung
+  - 11 vordefinierte Trade-Gründe im Dropdown (IV Mismatch, Sentiment Divergenz, etc.)
+  - Richtung mapping: long → STRONG BUY, short → STRONG SELL
+  - Rückmeldung bei Erfolg/Fehler mit Detail-Message
+- **GET /api/shadow/trade-reasons**: Liste aller validen Trade-Gründe für Frontend
+
+### 🎨 Performance-Page UI
+- **"+ Trade eröffnen" Button**: Neu im Header der Performance-Seite
+- **Trade-Modal**: Ticker, Richtung (Long/Short), Trade-Grund Dropdown
+  - Form-Validierung (Ticker und Grund Pflicht)
+  - Loading-States und Fehler-Feedback
+  - Automatisches Reload nach erfolgreichem Trade
+- **Trade-Grund Badges**: In offenen und abgeschlossenen Trades
+  - Kleine Badge unter Ticker mit gewähltem Grund
+  - Sichtbar wenn `trade_reason` vorhanden
+
+### 🔧 Technical Details
+- **TypeScript Types**: ShadowTrade erweitert um `trade_reason?` und `manual_entry?`
+- **Frontend State**: Modal-Management mit useState und useEffect
+- **API Integration**: Fetch von Trade-Gründen beim Component-Mount
+- **Error Handling**: HTTP 400 bei ungültigen Trade-Gründen
+
 ## [5.16.1] - 2026-03-22 - Sympathy Play Radar
 
 ### 🔗 Peer-Reaktions-Analyse

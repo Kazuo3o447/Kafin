@@ -47,6 +47,8 @@ async def open_shadow_trade(
     opportunity_score: float,
     torpedo_score: float,
     audit_report_id: str | None = None,
+    trade_reason: str | None = None,   # NEU
+    manual_entry: bool = False,         # NEU
 ) -> Dict[str, Any]:
     direction = TRADE_SIGNALS.get(recommendation)
     if not direction:
@@ -96,6 +98,8 @@ async def open_shadow_trade(
         "stop_loss_price": stop_loss,
         "position_size_usd": 10000,
         "status": "open",
+        "trade_reason": trade_reason,  # NEU
+        "manual_entry": manual_entry,  # NEU
         "created_at": now_mez().isoformat(),
     }
 
@@ -325,3 +329,10 @@ async def get_weekly_shadow_report() -> str:
             )
 
     return "\n".join(lines)
+
+
+# DB-Migration nötig (in Supabase SQL Editor):
+# ALTER TABLE shadow_trades
+#   ADD COLUMN IF NOT EXISTS trade_reason TEXT,
+#   ADD COLUMN IF NOT EXISTS manual_entry BOOLEAN
+#     DEFAULT FALSE;

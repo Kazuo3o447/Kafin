@@ -1043,6 +1043,34 @@ async def api_research_dashboard(
     metrics    = safe(3)
     estimates  = safe(4)
     history    = safe(5)
+
+    # yfinance Fallback wenn FMP leer
+    if (not history
+        or not getattr(history, "all_quarters", None)):
+        from backend.app.data.yfinance_data import (
+            get_earnings_history_yf
+        )
+        yf_history = await get_earnings_history_yf(
+            effective_ticker
+        )
+        if yf_history:
+            # Kompatibles Objekt erstellen
+            from types import SimpleNamespace
+            history = SimpleNamespace(
+                quarters_beat=yf_history["quarters_beat"],
+                avg_surprise_percent=yf_history[
+                    "avg_surprise_percent"
+                ],
+                all_quarters=yf_history["all_quarters"],
+                last_quarter=SimpleNamespace(
+                    **yf_history["all_quarters"][0]
+                ) if yf_history["all_quarters"] else None,
+                source="yfinance",
+            )
+            logger.info(
+                f"Earnings-Fallback yfinance für {ticker}"
+            )
+
     price_tgt  = safe(6)
     short_int  = safe(7)
     insiders   = safe(8)
@@ -1218,6 +1246,44 @@ async def api_research_dashboard(
                 ]
         except Exception:
             pass
+
+    # Sektor-Peers mit Earnings nächste 14T
+    sector_earnings: list[dict] = []
+    try:
+        from backend.app.data.finnhub import (
+            get_earnings_calendar
+        )
+        from datetime import date, timedelta
+        today = date.today()
+        in_14 = today + timedelta(days=14)
+        cal = await get_earnings_calendar(
+            from_date=today.isoformat(),
+            to_date=in_14.isoformat(),
+        )
+        if cal:
+            # Filtere Peers aus der Watchlist
+            from backend.app.memory.watchlist import (
+                get_watchlist
+            )
+            wl = await get_watchlist()
+            wl_tickers = {
+                w.get("ticker", "").upper()
+                for w in (wl if isinstance(wl, list) else [])
+            }
+            for item in (cal if isinstance(cal, list) else []):
+                item_ticker = (
+                    item.get("symbol", "")
+                    or item.get("ticker", "")
+                ).upper()
+                if (item_ticker in wl_tickers
+                        and item_ticker != ticker.upper()):
+                    sector_earnings.append({
+                        "ticker": item_ticker,
+                        "date":   item.get("date"),
+                        "timing": item.get("hour"),
+                    })
+    except Exception as e:
+        logger.debug(f"Sektor-Kalender Fehler: {e}")
 
     # PEG berechnen: PE / EPS_Growth (aus FMP key-metrics wenn vorhanden)
     # FMP liefert priceEarningsToGrowthRatioTTM in key-metrics-ttm
@@ -1880,6 +1946,9 @@ async def api_research_dashboard(
         "sentiment_vs_market": round(
             ticker_sent["avg"] - market_avg_sentiment, 3
         ) if (mkt_scores and ticker_sent["count"] > 0) else None,
+
+        # Sektor-Peers Earnings nächste 14T
+        "sector_earnings_upcoming": sector_earnings[:5],
     }
 
     # ── Datenvollständigkeit prüfen ────────────────────────────

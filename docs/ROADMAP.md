@@ -79,8 +79,10 @@ holen teils dieselben Daten unabhängig. Gemeinsames Objekt
 einmal befüllen, überall übergeben. Kein Doppel-fetching.
 
 ### P2b — Earnings-Historie Fallback
+**Status: ✅ ERLEDIGT (22.03.2026) v5.15.3**
 FMP Mid-Cap Lücken → yfinance `ticker.earnings_history` 
-als Fallback implementieren.
+als Fallback implementiert. Zusätzlich Watchlist-Earnings
+Kalender im Research Dashboard.
 
 ### P2c — FinBERT Batch-Optimierung
 Aktuell: sequenziell, nur Watchlist.

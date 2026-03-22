@@ -711,3 +711,73 @@ async def get_vwap(ticker: str) -> dict:
         return result
     except Exception as e:
         return {"vwap": None, "error": str(e)}
+
+
+async def get_earnings_history_yf(
+    ticker: str, limit: int = 8
+) -> dict | None:
+    """
+    yfinance Fallback für Earnings-Historie.
+    Gibt EarningsHistorySummary-kompatibles Dict zurück
+    oder None wenn keine Daten.
+    """
+    def _fetch():
+        import yfinance as yf
+        stock = yf.Ticker(ticker)
+
+        # yfinance earnings_history
+        try:
+            eh = stock.earnings_history
+            if eh is None or eh.empty:
+                return None
+
+            quarters = []
+            for _, row in eh.iterrows():
+                eps_act  = row.get("epsActual")
+                eps_est  = row.get("epsEstimate")
+                surp_pct = None
+                if (eps_act is not None
+                        and eps_est is not None
+                        and eps_est != 0):
+                    surp_pct = round(
+                        (eps_act - eps_est)
+                        / abs(eps_est) * 100, 1
+                    )
+                quarters.append({
+                    "quarter":              str(row.name)[:7],
+                    "eps_actual":           float(eps_act) if eps_act else None,
+                    "eps_consensus":        float(eps_est) if eps_est else None,
+                    "eps_surprise_percent": surp_pct,
+                    "beat":                 surp_pct > 0 if surp_pct else None,
+                })
+
+            quarters = quarters[:limit]
+            if not quarters:
+                return None
+
+            beats = sum(1 for q in quarters if q.get("beat"))
+            surprises = [
+                q["eps_surprise_percent"]
+                for q in quarters
+                if q.get("eps_surprise_percent") is not None
+            ]
+            avg_surp = (
+                round(sum(surprises) / len(surprises), 1)
+                if surprises else None
+            )
+
+            return {
+                "source":          "yfinance",
+                "quarters_beat":   beats,
+                "total_quarters":  len(quarters),
+                "avg_surprise_percent": avg_surp,
+                "all_quarters":    quarters,
+            }
+        except Exception:
+            return None
+
+    try:
+        import asyncio
+        return await asyncio.to_thread(_fetch)
+    except Exception:
+        return None

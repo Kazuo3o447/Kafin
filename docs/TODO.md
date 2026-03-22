@@ -27,8 +27,8 @@
 - [x] Options OI Chart (Heatmap)
 - [ ] P2a TickerContext Dataclass (kein Trader-Mehrwert,
       aber spart API-Calls)
-- [ ] P2b Earnings-Historie Fallback (yfinance)
-- [ ] Earnings-Kalender im Research Dashboard
+- [x] P2b Earnings-Historie Fallback (yfinance)
+- [x] Earnings-Kalender im Research Dashboard
 - [ ] 10-Q Filing RAG (Gemini Flash)
 - [ ] Shadow Trading Journal Phase A (Trade-Grund Dropdown)
 

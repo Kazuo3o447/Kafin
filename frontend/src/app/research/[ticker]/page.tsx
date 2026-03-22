@@ -132,6 +132,11 @@ type ResearchData = {
   market_sentiment_detail?: Record<string,{
     score: number; count: number; label: string
   }> | null;
+  sector_earnings_upcoming?: Array<{
+    ticker: string;
+    date: string | null;
+    timing: string | null;
+  }>;
   is_watchlist: boolean;
   web_prio: number | null;
   last_audit: {
@@ -1399,6 +1404,46 @@ function EarningsContextBanner({ data }: { data: ResearchData }) {
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Watchlist-Earnings nächste 14T */}
+      {data.sector_earnings_upcoming
+       && data.sector_earnings_upcoming.length > 0 && (
+        <div className="mt-3 pt-3 border-t
+                         border-[var(--border)]">
+          <p className="text-[10px]
+                         text-[var(--text-muted)]
+                         uppercase tracking-wider mb-2">
+            Watchlist-Earnings nächste 14T
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {data.sector_earnings_upcoming.map(e => (
+              <a
+                key={e.ticker}
+                href={`/research/${e.ticker}`}
+                className="flex items-center gap-1.5
+                            rounded-lg px-2.5 py-1.5
+                            bg-[var(--bg-tertiary)]
+                            hover:bg-[var(--bg-elevated)]
+                            text-xs transition-colors"
+              >
+                <span className="font-mono font-semibold
+                                  text-[var(--accent-blue)]">
+                  {e.ticker}
+                </span>
+                {e.date && (
+                  <span className="text-[var(--text-muted)]">
+                    {new Date(e.date)
+                      .toLocaleDateString("de-DE", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                  </span>
+                )}
+              </a>
+            ))}
+          </div>
         </div>
       )}
     </div>

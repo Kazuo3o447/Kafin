@@ -2,6 +2,39 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.15.3] - 2026-03-22 - P2b Earnings Fallback + Kalender
+
+### 🚀 Trading-Mehrwert
+- **Earnings-Historie Fallback**: yfinance als Backup wenn FMP leer
+  - Mid-Cap/Small-Cap Lücken geschlossen (oft keine FMP-Daten)
+  - get_earnings_history_yf() nutzt ticker.earnings_history
+  - Kompatibles EarningsHistorySummary Format
+  - Automatische Umschaltung im Research Dashboard
+- **Watchlist-Earnings Kalender**: Sektor-Peers in den nächsten 14 Tagen
+  - Im EarningsContextBanner unterhalb der Konsens-Daten
+  - Filtert Watchlist-Ticker aus Earnings-Kalender
+  - Klickbare Links zu betroffenen Tickers
+  - Datum im deutschen Format (TTT. Mon)
+
+### 🔧 Backend
+- **yfinance Fallback**: get_earnings_history_yf() in yfinance_data.py
+- **Smart Switching**: FMP → yfinance wenn all_quarters leer
+- **Sektor-Earnings**: sector_earnings_upcoming im Research Response
+- **Watchlist Filter**: Nur Peers aus eigener Watchlist anzeigen
+- **Error Handling**: Graceful Fallbacks bei API-Limits
+
+### 📊 Frontend
+- **Type Safety**: sector_earnings_upcoming im ResearchData Interface
+- **EarningsContextBanner**: Erweitert mit Watchlist-Earnings
+- **UI Integration**: Kompakte Badge-Darstellung mit Ticker + Datum
+- **Hover Effects**: Interaktive Links zu anderen Research-Seiten
+
+### 🎨 UI/UX
+- **Kompakte Darstellung**: Ticker in Blau, Datum in Grau
+- **Responsive Layout**: Flex-wrap für mehrere Earnings
+- **Kontextbewusst**: Nur bei Earnings-Nähe (<30 Tage) sichtbar
+- **Deutsch Lokalisiert**: Datumsformat "22. Mär"
+
 ## [5.15.2] - 2026-03-22 - Options OI Strike-Heatmap
 
 ### 🚀 Trading-Mehrwert

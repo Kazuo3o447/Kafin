@@ -1097,26 +1097,155 @@ export default function SettingsPage() {
 
           {/* Platform Info */}
           <div className="card p-6">
-            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Plattform-Info</h3>
-            <div className="grid gap-4 md:grid-cols-2">
+            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">System-Architektur</h3>
+            <div className="grid gap-6 md:grid-cols-2">
               <div>
-                <h4 className="font-medium text-[var(--text-primary)] mb-2">System</h4>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">Infrastruktur</h4>
                 <div className="text-sm text-[var(--text-secondary)] space-y-1">
-                  <div>Version: v5.11.1</div>
-                  <div>Umgebung: production</div>
+                  <div>Version: v5.11.2</div>
+                  <div>Umgebung: production (Docker Swarm)</div>
                   <div>Hardware: NUC i3 / 16GB RAM / ZimaOS</div>
-                  <div>Container: Backend + Frontend + n8n</div>
+                  <div>Container: Backend (FastAPI) + Frontend (Next.js) + n8n</div>
+                  <div>Datenbank: Supabase (PostgreSQL)</div>
+                  <div>Cache: Redis (Session + API Cache)</div>
                 </div>
               </div>
               <div>
-                <h4 className="font-medium text-[var(--text-primary)] mb-2">n8n Zeitplan</h4>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">n8n Automation</h4>
                 <div className="text-sm text-[var(--text-secondary)] space-y-1">
-                  <div>Mo-Fr 08:00 — Morning Briefing</div>
+                  <div>Mo-Fr 08:00 — Morning Briefing (Watchlist)</div>
                   <div>Mo-Fr 13:00-22:30 alle 30 Min — News-Pipeline</div>
                   <div>Mo-Fr 22:00 — Sonntags-Report Vorbereitung</div>
-                  <div>So 19:00 — Sonntags-Report</div>
+                  <div>So 19:00 — Sonntags-Report (PDF)</div>
                   <div>Sa/So 10/14/18/22 — News-Pipeline (Wochenende)</div>
                   <div>alle 10 Min — SEC EDGAR Scan</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Data Flows */}
+          <div className="card p-6">
+            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Datenflüsse & APIs</h3>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">Marktdaten (Real-time)</h4>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• yfinance — Preise, Technicals, Fundamentals</div>
+                  <div>• Finnhub — News, Economic Calendar, Insider</div>
+                  <div>• FMP — Financial Modeling Prep (Earnings)</div>
+                  <div>• FRED — Makro-Indikatoren (Zinsen, spreads)</div>
+                  <div>• FinBERT — Sentiment Analysis (DL-Model)</div>
+                  <div>• Google News RSS — General News Feed</div>
+                  <div>• SEC EDGAR — Filings, 8-K, 10-Q/K</div>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">Verarbeitung & Storage</h4>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• Daily Snapshots — Preis- + Indikator-Status</div>
+                  <div>• Macro Snapshots — FRED-Zeitreihen</div>
+                  <div>• Short-term Memory — News + Sentiment</div>
+                  <div>• Audit Reports — Generierte Berichte</div>
+                  <div>• Watchlist — Benutzer-Ticker</div>
+                  <div>• Scoring History — Opportunity/Torpedo Scores</div>
+                  <div>• Log Buffer — In-Memory (letzten 500)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Configuration Points */}
+          <div className="card p-6">
+            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Konfigurationspunkte</h3>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">Backend Config</h4>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• <code>config/scoring.yaml</code> — Score-Gewichtungen</div>
+                  <div>• <code>config/.env</code> — API Keys, Supabase</div>
+                  <div>• <code>backend/app/logger.py</code> — Module-Definition</div>
+                  <div>• <code>docker-compose.yml</code> — Container-Setup</div>
+                  <div>• <code>n8n/workflows/</code> — Automation-Definitionen</div>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">Frontend Config</h4>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• <code>frontend/src/app/globals.css</code> — Design Tokens</div>
+                  <div>• <code>frontend/src/lib/api.ts</code> — API-Client</div>
+                  <div>• <code>frontend/next.config.ts</code> — Proxy + Build</div>
+                  <div>• <code>frontend/src/components/</code> — UI-Komponenten</div>
+                  <div>• <code>frontend/src/app/</code> — Seiten & API-Routes</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Feature Matrix */}
+          <div className="card p-6">
+            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Feature-Matrix</h3>
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">Core Features</h4>
+                <div className="grid gap-2 md:grid-cols-3 text-sm">
+                  <div className="text-[var(--text-secondary)]">• Marktdashboard (9 Kacheln)</div>
+                  <div className="text-[var(--text-secondary)]">• Watchlist + Research</div>
+                  <div className="text-[var(--text-secondary)]">• Earnings-Radar</div>
+                  <div className="text-[var(--text-secondary)]">• News-Feed + Sentiment</div>
+                  <div className="text-[var(--text-secondary)]">• Performance-Analyse</div>
+                  <div className="text-[var(--text-secondary)]">• Reports (PDF)</div>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">Advanced Features</h4>
+                <div className="grid gap-2 md:grid-cols-3 text-sm">
+                  <div className="text-[var(--text-secondary)]">• Composite Regime Scoring</div>
+                  <div className="text-[var(--text-secondary)]">• Position Sizer (Risk)</div>
+                  <div className="text-[var(--text-secondary)]">• Expected Move Calculator</div>
+                  <div className="text-[var(--text-secondary)]">• Market Breadth Analysis</div>
+                  <div className="text-[var(--text-secondary)]">• Intermarket Signals</div>
+                  <div className="text-[var(--text-secondary)]">• Economic Calendar</div>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">System Features</h4>
+                <div className="grid gap-2 md:grid-cols-3 text-sm">
+                  <div className="text-[var(--text-secondary)]">• Command Center (Settings)</div>
+                  <div className="text-[var(--text-secondary)]">• Module-Status Monitoring</div>
+                  <div className="text-[var(--text-secondary)]">• Log-Viewer (Global)</div>
+                  <div className="text-[var(--text-secondary)]">• API-Diagnostics</div>
+                  <div className="text-[var(--text-secondary)]">• Telegram-Integration</div>
+                  <div className="text-[var(--text-secondary)]">• Automated Reports</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Development Notes */}
+          <div className="card p-6">
+            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Entwicklung & Wartung</h3>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">Tech Stack</h4>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• Backend: Python 3.11, FastAPI, asyncio</div>
+                  <div>• Frontend: React 18, Next.js 16, TypeScript</div>
+                  <div>• Database: PostgreSQL (Supabase)</div>
+                  <div>• Cache: Redis (Session + API)</div>
+                  <div>• ML: Transformers (FinBERT), scikit-learn</div>
+                  <div>• Automation: n8n (Node-RED Alternative)</div>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">Wichtige Pfade</h4>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• <code>/logs</code> — System-Logs (Live)</div>
+                  <div>• <code>/status</code> — Legacy Status (deprecated)</div>
+                  <div>• <code>/settings</code> — Command Center</div>
+                  <div>• <code>/api/diagnostics/*</code> — Health-Checks</div>
+                  <div>• <code>/api/logs/*</code> — Log-Management</div>
+                  <div>• <code>docker-compose logs -f</code> — Container Logs</div>
                 </div>
               </div>
             </div>

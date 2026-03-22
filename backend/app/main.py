@@ -169,6 +169,13 @@ async def api_get_module_status():
     """Gibt den Execution-Status der sechs Kernmodule zurück."""
     return get_module_status()
 
+@app.post("/api/logs/create-test-logs")
+async def api_create_test_logs():
+    """Erzeugt Test-Log-Einträge für alle Module (für Debugging)."""
+    from backend.app.logger import create_test_module_logs
+    create_test_module_logs()
+    return {"status": "success", "message": "Test logs created for all modules"}
+
 @app.get("/api/logs/module/{module_id}")
 async def api_get_module_logs(module_id: str):
     """Gibt die letzten 20 Log-Zeilen für ein spezifisches Modul zurück."""
@@ -3867,66 +3874,119 @@ async def full_system_diagnostics():
     from backend.app.data.fred import get_macro_snapshot
     from backend.app.analysis.deepseek import call_deepseek
     from backend.app.analysis.finbert import analyze_sentiment
+    from backend.app.logger import get_logger
+    
+    logger = get_logger(__name__)
+    logger.info("=== Starting Full System Diagnostics ===")
     
     results = {"status": "ok", "timestamp": datetime.utcnow().isoformat(), "services": {}}
     
     async def measure(func, *args):
         t0 = time.time()
-        res = await func(*args) if args else await func()
-        return res, round((time.time() - t0) * 1000)
+        try:
+            res = await func(*args) if args else await func()
+            return res, round((time.time() - t0) * 1000)
+        except Exception as e:
+            logger.error(f"Error measuring {func.__name__}: {e}")
+            raise
 
     # 1. Supabase
+    logger.info("🔍 Testing Supabase connection...")
     try:
         t0 = time.time()
         db = get_supabase_client()
         wl = db.table("watchlist").select("ticker").limit(1).execute() if db else None
         ms = round((time.time() - t0) * 1000)
         results["services"]["supabase"] = {"status": "ok" if wl else "error", "latency_ms": ms, "details": "DB connected"}
+        logger.info(f"✅ Supabase: OK ({ms}ms)")
     except Exception as e:
         results["services"]["supabase"] = {"status": "error", "error_code": "DB_CONN_ERR", "details": str(e)}
+        logger.error(f"❌ Supabase: ERROR - {e}")
 
     # 2. Finnhub API
+    logger.info("🔍 Testing Finnhub API...")
     try:
         now = datetime.now()
         from_date = (now - timedelta(days=7)).strftime("%Y-%m-%d")
         to_date = now.strftime("%Y-%m-%d")
         res, ms = await measure(get_company_news, "AAPL", from_date, to_date)
         results["services"]["finnhub"] = {"status": "ok" if res else "warning", "latency_ms": ms, "details": "API responsive"}
+        logger.info(f"✅ Finnhub: OK ({ms}ms, {len(res) if res else 0} items)")
     except Exception as e:
         results["services"]["finnhub"] = {"status": "error", "error_code": "FINNHUB_API_ERR", "details": repr(e)}
+        logger.error(f"❌ Finnhub: ERROR - {e}")
 
     # 3. FMP API
+    logger.info("🔍 Testing FMP API...")
     try:
         res, ms = await measure(fmp_profile, "AAPL")
         results["services"]["fmp"] = {"status": "ok" if res else "warning", "latency_ms": ms, "details": "API responsive"}
+        logger.info(f"✅ FMP: OK ({ms}ms)")
     except Exception as e:
         results["services"]["fmp"] = {"status": "error", "error_code": "FMP_API_ERR", "details": repr(e)}
+        logger.error(f"❌ FMP: ERROR - {e}")
 
     # 4. FRED API
+    logger.info("🔍 Testing FRED API...")
     try:
         res, ms = await measure(get_macro_snapshot)
         results["services"]["fred"] = {"status": "ok" if res else "warning", "latency_ms": ms, "details": "API responsive"}
+        logger.info(f"✅ FRED: OK ({ms}ms)")
     except Exception as e:
         results["services"]["fred"] = {"status": "error", "error_code": "FRED_API_ERR", "details": repr(e)}
+        logger.error(f"❌ FRED: ERROR - {e}")
 
-    # 3. AI Services
+    # 5. AI Services
+    logger.info("🔍 Testing DeepSeek API...")
     try:
         res, ms = await measure(call_deepseek, "Reply OK", "Test")
         results["services"]["deepseek"] = {"status": "ok", "latency_ms": ms, "details": "LLM responsive"}
+        logger.info(f"✅ DeepSeek: OK ({ms}ms)")
     except Exception as e:
         results["services"]["deepseek"] = {"status": "error", "error_code": "DEEPSEEK_ERR", "details": repr(e)}
+        logger.error(f"❌ DeepSeek: ERROR - {e}")
         
+    logger.info("🔍 Testing FinBERT model...")
     try:
         t0 = time.time()
         await asyncio.to_thread(analyze_sentiment, "Test sentence.")
         ms = round((time.time() - t0) * 1000)
         results["services"]["finbert"] = {"status": "ok", "latency_ms": ms, "details": "Model loaded"}
+        logger.info(f"✅ FinBERT: OK ({ms}ms)")
     except Exception as e:
         results["services"]["finbert"] = {"status": "error", "error_code": "FINBERT_ERR", "details": repr(e)}
+        logger.error(f"❌ FinBERT: ERROR - {e}")
+
+    # 6. Telegram
+    logger.info("🔍 Testing Telegram connection...")
+    try:
+        from backend.app.alerts.telegram import send_telegram_alert
+        await send_telegram_alert("🧪 Systemcheck: Alle APIs getestet.")
+        results["services"]["telegram"] = {"status": "ok", "details": "Notification sent"}
+        logger.info("✅ Telegram: OK")
+    except Exception as e:
+        results["services"]["telegram"] = {"status": "error", "error_code": "TELEGRAM_ERR", "details": repr(e)}
+        logger.error(f"❌ Telegram: ERROR - {e}")
+
+    # 7. n8n
+    logger.info("🔍 Testing n8n connection...")
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://kafin-n8n:5678/healthz", timeout=5.0)
+            results["services"]["n8n"] = {"status": "ok" if response.status_code == 200 else "warning", "details": f"Status {response.status_code}"}
+            logger.info(f"✅ n8n: OK (status {response.status_code})")
+    except Exception as e:
+        results["services"]["n8n"] = {"status": "error", "error_code": "N8N_ERR", "details": repr(e)}
+        logger.error(f"❌ n8n: ERROR - {e}")
 
     if any(s.get("status") == "error" for s in results["services"].values()):
         results["status"] = "degraded"
-        
+        logger.warning("⚠️ System status: DEGRADED")
+    else:
+        logger.info("✅ System status: OK")
+    
+    logger.info("=== Full System Diagnostics Complete ===")
     return results
 
 app.include_router(diagnostics_router)

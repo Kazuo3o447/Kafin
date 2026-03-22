@@ -43,6 +43,14 @@ async def _fmp_get(endpoint: str, params: dict = None) -> list | dict | None:
 
             if response.status_code == 200:
                 data = response.json()
+                
+                # Usage tracken (nach erfolgreichem Response)
+                try:
+                    from backend.app.analysis.usage_tracker import track_call
+                    track_call(api_name="fmp")
+                except Exception:
+                    pass
+                
                 return data
             else:
                 # Debug statt Warning für erwartete Fehler (Plan-Limits, Premium-Features)

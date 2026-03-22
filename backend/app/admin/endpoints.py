@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
-from backend.app.logger import get_logger, log_custom_search_terms_sql, get_schema_extension_sql
+from backend.app.logger import get_logger
+from backend.app.init_db import log_custom_search_terms_sql, get_schema_extension_sql
 from backend.app.database import get_pool
 from backend.app.embeddings import save_embedding
 

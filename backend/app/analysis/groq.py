@@ -71,6 +71,24 @@ async def call_groq(
                 return await call_deepseek(system_prompt, user_prompt)
 
             data = resp.json()
+
+            # Token-Tracking
+            try:
+                usage = data.get("usage", {})
+                input_tok  = usage.get("prompt_tokens", 0)
+                output_tok = usage.get("completion_tokens", 0)
+                from backend.app.analysis.usage_tracker import (
+                    track_call
+                )
+                track_call(
+                    api_name="groq",
+                    model=model,
+                    input_tokens=input_tok,
+                    output_tokens=output_tok,
+                )
+            except Exception:
+                pass
+
             content = (
                 data.get("choices", [{}])[0]
                     .get("message", {})

@@ -45,6 +45,13 @@ async def get_economic_calendar(days_back: int = 7, days_forward: int = 7) -> li
         response = await client.get(url)
         response.raise_for_status()
         data = response.json()
+        
+        # Usage tracken
+        try:
+            from backend.app.analysis.usage_tracker import track_call
+            track_call(api_name="finnhub")
+        except Exception:
+            pass
 
     events_raw = data.get("economicCalendar", [])
 
@@ -92,6 +99,13 @@ async def get_earnings_calendar(from_date: str, to_date: str) -> List[EarningsEx
         response = await client.get(url)
         response.raise_for_status()
         data = response.json().get("earningsCalendar", [])
+        
+        # Usage tracken
+        try:
+            from backend.app.analysis.usage_tracker import track_call
+            track_call(api_name="finnhub")
+        except Exception:
+            pass
         return [
             EarningsExpectation(
                 ticker=item.get("symbol"),
@@ -115,6 +129,13 @@ async def get_company_news(ticker: str, from_date: str, to_date: str) -> List[Ne
         response = await client.get(url)
         response.raise_for_status()
         data = response.json()
+        
+        # Usage tracken
+        try:
+            from backend.app.analysis.usage_tracker import track_call
+            track_call(api_name="finnhub")
+        except Exception:
+            pass
         return [
             NewsBulletPoint(
                 headline=item.get("headline"),
@@ -362,6 +383,13 @@ async def get_general_news(category: str = "general", min_id: int = 0) -> list[d
         response = await client.get(url)
         response.raise_for_status()
         news = response.json()
+        
+        # Usage tracken
+        try:
+            from backend.app.analysis.usage_tracker import track_call
+            track_call(api_name="finnhub")
+        except Exception:
+            pass
 
         # Nimm die 15 neuesten, filtere auf relevante Quellen
         filtered = []

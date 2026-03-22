@@ -13,7 +13,7 @@ import yfinance as yf
 import pandas as pd
 import asyncio
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -78,9 +78,39 @@ async def startup_event():
     await ensure_daily_snapshots_table()
     log_schema_extension_sql()
 
+    # API Usage Tabelle erstellen (einmalig)
+    try:
+        from backend.app.database import get_pool
+        import aiofiles, os
+        pool = await get_pool()
+        migration = os.path.join(
+            "/app/database/migrations",
+            "04_api_usage.sql"
+        )
+        if os.path.exists(migration):
+            with open(migration, "r") as f:
+                sql = f.read()
+            async with pool.acquire() as conn:
+                await conn.execute(sql)
+            logger.info("api_usage Tabelle bereit.")
+    except Exception as e:
+        logger.warning(f"api_usage Migration: {e}")
+
+    # Periodischer Flush alle 5 Minuten
+    async def _periodic_flush():
+        while True:
+            await asyncio.sleep(300)
+            try:
+                from backend.app.analysis.usage_tracker import (
+                    flush_to_db
+                )
+                await flush_to_db()
+            except Exception:
+                pass
+
+    asyncio.create_task(_periodic_flush())
+
     # Warm-Start für Market-Cache
-    import asyncio
-    
     async def _warm():
         try:
             logger.info("Cache-Warm-Start...")
@@ -292,6 +322,56 @@ async def api_get_module_logs(module_id: str):
     ]
     
     return {"logs": module_logs[:20]}
+
+@app.get("/api/admin/api-usage")
+async def api_usage_endpoint(days: int = 7):
+    """
+    Aggregierte API Usage der letzten N Tage.
+    Inkl. heutige Echtzeit-Daten aus Redis.
+    """
+    from backend.app.analysis.usage_tracker import (
+        get_today_summary,
+        get_usage_summary,
+    )
+
+    today   = await get_today_summary()
+    history = await get_usage_summary(days=days)
+
+    # FMP Limit-Status
+    fmp_today = sum(
+        v.get("calls", 0)
+        for v in today.get("fmp", {}).values()
+    )
+    finnhub_today = sum(
+        v.get("calls", 0)
+        for v in today.get("finnhub", {}).values()
+    )
+
+    return {
+        "today":          today,
+        "history":        history,
+        "limits": {
+            "fmp": {
+                "used":      fmp_today,
+                "limit":     250,
+                "remaining": max(0, 250 - fmp_today),
+                "pct":       round(fmp_today / 250 * 100),
+            },
+            "finnhub": {
+                "used":      finnhub_today,
+                "limit_per_min": 60,
+                "note":      "per Minute, kein Tageslimit",
+            },
+            "groq": {
+                "used_tokens": sum(
+                    v.get("total_tokens", 0)
+                    for v in today.get("groq", {}).values()
+                ),
+                "limit_per_day": 500000,
+                "note":          "Llama 3.1 8B Free Tier",
+            },
+        },
+    }
 
 from backend.app.analysis.finbert import analyze_sentiment
 

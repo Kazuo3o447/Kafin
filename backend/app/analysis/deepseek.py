@@ -82,7 +82,27 @@ async def call_deepseek(
                 
                 # Logging limits & tokens
                 usage = data.get("usage", {})
-                logger.info(f"DeepSeek success. Tokens: {usage.get('total_tokens', 'N/A')}")
+                input_tok  = usage.get("prompt_tokens", 0)
+                output_tok = usage.get("completion_tokens", 0)
+                logger.info(
+                    f"DeepSeek [{model}] "
+                    f"in={input_tok} out={output_tok} tokens"
+                )
+
+                # Usage tracken
+                try:
+                    from backend.app.analysis.usage_tracker import (
+                        track_call
+                    )
+                    track_call(
+                        api_name="deepseek",
+                        model=model,
+                        input_tokens=input_tok,
+                        output_tokens=output_tok,
+                    )
+                except Exception:
+                    pass
+
                 message = data["choices"][0]["message"]
                 reasoning = message.get("reasoning_content")
                 if reasoning:

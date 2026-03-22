@@ -103,6 +103,182 @@ type NewsMemory = {
 
 type TabId = "uebersicht" | "pipeline" | "apis" | "daten" | "konfiguration";
 
+type ApiUsageModel = {
+  calls:         number;
+  input_tokens:  number;
+  output_tokens: number;
+  total_tokens:  number;
+  cost_usd:      number;
+};
+
+type ApiUsageToday = {
+  [api: string]: { [model: string]: ApiUsageModel };
+};
+
+type ApiUsageData = {
+  today:   ApiUsageToday;
+  limits:  {
+    fmp:     { used: number; limit: number; remaining: number; pct: number };
+    groq:    { used_tokens: number; limit_per_day: number };
+    finnhub: { used: number; limit_per_min: number };
+  };
+};
+
+// API Usage Block Component
+function ApiUsageBlock({
+  data,
+}: {
+  data: ApiUsageData | null;
+}) {
+  if (!data) return null;
+
+  const today = data.today || {};
+  const limits = data.limits || {};
+
+  // Alle APIs mit Daten sammeln
+  const apis = [
+    {
+      name:    "FMP",
+      key:     "fmp",
+      color:   "var(--accent-blue)",
+      used:    limits.fmp?.used ?? 0,
+      limit:   limits.fmp?.limit ?? 250,
+      unit:    "Calls",
+      isLimit: true,
+    },
+    {
+      name:    "Groq",
+      key:     "groq",
+      color:   "var(--accent-green)",
+      used:    limits.groq?.used_tokens ?? 0,
+      limit:   limits.groq?.limit_per_day ?? 500000,
+      unit:    "Tokens",
+      isLimit: true,
+    },
+    {
+      name:    "Finnhub",
+      key:     "finnhub",
+      color:   "var(--accent-amber)",
+      used:    limits.finnhub?.used ?? 0,
+      limit:   60,
+      unit:    "Calls/Min",
+      isLimit: false,
+    },
+  ];
+
+  return (
+    <div className="card p-5">
+      <h3 className="text-sm font-semibold
+                      text-[var(--text-primary)] mb-4">
+        API Tagesverbrauch
+      </h3>
+
+      <div className="space-y-4">
+        {apis.map(api => {
+          const pct = api.limit
+            ? Math.min(100, Math.round(api.used / api.limit * 100))
+            : 0;
+          const color =
+            pct > 75 ? "var(--accent-red)"
+            : pct > 50 ? "var(--accent-amber)"
+            : "var(--accent-green)";
+
+          return (
+            <div key={api.key}>
+              <div className="flex justify-between
+                               items-baseline mb-1">
+                <span className="text-xs font-semibold
+                                   text-[var(--text-primary)]">
+                  {api.name}
+                </span>
+                <span className="text-xs font-mono
+                                   text-[var(--text-secondary)]">
+                  {api.used.toLocaleString("de-DE")}
+                  {api.isLimit && (
+                    <span className="text-[var(--text-muted)]">
+                      {" "}/ {api.limit.toLocaleString("de-DE")} {api.unit}
+                    </span>
+                  )}
+                  {!api.isLimit && (
+                    <span className="text-[var(--text-muted)]">
+                      {" "}{api.unit}
+                    </span>
+                  )}
+                </span>
+              </div>
+              {api.isLimit && (
+                <div className="h-1.5 rounded-full
+                                 bg-[var(--bg-tertiary)]
+                                 overflow-hidden">
+                  <div
+                    className="h-full rounded-full
+                                 transition-all duration-700"
+                    style={{
+                      width:      `${pct}%`,
+                      background: color,
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Token-Details für KI-Modelle */}
+      {(today.deepseek || today.groq) && (
+        <div className="border-t border-[var(--border)]
+                         mt-4 pt-4">
+          <p className="text-[10px] uppercase tracking-wider
+                          text-[var(--text-muted)] mb-3">
+            KI Token-Verbrauch heute
+          </p>
+          <div className="space-y-2">
+            {["deepseek", "groq"].map(api =>
+              Object.entries(today[api] || {}).map(
+                ([model, usage]) => (
+                  <div
+                    key={`${api}-${model}`}
+                    className="flex items-center
+                                justify-between text-xs"
+                  >
+                    <div>
+                      <span className="font-mono
+                                         text-[var(--text-primary)]">
+                        {model}
+                      </span>
+                      <span className="text-[var(--text-muted)]
+                                         ml-2">
+                        {(usage as ApiUsageModel).calls}×
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono
+                                         text-[var(--text-secondary)]">
+                        {(usage as ApiUsageModel)
+                          .total_tokens.toLocaleString("de-DE")}{" "}
+                        tokens
+                      </span>
+                      {(usage as ApiUsageModel).cost_usd > 0 && (
+                        <span className="ml-2 font-mono
+                                           text-[var(--text-muted)]">
+                          $
+                          {(usage as ApiUsageModel)
+                            .cost_usd.toFixed(4)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              )
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   // Tab state
   const [activeTab, setActiveTab] = useState<TabId>("uebersicht");
@@ -119,6 +295,7 @@ export default function SettingsPage() {
   const [apiDiagnostics, setApiDiagnostics] = useState<DiagnosticResult>({});
   const [finbertTestText, setFinbertTestText] = useState("");
   const [finbertResult, setFinbertResult] = useState<{ score: number; label: string } | null>(null);
+  const [apiUsage, setApiUsage] = useState<ApiUsageData | null>(null);
   
   // Daten state
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
@@ -310,6 +487,16 @@ export default function SettingsPage() {
         loadModuleStatus();
       }, 30000);
       return () => clearInterval(interval);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "apis") {
+      // Load API usage data when switching to APIs tab
+      fetch("/api/admin/api-usage")
+        .then(r => r.json())
+        .then(d => setApiUsage(d))
+        .catch(() => {});
     }
   }, [activeTab]);
 
@@ -792,6 +979,9 @@ export default function SettingsPage() {
               );
             })}
           </div>
+
+          {/* API Usage Block */}
+          <ApiUsageBlock data={apiUsage} />
 
           {/* FinBERT Test */}
           <div className="card p-6">

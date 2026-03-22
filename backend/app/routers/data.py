@@ -910,12 +910,27 @@ async def api_research_dashboard(
 
     last_audit = None
     try:
+        from datetime import datetime, timedelta
+        cutoff = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        
         db = get_supabase_client()
         if db:
-            res = await db.table("audit_reports").select("report_date, recommendation, opportunity_score, torpedo_score, report_text").eq("ticker", ticker).order("report_date", desc=True).limit(1).execute_async()
+            res = await db.table("audit_reports").select(
+                "report_date, recommendation, "
+                "opportunity_score, torpedo_score, "
+                "report_text, created_at"
+            ).eq("ticker", ticker).gte("report_date", cutoff).order("report_date", desc=True).limit(1).execute_async()
             rows = res.data if res and res.data else []
-            if rows: last_audit = {"date": rows[0].get("report_date"), "recommendation": rows[0].get("recommendation"), "opportunity_score": rows[0].get("opportunity_score"), "torpedo_score": rows[0].get("torpedo_score"), "report_text": rows[0].get("report_text", "")[:500]}
-    except Exception as e: logger.debug(f"Research: last audit {ticker}: {e}")
+            if rows: 
+                last_audit = {
+                    "date": rows[0].get("report_date") or rows[0].get("created_at", ""),
+                    "recommendation": rows[0].get("recommendation"),
+                    "opportunity_score": rows[0].get("opportunity_score"),
+                    "torpedo_score": rows[0].get("torpedo_score"),
+                    "report_text": rows[0].get("report_text", "")
+                }
+    except Exception as e: 
+        logger.debug(f"Research: last audit {ticker}: {e}")
 
     ticker_sent = _calc_sentiment_from_bullets(news_mem or [])
     mkt_cat = market_sent_data.get("category_sentiment", {})

@@ -1022,14 +1022,26 @@ async def generate_audit_report(ticker: str) -> str:
 
             await db.table("audit_reports").insert({
                 "ticker": ticker,
+                "report_type": "audit",
                 "report_date": datetime.now().strftime("%Y-%m-%d"),
                 "earnings_date": str(e_date),
                 "recommendation": rec.recommendation if rec else "unknown",
                 "opportunity_score": opp_score.total_score if opp_score else 0,
                 "torpedo_score": torp_score.total_score if torp_score else 0,
+                "report_text": mock_response,   # ← NEU
+                "prompt_version": "0.4",       # ← NEU
                 "created_at": datetime.now().isoformat()
             }).execute_async()
             logger.info(f"Audit-Report für {ticker} in Supabase gespeichert")
+            
+            # Redis Cache für Research invalidieren
+            try:
+                from backend.app.cache import cache_invalidate
+                cache_invalidate(f"research:{ticker.upper()}")
+                cache_invalidate(f"research:{ticker.upper()}:v2")
+                logger.info(f"Research Cache für {ticker} invalidiert")
+            except Exception:
+                pass
             try:
                 await open_shadow_trade(
                     ticker=ticker,

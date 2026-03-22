@@ -2,6 +2,24 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [6.1.5] - 2026-03-22 - Bugfix: Audit Report Persistenz
+
+### 🐛 Kritischer Bugfix
+  report_text wurde weder gespeichert noch geladen.
+  Resultat: Jeder Research-Besuch = neuer 30-60s DeepSeek-Reasoner-Call.
+
+  Fix 1: INSERT +report_text, +prompt_version
+  Fix 2: SELECT +report_text, +created_at  
+  Fix 3: last_audit Response +report_text
+  Fix 4: Nur Reports < 30 Tage laden
+  Fix 5: Redis Cache nach neuem Report invalidieren
+
+### 🔧 Technical Changes
+- **report_generator.py**: report_text und prompt_version in DB-INSERT
+- **data.py**: report_text in SELECT, 30-Tage-Cutoff, created_at Fallback
+- **Cache**: research:{ticker} und research:{ticker}:v2 invalidiert
+- **Performance**: Report lädt sofort beim erneuten Besuch
+
 ## [6.1.4] - 2026-03-22 - Earnings Radar: Firmenname + MEZ-Zeit
 
 ### 📊 Earnings Radar Upgrade

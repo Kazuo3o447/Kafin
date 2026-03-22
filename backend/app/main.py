@@ -2181,6 +2181,13 @@ async def api_options_oi(ticker: str):
     return await get_options_oi_analysis(ticker.upper())
 
 
+@data_router.get("/vwap/{ticker}")
+async def api_vwap(ticker: str):
+    """VWAP Intraday für Ticker (2min Cache)."""
+    from backend.app.data.yfinance_data import get_vwap
+    return await get_vwap(ticker.upper())
+
+
 @app.get("/api/data/chart-overlays/{ticker}")
 async def api_chart_overlays(ticker: str):
     """Aggregiert Earnings-, Torpedo-, Narrative- und Insider-Events für Charts."""

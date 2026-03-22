@@ -2,6 +2,30 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.15.1] - 2026-03-22 - VWAP Intraday Indikator
+
+### 🚀 Trading-Mehrwert
+- **VWAP Badge**: Intraday Volume Weighted Average Price im Research Dashboard
+  - Zeigt aktuellen VWAP und Delta % zum aktuellen Preis
+  - Farbcodierte Anzeige: Grün über VWAP, Rot unter VWAP
+  - Auto-Refresh alle 2 Minuten während Marktöffnung
+  - "Markt geschlossen" Hinweis außerhalb Handelszeiten
+
+### 🔧 Backend
+- **get_vwap()**: 5-Minuten Intraday-Daten, typischer Preis × Volume
+- **VWAP Berechnung**: Cumsum(Typical Price × Volume) / Cumsum(Volume)
+- **Smart Caching**: 2min TTL während Marktöffnung, 1h sonst
+- **Marktstunden-Erkennung**: ET timezone check (09:00-16:00)
+
+### 📊 Frontend
+- **VWAP State**: On-demand Loading mit useEffect und 2min Intervall
+- **Badge UI**: Kompakte Anzeige mit VWAP, Delta % und Marktstatus
+- **Type Safety**: Strukturiertes VWAP Interface mit null checks
+
+### 💾 API
+- **GET /api/data/vwap/{ticker}**: Neuer Endpoint für VWAP Daten
+- **Response Format**: vwap, current_price, vwap_delta_pct, above_vwap, is_market_hours
+
 ## [5.15.0] - 2026-03-22 - Marktbreite 5T/20T History
 
 ### 🚀 Trading-Mehrwert

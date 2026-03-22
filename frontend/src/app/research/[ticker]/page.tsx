@@ -1533,6 +1533,14 @@ export default function ResearchDashboard() {
   const [chartLoading, setChartLoading] = useState(false);
   const chartLoadingRef = useRef(false);
 
+  // Feature 4: VWAP Intraday
+  const [vwapData, setVwapData] = useState<{
+    vwap: number | null;
+    vwap_delta_pct: number | null;
+    above_vwap: boolean | null;
+    is_market_hours: boolean;
+  } | null>(null);
+
   // Feature 3: Position Sizer
   const [accountSize, setAccountSize] = useState<number>(10000);
   const [riskPercent, setRiskPercent] = useState<number>(1);
@@ -1633,6 +1641,23 @@ export default function ResearchDashboard() {
       setChartLoading(false);
     }
   }, [tickerUpper, chartLoading]);
+
+  // VWAP nur laden wenn Markt offen könnte sein
+  useEffect(() => {
+    if (!tickerUpper) return;
+    fetch(`/api/data/vwap/${tickerUpper}`)
+      .then(r => r.json())
+      .then(d => setVwapData(d))
+      .catch(() => {});
+    // Refresh alle 2 Minuten
+    const id = setInterval(() => {
+      fetch(`/api/data/vwap/${tickerUpper}`)
+        .then(r => r.json())
+        .then(d => setVwapData(d))
+        .catch(() => {});
+    }, 120000);
+    return () => clearInterval(id);
+  }, [tickerUpper]);
 
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { loadScoreDelta(); }, [loadScoreDelta]);
@@ -2076,6 +2101,36 @@ export default function ResearchDashboard() {
               }
             />
           </div>
+
+          {/* VWAP Badge */}
+          {vwapData?.vwap != null && (
+            <div className="flex items-center gap-2 mb-3 p-3 bg-[var(--bg-tertiary)] rounded-lg">
+              <span className="text-[10px] text-[var(--text-muted)]
+                            uppercase tracking-wider">
+                VWAP
+              </span>
+              <span className="text-sm font-mono font-semibold
+                            text-[var(--text-primary)]">
+                ${vwapData.vwap.toFixed(2)}
+              </span>
+              {vwapData.vwap_delta_pct != null && (
+                <span className={`text-xs font-mono ${
+                  vwapData.above_vwap
+                    ? "text-[var(--accent-green)]"
+                    : "text-[var(--accent-red)]"
+                }`}>
+                  {vwapData.vwap_delta_pct >= 0 ? "+" : ""}
+                  {vwapData.vwap_delta_pct.toFixed(2)}%
+                </span>
+              )}
+              {!vwapData.is_market_hours && (
+                <span className="text-[10px]
+                              text-[var(--text-muted)]">
+                  (Markt geschlossen)
+                </span>
+              )}
+            </div>
+          )}
 
           {/* ATR + Preisspanne als Kontext-Zeile */}
           <div className="flex items-center justify-between

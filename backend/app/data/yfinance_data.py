@@ -634,3 +634,80 @@ async def get_options_oi_analysis(ticker: str) -> dict:
         return result
     except Exception as e:
         return {"error": str(e)}
+
+
+async def get_vwap(ticker: str) -> dict:
+    """
+    Berechnet VWAP (Volume Weighted Average Price)
+    aus heutigem Intraday-1min-Daten.
+    Nur sinnvoll während Börsenöffnung (09:30-16:00 ET).
+    Außerhalb: gibt None zurück.
+    """
+    from backend.app.cache import cache_get, cache_set
+    cache_key = f"vwap:{ticker.upper()}"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
+
+    def _calc():
+        import yfinance as yf
+        from datetime import datetime, timezone
+        import pytz
+
+        # Prüfe ob Markt offen (vereinfacht)
+        et = pytz.timezone("America/New_York")
+        now_et = datetime.now(et)
+        is_market_hours = (
+            now_et.weekday() < 5
+            and 9 <= now_et.hour < 16
+        )
+
+        # Hole 1T Intraday-Daten (5min für Stabilität)
+        stock = yf.Ticker(ticker)
+        hist = stock.history(
+            period="1d", interval="5m", prepost=False
+        )
+
+        if hist.empty or len(hist) < 3:
+            return {
+                "vwap": None,
+                "is_market_hours": is_market_hours,
+                "data_points": 0,
+            }
+
+        # Typischer Preis = (High + Low + Close) / 3
+        typical = (
+            hist["High"] + hist["Low"] + hist["Close"]
+        ) / 3
+        vol = hist["Volume"]
+
+        # VWAP = cumsum(Preis * Vol) / cumsum(Vol)
+        cumulative_pv = (typical * vol).cumsum()
+        cumulative_v  = vol.cumsum()
+        vwap_series   = cumulative_pv / cumulative_v
+
+        current_vwap  = float(vwap_series.iloc[-1])
+        current_price = float(hist["Close"].iloc[-1])
+        vwap_delta    = round(
+            (current_price - current_vwap)
+            / current_vwap * 100, 2
+        )
+
+        return {
+            "vwap":            round(current_vwap, 2),
+            "current_price":   round(current_price, 2),
+            "vwap_delta_pct":  vwap_delta,
+            "above_vwap":      current_price > current_vwap,
+            "is_market_hours": is_market_hours,
+            "data_points":     len(hist),
+        }
+
+    try:
+        import asyncio
+        result = await asyncio.to_thread(_calc)
+        # Kurzes Cache — VWAP ändert sich ständig
+        ttl = 120 if result.get("is_market_hours") else 3600
+        cache_set(cache_key, result, ttl_seconds=ttl)
+        return result
+    except Exception as e:
+        return {"vwap": None, "error": str(e)}

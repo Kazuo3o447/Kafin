@@ -534,7 +534,21 @@ async def save_daily_snapshot(
             ),
         }
 
-        db.table("daily_snapshots").upsert(record, on_conflict="date").execute()
+        try:
+            db.table("daily_snapshots").upsert(record, on_conflict="date").execute()
+        except Exception as exc:
+            error_text = str(exc).lower()
+            if "pct_above_sma50" in error_text or "pct_above_sma200" in error_text or "column" in error_text:
+                fallback_record = {
+                    k: v for k, v in record.items()
+                    if k not in {"pct_above_sma50", "pct_above_sma200"}
+                }
+                logger.warning(
+                    "daily_snapshots breadth columns fehlen noch; speichere Snapshot ohne breadth-Felder."
+                )
+                db.table("daily_snapshots").upsert(fallback_record, on_conflict="date").execute()
+            else:
+                raise
         logger.info(f"Tages-Snapshot gespeichert/aktualisiert für {date.today()}")
     except Exception as e:
         logger.error(f"Fehler beim Speichern des Tages-Snapshots: {e}")
@@ -659,8 +673,7 @@ async def get_market_breadth() -> dict:
         db = get_supabase_client()
         if db:
             today = date.today()
-            d5 = (today - timedelta(days=7)).isoformat()
-            d20 = (today - timedelta(days=28)).isoformat()
+            d20 = (today - timedelta(days=40)).isoformat()
 
             rows = (
                 db.table("daily_snapshots")
@@ -670,24 +683,18 @@ async def get_market_breadth() -> dict:
                 .execute()
             )
             if rows.data:
-                # 5T-Ago: Datensatz ~5 Handelstage zurück
-                candidates_5 = [
-                    r for r in rows.data
-                    if r["date"] <= (
-                        today - timedelta(days=5)
-                    ).isoformat()
-                    and r.get("pct_above_sma50") is not None
-                ]
-                if candidates_5:
-                    pct_5d_ago = candidates_5[-1]["pct_above_sma50"]
-
-                # 20T-Ago
-                candidates_20 = [
+                valid_rows = [
                     r for r in rows.data
                     if r.get("pct_above_sma50") is not None
                 ]
-                if candidates_20:
-                    pct_20d_ago = candidates_20[0]["pct_above_sma50"]
+
+                # 5 Handelstage zurück = 6. letzter Snapshot (heute + 5 frühere Handelstage)
+                if len(valid_rows) >= 6:
+                    pct_5d_ago = valid_rows[-6]["pct_above_sma50"]
+
+                # 20 Handelstage zurück = 21. letzter Snapshot
+                if len(valid_rows) >= 21:
+                    pct_20d_ago = valid_rows[-21]["pct_above_sma50"]
     except Exception as e:
         logger.debug(f"Breadth-History Fehler: {e}")
 

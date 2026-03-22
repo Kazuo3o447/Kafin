@@ -651,11 +651,11 @@ async def get_vwap(ticker: str) -> dict:
 
     def _calc():
         import yfinance as yf
-        from datetime import datetime, timezone
-        import pytz
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
 
         # Prüfe ob Markt offen (vereinfacht)
-        et = pytz.timezone("America/New_York")
+        et = ZoneInfo("America/New_York")
         now_et = datetime.now(et)
         is_market_hours = (
             now_et.weekday() < 5

@@ -1254,33 +1254,43 @@ async def api_research_dashboard(
             get_earnings_calendar
         )
         from datetime import date, timedelta
-        today = date.today()
-        in_14 = today + timedelta(days=14)
-        cal = await get_earnings_calendar(
-            from_date=today.isoformat(),
-            to_date=in_14.isoformat(),
-        )
-        if cal:
-            # Filtere Peers aus der Watchlist
-            from backend.app.memory.watchlist import (
-                get_watchlist
+        sector_norm = str(sector or "").strip().lower()
+        if sector_norm:
+            today = date.today()
+            in_14 = today + timedelta(days=14)
+            cal = await get_earnings_calendar(
+                from_date=today.isoformat(),
+                to_date=in_14.isoformat(),
             )
-            wl = await get_watchlist()
-            wl_tickers = {
-                w.get("ticker", "").upper()
-                for w in (wl if isinstance(wl, list) else [])
-            }
-            for item in (cal if isinstance(cal, list) else []):
-                item_ticker = (
-                    item.get("symbol", "")
-                    or item.get("ticker", "")
-                ).upper()
-                if (item_ticker in wl_tickers
-                        and item_ticker != ticker.upper()):
+            if cal:
+                cal_by_ticker = {}
+                for item in (cal if isinstance(cal, list) else []):
+                    item_ticker = (
+                        getattr(item, "ticker", None)
+                        or getattr(item, "symbol", None)
+                        or ""
+                    ).upper()
+                    if item_ticker:
+                        cal_by_ticker[item_ticker] = item
+
+                for w in (watchlist if isinstance(watchlist, list) else []):
+                    item_ticker = str(w.get("ticker", "")).upper()
+                    if not item_ticker or item_ticker == ticker.upper():
+                        continue
+
+                    item_sector = str(w.get("sector", "")).strip().lower()
+                    if item_sector != sector_norm:
+                        continue
+
+                    cal_item = cal_by_ticker.get(item_ticker)
+                    if not cal_item:
+                        continue
+
                     sector_earnings.append({
                         "ticker": item_ticker,
-                        "date":   item.get("date"),
-                        "timing": item.get("hour"),
+                        "date": getattr(cal_item, "report_date", None),
+                        "timing": getattr(cal_item, "report_timing", None)
+                        or getattr(cal_item, "hour", None),
                     })
     except Exception as e:
         logger.debug(f"Sektor-Kalender Fehler: {e}")
@@ -1355,16 +1365,34 @@ async def api_research_dashboard(
         last_q = getattr(history, "last_quarter", None)
         if last_q:
             last_surprise_pct = getattr(last_q, "eps_surprise_percent", None)
-            last_beat = (last_surprise_pct or 0) > 0
+            last_surprise_pct = (
+                float(last_surprise_pct)
+                if last_surprise_pct is not None else None
+            )
+            last_beat = bool((last_surprise_pct or 0) > 0)
+        if beats_of_8 is not None:
+            try:
+                beats_of_8 = int(beats_of_8)
+            except Exception:
+                pass
+        if avg_surprise is not None:
+            try:
+                avg_surprise = float(avg_surprise)
+            except Exception:
+                pass
         # Letzte 8 Quartale für Tabelle
         all_q = getattr(history, "all_quarters", [])
         for q in all_q[:8]:
+            eps_actual = getattr(q, "eps_actual", None)
+            eps_consensus = getattr(q, "eps_consensus", None)
+            surprise_pct = getattr(q, "eps_surprise_percent", None)
+            reaction_1d = getattr(q, "stock_reaction_1d", None)
             quarterly_history.append({
                 "quarter": getattr(q, "quarter", ""),
-                "eps_actual": getattr(q, "eps_actual", None),
-                "eps_consensus": getattr(q, "eps_consensus", None),
-                "surprise_pct": getattr(q, "eps_surprise_percent", None),
-                "reaction_1d": getattr(q, "stock_reaction_1d", None),
+                "eps_actual": float(eps_actual) if eps_actual is not None else None,
+                "eps_consensus": float(eps_consensus) if eps_consensus is not None else None,
+                "surprise_pct": float(surprise_pct) if surprise_pct is not None else None,
+                "reaction_1d": float(reaction_1d) if reaction_1d is not None else None,
             })
 
     # ── Tage bis Earnings ──────────────────────────────────────
@@ -1658,11 +1686,12 @@ async def api_research_dashboard(
     
     # Sentiment-Divergenz:
     # Ticker historisch positiv aber aktuelle Trend neg
-    sentiment_divergence_calc = (
+    sentiment_divergence_calc = bool(
         ticker_sent["count"] > 0
         and ticker_sent["avg"] > 0.1
         and ticker_sent["trend"] == "deteriorating"
     )
+    sentiment_has_material = bool(ticker_sent["has_material"])
 
     # ── Data Context für Scoring ────────────────────────────────────────────────
     from backend.app.analysis.scoring import (
@@ -1937,7 +1966,7 @@ async def api_research_dashboard(
         "finbert_sentiment": ticker_sent["avg"],
         "sentiment_label": ticker_sent["label"],
         "sentiment_trend": ticker_sent["trend"],
-        "sentiment_has_material": ticker_sent["has_material"],
+        "sentiment_has_material": sentiment_has_material,
         "sentiment_count": ticker_sent["count"],
         "sentiment_divergence": sentiment_divergence_calc,
         # S&P-500 Vergleich
@@ -1966,6 +1995,22 @@ async def api_research_dashboard(
             "Daten basiert. Bitte alternativen Ticker eingeben "
             "(z.B. VOW3.DE statt VLKPF für Volkswagen)."
         )
+
+    def _json_safe(value):
+        if isinstance(value, dict):
+            return {k: _json_safe(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [_json_safe(v) for v in value]
+        if isinstance(value, tuple):
+            return [_json_safe(v) for v in value]
+        if hasattr(value, "item") and not isinstance(value, (str, bytes)):
+            try:
+                return _json_safe(value.item())
+            except Exception:
+                pass
+        return value
+
+    response = _json_safe(response)
 
     cache_set(cache_key, response, ttl_seconds=600)
     return response

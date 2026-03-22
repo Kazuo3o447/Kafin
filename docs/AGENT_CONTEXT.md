@@ -5,7 +5,7 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 5.10.11 (Stability: Free-Tier News Sentiment Hardening)
+**Version**: 5.15.4 (Cascade 4 self-review + docs)
 **Stand**: 2026-03-22
 
 ---
@@ -87,6 +87,13 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 - **Free-Tier News Coverage**: Market-Sentiment kombiniert Finnhub General News und Google News RSS, um ein robusteres 24h-Sentimentbild zu erhalten
 - **Sentiment UX**: Der Markets-Block zeigt jetzt Datum/Uhrzeit, externe Links und Bullish/Bearish/Neutral-Zähler für die Marktanalyse
 - **Cache Isolation**: Google-News-Caches sind nach Scope getrennt, damit Market-Sentiment nicht versehentlich durch Watchlist-Scans überschrieben wird
+
+### Kaskade 4 (v5.15.0-5.15.4)
+- **Marktbreite History**: `daily_snapshots` speichert jetzt `pct_above_sma50` / `pct_above_sma200`; historische 5T/20T-Werte kommen aus Supabase.
+- **VWAP**: `get_vwap()` berechnet intraday VWAP aus 5m-Yahoo-Daten, cached 2min im Markt und 1h außerhalb; Endpoint `GET /api/data/vwap/{ticker}`.
+- **Options OI Heatmap**: `OptionsOiBlock` lädt on-demand Top-Strike-OI, hebt Max Pain hervor und markiert ATM-Level.
+- **P2b Earnings Fallback**: `get_earnings_history_yf()` nutzt yfinance als Fallback, wenn FMP keine Earnings-Historie liefert.
+- **Sektor-Kalender**: `sector_earnings_upcoming` zeigt Watchlist-Earnings der nächsten 14 Tage im `EarningsContextBanner`.
 
 ---
 

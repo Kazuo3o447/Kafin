@@ -1808,6 +1808,10 @@ export default function ResearchDashboard() {
     finally { setOiLoading(false); }
   }, [ticker]);
 
+  useEffect(() => {
+    setOiData(null);
+  }, [tickerUpper]);
+
   // Feature 3: Position Sizer
   const [accountSize, setAccountSize] = useState<number>(10000);
   const [riskPercent, setRiskPercent] = useState<number>(1);

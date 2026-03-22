@@ -468,12 +468,13 @@ Kein vorzeitiger Architektur-Wechsel.
 - **Timestamp-Delta**: "vor 5 min" Anzeige mit Stale-Warnungen
 - **BlockError**: Fallback-Komponente für fehlgeschlagene API-Calls
 
-## 🟡 MARKETS: Marktbreite 5T/20T Verlauf
-Aktuell: pct_above_sma50_5d_ago = None (Placeholder).
-Lösung: Täglichen Breadth-Wert in Supabase speichern.
-Neue Tabelle: market_breadth_history (date, pct_sma50, pct_sma200).
-n8n: täglich um 22:00 speichern.
-Aufwand: ~2h, SWE-1.5.
+## ✅ MARKETS: Marktbreite 5T/20T Verlauf
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.15.0**
+
+Tägliche Breadth-Werte werden in `daily_snapshots` gespeichert.
+Historische 5T/20T-Werte werden aus Supabase geladen.
+`pct_above_sma50_5d_ago`, `pct_above_sma50_20d_ago` und `breadth_trend_5d`
+sind jetzt im Markets-Dashboard sichtbar.
 
 ## 🟡 FUTURE: General News Endpoint
 GET /api/news/general fehlt noch.
@@ -572,9 +573,9 @@ URL: https://polygon.io/dashboard/stocks/starter
 
 ---
 
-## 🟡 OPTIONEN OPEN INTEREST PRO STRIKE
+## ✅ OPTIONEN OPEN INTEREST PRO STRIKE
 
-**Status: ✅ ERLEDIGT (22.03.2026) — v5.13.0**
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.15.2**
 
 **Was:** Welche Strike-Preise haben das meiste Open Interest?
 → "Max Pain" Berechnung, magnetische Support/Resistance-Level.
@@ -587,7 +588,8 @@ fehlen im Frontend.
 **Implementierung wenn bereit:**
 - Backend: Neuer Endpoint GET /api/data/options-oi/{ticker}
   → Gibt Top-10 Strikes nach OI zurück (Calls + Puts getrennt)
-- Frontend: Einfache Tabelle im "Analyst & Options" Block
+- Frontend: `OptionsOiBlock` im Research-Dashboard mit On-Demand-Button,
+Call/Put-Heatmap, Max-Pain-Hervorhebung und ATM-Markierung.
 - Max Pain Formel: Strike mit minimiertem Gesamtverlust aller Options
 
 **Aufwand:** ~3h, SWE-1.5.
@@ -610,16 +612,47 @@ Sentiment-Monitor und Peer-Monitor loggen jeden Alert.
 
 ---
 
-## 🟡 EARNINGS-KALENDER IM RESEARCH-DASHBOARD
+## ✅ EARNINGS-KALENDER IM RESEARCH-DASHBOARD
 
-**Was:** Nächste 5 Earnings-Termine aus dem gleichen Sektor
-direkt im Research-Dashboard anzeigen.
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.15.3**
+
+**Was:** Watchlist-Earnings der nächsten 14 Tage direkt im
+Research-Dashboard anzeigen.
 "HIMS meldet in 12 Tagen — und diese Peers auch bald..."
 
-**Warum noch nicht:** Earnings-Radar existiert, aber nicht
-integriert in das Research-Dashboard.
+**Implementiert:** `sector_earnings_upcoming` im `EarningsContextBanner`
+mit klickbaren Research-Links.
 
-**Aufwand:** ~1h, SWE-1.5.
+**Aufwand:** erledigt.
+
+---
+
+## ✅ INTRADAY — VWAP
+
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.15.1**
+
+**Was:** Volume Weighted Average Price — Fair-Value-Linie für Daytrader.
+Long über VWAP = bullish Intraday-Bias. Short darunter = bearish.
+
+**Implementiert:**
+- `GET /api/data/vwap/{ticker}`
+- `get_vwap()` aus 5-Minuten-Yahoo-Intraday-Daten
+- Cache: 2 Minuten während Marktstunden, 1 Stunde sonst
+- Research Dashboard: VWAP-Badge mit Delta % und Marktstatus
+
+---
+
+## ✅ P2B EARNINGS-HISTORIE FALLBACK
+
+**Status: ✅ ERLEDIGT (22.03.2026) — v5.15.3**
+
+**Was:** Wenn FMP keine Earnings-Historie liefert,
+nutzte das Research Dashboard `yfinance` als Fallback.
+
+**Implementiert:**
+- `get_earnings_history_yf()` in `backend/app/data/yfinance_data.py`
+- FMP → yfinance Umschaltung im `api_research_dashboard`
+- `SimpleNamespace` hält das erwartete History-Interface kompatibel
 
 ---
 

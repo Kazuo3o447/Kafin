@@ -5,15 +5,28 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ---
 
 ## Aktuelle Version
-**Version**: 6.1.4 (Prompt-Qualität + Modell-Optimierung + API Usage Tracking)
+**Version**: 6.1.5 (Modular Architecture + Prompt Quality + API Usage)
 **Stand**: 2026-03-22
-**Latest Commit**: feat: complete api usage tracking implementation v6.1.3
+**Latest Commit**: refactor: modularize main.py into dedicated routers v6.1.5
 
 ---
 
-## Architektur-Überblick
+## Architektur-Überblick (v6.1.5)
+Das Backend wurde von einer monolithischen `main.py` auf eine modulare Router-Struktur umgestellt.
 
-### Backend (Python/FastAPI)
+### Kern-Struktur (backend/app/)
+- `main.py` - Minimaler Entrypoint, Middleware & Router-Registrierung
+- `routers/` - Fachlich getrennte API-Endpunkte:
+  - `data.py` - Marktdaten, Research, Snapshots
+  - `news.py` - Google News, Scans, News-Memory
+  - `analysis.py` - Signale, FinBERT, RAG, Market-Audit
+  - `reports.py` - Report-Generierung (Audit, Morning, Weekly)
+  - `watchlist.py` - Watchlist Management
+  - `shadow.py` - Shadow Portfolio & Trades
+  - `logs.py` - Log-Management & Export
+  - `system.py` - Diagnostics, Health, Telegram-Test
+  - `web_intelligence.py` - Web-Intelligence-Integration
+- `admin/` - Admin-Panel UI & Admin-Operations
 - **Docker Container**: `kafin-backend` auf Port 8000
 - **API-Dokumentation**: http://localhost:8000/docs
 - **Wichtige Module**:

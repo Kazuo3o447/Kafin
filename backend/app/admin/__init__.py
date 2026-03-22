@@ -27,7 +27,7 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 # Register the routers
-router.include_router(score_backfill_router, prefix="/scores", tags=["scores"])
+router.include_router(score_backfill_router, prefix="/api/admin/scores", tags=["scores"])
 router.include_router(admin_ops_router, prefix="/api/admin", tags=["admin-ops"])
 
 # ---------------------------------------------------------------------------

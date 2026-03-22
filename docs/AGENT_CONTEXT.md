@@ -150,6 +150,8 @@ Dieses Dokument beschreibt den aktuellen Stand und die Architektur von Kafin fü
 ### Research Dashboard Decision Core (/research/[ticker])
 - **Score-Delta Anzeige**: Opportunity- und Torpedo-Scores mit Veränderung vs. gestern/letzte Woche
 - **Trade Setup Block**: Chart-Analyse mit Entry Zone, Stop-Loss, Targets, Support/Resistance, Bias
+  - **Anti-Falling-Knife**: Begründungsfelder why_entry/stop, trend_context, floor_scenario, turnaround_conditions
+  - **Risk Assessment**: falling_knife_risk (low/medium/high) mit prominenten Warn-Bannern
 - **Position Sizer Block**: Risikomanagement mit Kontogröße, Risiko-%, Aktienanzahl, R:R Verhältnis
 - **On-Demand Loading**: Chart-Analyse erst auf Knopfdruck geladen (Performance-Optimierung)
 - **localStorage Integration**: Kontogröße wird gespeichert und wiederhergestellt

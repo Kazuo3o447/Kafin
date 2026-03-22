@@ -124,7 +124,7 @@ Erstelle ein JSON-Objekt mit folgender Struktur:
 
         user_prompt = data_prompt + """
 
-Antworte NUR mit diesem JSON (alle Felder pflicht):
+Antworte NUR mit diesem JSON (alle Felder Pflicht):
 {
   "support_levels": [
     {"price": 0.00, "strength": "strong", "label": "20T-Tief"},
@@ -138,15 +138,21 @@ Antworte NUR mit diesem JSON (alle Felder pflicht):
   "stop_loss": 0.00,
   "target_1": 0.00,
   "target_2": 0.00,
-  "analysis_text": "3-4 Sätze narrative Einordnung des Setups",
+  "analysis_text": "3-4 Sätze narrative Einordnung",
   "bias": "bullish",
-  "key_risk": "1 Satz Hauptrisiko"
+  "key_risk": "1 Satz Hauptrisiko",
+  "why_entry": "1-2 Sätze: Warum genau diese Entry-Zone? Welche technische Struktur liegt dort?",
+  "why_stop": "1-2 Sätze: Warum genau dieser Stop? Welches Level wird damit geschützt?",
+  "trend_context": "1-2 Sätze: Ist der Trend intakt oder gebrochen? Wo stehen SMA50/200 relativ zum Kurs?",
+  "floor_scenario": "1-2 Sätze: Wenn der Stop reisst — wo ist der nächste harte Support? Was wäre dann das Kursziel?",
+  "turnaround_conditions": "1-2 Sätze: Was muss passieren damit sich ein Abwärtstrend dreht? Welche Signale brauchst du?",
+  "falling_knife_risk": "low|medium|high"
 }
 
-strength muss exakt "strong", "moderate" oder "weak" sein.
-bias muss exakt "bullish", "bearish" oder "neutral" sein.
-Liefere mindestens 1 support_level und 1 resistance_level.
-Alle Preise müssen realistische Werte nahe dem aktuellen Kurs sein."""
+strength: "strong"|"moderate"|"weak"
+bias: "bullish"|"bearish"|"neutral"
+falling_knife_risk: "low"|"medium"|"high"
+Alle Preise als Zahlen. Kein Markdown."""
 
         raw_response = await call_deepseek(system_prompt, user_prompt, model="deepseek-chat")
 
@@ -183,6 +189,12 @@ Alle Preise müssen realistische Werte nahe dem aktuellen Kurs sein."""
                 "analysis_text": ai_data.get("analysis_text", ""),
                 "bias": ai_data.get("bias", "neutral"),
                 "key_risk": ai_data.get("key_risk", ""),
+                "why_entry":             ai_data.get("why_entry", ""),
+                "why_stop":              ai_data.get("why_stop", ""),
+                "trend_context":         ai_data.get("trend_context", ""),
+                "floor_scenario":        ai_data.get("floor_scenario", ""),
+                "turnaround_conditions": ai_data.get("turnaround_conditions", ""),
+                "falling_knife_risk":    ai_data.get("falling_knife_risk", "medium"),
                 "support": round(support_20d, 2),
                 "resistance": round(resistance_20d, 2),
                 "analysis": ai_data.get("analysis_text", ""),

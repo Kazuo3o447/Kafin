@@ -2,6 +2,28 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [5.12.0] - 2026-03-22 - Chart-Analyse Begründung
+
+### 🚀 Trading-Mehrwert
+- **Anti-Falling-Knife**: Jede Chart-Analyse enthält jetzt:
+  why_entry: Warum diese Entry-Zone (technische Struktur)
+  why_stop: Warum dieser Stop (welches Level geschützt)
+  trend_context: Ist der Trend intakt oder gebrochen?
+  floor_scenario: Nächster Support wenn Stop reisst
+  turnaround_conditions: Was für Trendwende nötig ist
+  falling_knife_risk: low/medium/high
+- **UI**: Falling-Knife Warnung (rot/amber) über Levels
+  Aufklappbarer "Begründung"-Block nach den Kacheln
+
+### 🏗️ Backend
+- **chart_analyst.py**: DeepSeek-Prompt um 6 neue Begründungsfelder erweitert
+- **JSON-Schema**: Strukturierte Antworten mit Trend-Kontext und Risiko-Bewertung
+
+### 🎨 Frontend
+- **TradeSetupBlock**: Neue Felder im TypeScript-Typ und UI-Rendering
+- **Risk Banner**: High/Medium Falling-Knife Risiken prominently angezeigt
+- **Collapsible Reasoning**: "Begründung anzeigen" Accordion mit detaillierter Analyse
+
 ## [5.11.2] - 2026-03-22 - Settings Command Center Hotfix
 
 ### 🐛 Bugfixes (Review-Findings)

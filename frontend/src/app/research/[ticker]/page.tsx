@@ -203,6 +203,12 @@ type ChartAnalysisData = {
   analysis_text: string;
   bias: "bullish" | "bearish" | "neutral";
   key_risk: string;
+  why_entry?: string;
+  why_stop?: string;
+  trend_context?: string;
+  floor_scenario?: string;
+  turnaround_conditions?: string;
+  falling_knife_risk?: "low" | "medium" | "high";
   error?: boolean;
 } | null;
 
@@ -561,6 +567,33 @@ function TradeSetupBlock({
         Trade Setup - {data.ticker}
       </p>
       
+      {/* Falling-Knife-Warnung */}
+      {data.falling_knife_risk === "high" && (
+        <div className="rounded-lg border border-[var(--accent-red)]/30
+                        bg-[var(--accent-red)]/5 px-3 py-2 mb-3
+                        flex items-start gap-2">
+          <AlertTriangle size={13}
+            className="text-[var(--accent-red)] shrink-0 mt-0.5" />
+          <p className="text-xs text-[var(--accent-red)]">
+            <span className="font-semibold">Falling-Knife-Risiko hoch</span>
+            {data.floor_scenario
+              ? ` — ${data.floor_scenario}` : ""}
+          </p>
+        </div>
+      )}
+      {data.falling_knife_risk === "medium" && (
+        <div className="rounded-lg border border-amber-500/30
+                        bg-amber-500/5 px-3 py-2 mb-3
+                        flex items-start gap-2">
+          <AlertTriangle size={13}
+            className="text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-400">
+            <span className="font-semibold">Vorsicht:</span>
+            {" "}Trend prüfen vor Entry.
+          </p>
+        </div>
+      )}
+      
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Linke Seite: Levels */}
         <div className="space-y-3">
@@ -627,6 +660,83 @@ function TradeSetupBlock({
           </div>
         </div>
       </div>
+
+      {/* "Warum?"-Akkordeon */}
+      {(data.why_entry || data.why_stop ||
+        data.trend_context ||
+        data.turnaround_conditions) && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs
+                               text-[var(--accent-blue)]
+                               hover:opacity-80 select-none">
+            ▸ Begründung anzeigen
+          </summary>
+          <div className="mt-2 space-y-2 rounded-lg
+                          bg-[var(--bg-tertiary)] p-3">
+            {data.trend_context && (
+              <div>
+                <p className="text-[10px] font-semibold
+                               text-[var(--text-muted)] uppercase
+                               tracking-wider mb-0.5">
+                  Trend-Kontext
+                </p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {data.trend_context}
+                </p>
+              </div>
+            )}
+            {data.why_entry && (
+              <div>
+                <p className="text-[10px] font-semibold
+                               text-[var(--text-muted)] uppercase
+                               tracking-wider mb-0.5">
+                  Warum diese Entry-Zone?
+                </p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {data.why_entry}
+                </p>
+              </div>
+            )}
+            {data.why_stop && (
+              <div>
+                <p className="text-[10px] font-semibold
+                               text-[var(--text-muted)] uppercase
+                               tracking-wider mb-0.5">
+                  Warum dieser Stop?
+                </p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {data.why_stop}
+                </p>
+              </div>
+            )}
+            {data.floor_scenario
+             && data.falling_knife_risk !== "high" && (
+              <div>
+                <p className="text-[10px] font-semibold
+                               text-[var(--text-muted)] uppercase
+                               tracking-wider mb-0.5">
+                  Wenn Stop reisst
+                </p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {data.floor_scenario}
+                </p>
+              </div>
+            )}
+            {data.turnaround_conditions && (
+              <div>
+                <p className="text-[10px] font-semibold
+                               text-[var(--text-muted)] uppercase
+                               tracking-wider mb-0.5">
+                  Turnaround-Bedingungen
+                </p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {data.turnaround_conditions}
+                </p>
+              </div>
+            )}
+          </div>
+        </details>
+      )}
 
       {/* Analyse Text und Bias */}
       <div className="mt-4 pt-4 border-t border-[var(--border)]">

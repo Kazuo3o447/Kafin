@@ -68,6 +68,7 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 ### Letzte Fixes (23.03.2026)
 - **Frontend JSON Errors**: Behoben von `JSON.parse: unexpected character` Fehlern in Module Status und Diagnostics durch Implementierung von `fetchJsonSafe` Helper.
 - **Research Page Crash**: Guard für `quarterly_history` hinzugefügt um NU Research Dashboard Abstürze bei fehlenden Daten zu verhindern.
+- **Research Dashboard Normalisierung**: Verschachtelte API-Antworten (`fundamentals`, `technicals`, `earnings`, `analyst`, `sentiment`, `smart_money`) werden jetzt in das flache Frontend-Schema gemappt, damit die Research-Seite wieder zuverlässig Daten rendert.
 - **Backend Coroutine Warnings**: Alle `coroutine was never awaited` Warnungen in FMP, Finnhub und Ticker Resolver gefixt.
 - **DateTime UTC Normalization**: FinBERT Pipeline Logging Errors mit offset-naive/aware datetime subtraction behoben.
 - **Font Rendering Issues**: Inter Font-Konfiguration verbessert mit expliziten weights, display:swap und system-ui fallbacks um `glyf: empty gid` Warnungen zu beheben.

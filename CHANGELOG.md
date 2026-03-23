@@ -26,6 +26,9 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 - **Chat-Section neu positioniert**: AI Chat ist jetzt der erste Abschnitt in allen Aktien/ETF Dashboards (Research, Watchlist, Bitcoin)
 - **Bessere User Experience**: Direkter Zugriff auf KI-Analysen ohne Scrollen
 
+### 🧩 Research Dashboard Fix
+- **Daten-Normalisierung**: Verschachtelte Research-API-Antworten werden im Frontend jetzt zuverlässig in das erwartete Dashboard-Schema gemappt, damit die Boards auch ohne Fehler wieder Inhalte anzeigen.
+
 ## [7.2.0] - 2026-03-23 - Alpaca Integration + Learning Module
 
 ### 🔗 Alpaca Paper Trading

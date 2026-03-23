@@ -325,6 +325,199 @@ const fmt = {
   },
 };
 
+function normalizeResearchData(raw: any): ResearchData {
+  const fundamentals = raw?.fundamentals ?? {};
+  const technicals = raw?.technicals ?? {};
+  const earnings = raw?.earnings ?? {};
+  const analyst = raw?.analyst ?? {};
+  const sentiment = raw?.sentiment ?? {};
+  const smartMoney = raw?.smart_money ?? {};
+  const expectedMove = raw?.expected_move ?? {};
+  const relativeStrength = raw?.relative_strength ?? null;
+  const companyProfile = raw?.company_profile ?? {
+    ceo: fundamentals.ceo ?? null,
+    employees: fundamentals.employees ?? null,
+    description: fundamentals.description ?? null,
+    website: fundamentals.website ?? null,
+    ipo_date: fundamentals.ipo_date ?? null,
+    country: raw?.country ?? null,
+    exchange: raw?.exchange ?? null,
+    peers: fundamentals.peers ?? raw?.peers ?? [],
+  };
+
+  const quarterlyHistorySource = Array.isArray(earnings.quarterly_history)
+    ? earnings.quarterly_history
+    : Array.isArray(raw?.quarterly_history)
+      ? raw.quarterly_history
+      : [];
+
+  const quarterlyHistory = quarterlyHistorySource.map((q: any) => ({
+    quarter: q?.quarter ?? "",
+    eps_actual: q?.eps_actual ?? null,
+    eps_consensus: q?.eps_consensus ?? null,
+    surprise_pct: q?.surprise_pct ?? null,
+    reaction_1d: q?.reaction_1d ?? null,
+  }));
+
+  const newsBulletsSource = Array.isArray(raw?.news_bullets)
+    ? raw.news_bullets
+    : Array.isArray(sentiment.news)
+      ? sentiment.news
+      : [];
+
+  const newsBullets = newsBulletsSource.map((item: any) => ({
+    text: item?.text ?? item?.headline ?? item?.bullet_text ?? "",
+    sentiment: Number(item?.sentiment ?? item?.score ?? 0),
+    is_material: Boolean(item?.is_material ?? item?.material ?? false),
+    category: item?.category ?? "News",
+    date: item?.date ?? item?.created_at ?? item?.datetime ?? "",
+    source: item?.source,
+    url: item?.url,
+  }));
+
+  const redditSentiment = sentiment.reddit_sentiment && typeof sentiment.reddit_sentiment === "object"
+    ? {
+        score: sentiment.reddit_sentiment.score ?? null,
+        mentions: sentiment.reddit_sentiment.mentions ?? 0,
+        label: sentiment.reddit_sentiment.label ?? null,
+      }
+    : null;
+
+  const fearGreed = sentiment.fear_greed && typeof sentiment.fear_greed === "object"
+    ? {
+        score: sentiment.fear_greed.score ?? null,
+        label: sentiment.fear_greed.label ?? null,
+      }
+    : (sentiment.fear_greed_score != null || sentiment.fear_greed_label != null)
+      ? {
+          score: sentiment.fear_greed_score ?? null,
+          label: sentiment.fear_greed_label ?? null,
+        }
+      : null;
+
+  return {
+    ...(raw ?? {}),
+    ticker: raw?.ticker ?? raw?.effective_ticker ?? "",
+    resolved_ticker: raw?.effective_ticker ?? raw?.resolved_ticker,
+    was_resolved: raw?.resolution?.was_resolved ?? raw?.was_resolved,
+    resolution_note: raw?.resolution?.resolution_note ?? raw?.resolution_note,
+    data_quality: raw?.resolution?.data_quality ?? raw?.data_quality ?? "unknown",
+    available_fields: raw?.resolution?.available_fields ?? raw?.available_fields,
+    core_fields_available: raw?.core_fields_available ?? raw?.resolution?.core_fields_available,
+    data_sufficient_for_ai: raw?.data_sufficient_for_ai ?? raw?.ai?.data_sufficient_for_ai,
+    ai_blocked_reason: raw?.ai_blocked_reason ?? raw?.ai?.blocked_reason,
+    is_etf: raw?.is_etf ?? raw?.asset_type === "etf",
+    is_index: raw?.is_index ?? raw?.asset_type === "index",
+    asset_type: raw?.asset_type ?? (raw?.is_etf ? "etf" : raw?.is_index ? "index" : "stock"),
+    company_name: raw?.company_name ?? raw?.name ?? raw?.ticker ?? raw?.effective_ticker ?? "",
+    sector: raw?.sector ?? fundamentals.sector ?? null,
+    industry: raw?.industry ?? fundamentals.industry ?? null,
+    fetched_at: raw?.fetched_at ?? raw?.timestamp ?? new Date().toISOString(),
+    price: raw?.price ?? null,
+    change_pct: raw?.change_pct ?? null,
+    price_change_30d: raw?.price_change_30d ?? raw?.change_1m_pct ?? null,
+    price_change_5d: raw?.price_change_5d ?? raw?.change_5d_pct ?? null,
+    fifty_two_week_high: raw?.fifty_two_week_high ?? technicals.fifty_two_week_high ?? null,
+    fifty_two_week_low: raw?.fifty_two_week_low ?? technicals.fifty_two_week_low ?? null,
+    pre_market_price: raw?.pre_market_price ?? null,
+    post_market_price: raw?.post_market_price ?? null,
+    pre_market_change: raw?.pre_market_change ?? null,
+    pe_ratio: raw?.pe_ratio ?? fundamentals.pe_ratio ?? null,
+    forward_pe: raw?.forward_pe ?? fundamentals.forward_pe ?? null,
+    ps_ratio: raw?.ps_ratio ?? fundamentals.ps_ratio ?? null,
+    peg_ratio: raw?.peg_ratio ?? fundamentals.peg_ratio ?? null,
+    ev_ebitda: raw?.ev_ebitda ?? fundamentals.ev_ebitda ?? null,
+    market_cap: raw?.market_cap ?? fundamentals.market_cap ?? null,
+    beta: raw?.beta ?? fundamentals.beta ?? null,
+    dividend_yield: raw?.dividend_yield ?? fundamentals.dividend_yield ?? null,
+    revenue_ttm: raw?.revenue_ttm ?? fundamentals.revenue_ttm ?? null,
+    eps_ttm: raw?.eps_ttm ?? fundamentals.eps_ttm ?? null,
+    roe: raw?.roe ?? fundamentals.roe ?? null,
+    roa: raw?.roa ?? fundamentals.roa ?? null,
+    debt_equity: raw?.debt_equity ?? fundamentals.debt_equity ?? null,
+    fcf_yield: raw?.fcf_yield ?? fundamentals.fcf_yield ?? null,
+    current_ratio: raw?.current_ratio ?? fundamentals.current_ratio ?? null,
+    analyst_target: raw?.analyst_target ?? analyst.target_avg ?? null,
+    analyst_target_high: raw?.analyst_target_high ?? analyst.target_high ?? null,
+    analyst_target_low: raw?.analyst_target_low ?? analyst.target_low ?? null,
+    analyst_recommendation: raw?.analyst_recommendation ?? analyst.recommendation ?? null,
+    number_of_analysts: raw?.number_of_analysts ?? analyst.analyst_count ?? null,
+    rsi: raw?.rsi ?? technicals.rsi ?? null,
+    trend: raw?.trend ?? technicals.trend ?? null,
+    sma_50: raw?.sma_50 ?? technicals.sma_50 ?? null,
+    sma_200: raw?.sma_200 ?? technicals.sma_200 ?? null,
+    above_sma50: raw?.above_sma50 ?? technicals.above_sma50 ?? null,
+    above_sma200: raw?.above_sma200 ?? technicals.above_sma200 ?? null,
+    sma50_distance_pct: raw?.sma50_distance_pct ?? technicals.sma50_distance ?? null,
+    sma200_distance_pct: raw?.sma200_distance_pct ?? technicals.sma200_distance ?? null,
+    support: raw?.support ?? technicals.support ?? null,
+    resistance: raw?.resistance ?? technicals.resistance ?? null,
+    distance_52w_high_pct: raw?.distance_52w_high_pct ?? technicals.distance_52w_high ?? null,
+    sma_20: raw?.sma_20 ?? technicals.sma_20 ?? null,
+    atr_14: raw?.atr_14 ?? technicals.atr_14 ?? null,
+    macd: raw?.macd ?? technicals.macd ?? null,
+    macd_signal: raw?.macd_signal ?? technicals.macd_signal ?? null,
+    macd_histogram: raw?.macd_histogram ?? technicals.macd_histogram ?? null,
+    macd_bullish: raw?.macd_bullish ?? technicals.macd_bullish ?? null,
+    obv_trend: raw?.obv_trend ?? technicals.obv_trend ?? null,
+    rvol: raw?.rvol ?? technicals.rvol ?? null,
+    float_shares: raw?.float_shares ?? technicals.float_shares ?? null,
+    avg_volume: raw?.avg_volume ?? technicals.avg_volume ?? null,
+    bid_ask_spread: raw?.bid_ask_spread ?? technicals.bid_ask_spread ?? null,
+    iv_atm: raw?.iv_atm ?? expectedMove.iv ?? null,
+    put_call_ratio: raw?.put_call_ratio ?? smartMoney.pcr_volume ?? null,
+    expected_move_pct: raw?.expected_move_pct ?? expectedMove.pct ?? null,
+    expected_move_usd: raw?.expected_move_usd ?? expectedMove.usd ?? null,
+    max_pain: raw?.max_pain ?? smartMoney.max_pain ?? null,
+    options_oi_url: raw?.options_oi_url ?? null,
+    short_interest_pct: raw?.short_interest_pct ?? smartMoney.short_interest_pct ?? null,
+    days_to_cover: raw?.days_to_cover ?? smartMoney.days_to_cover ?? null,
+    squeeze_risk: raw?.squeeze_risk ?? smartMoney.squeeze_risk ?? null,
+    insider_buys: raw?.insider_buys ?? smartMoney.insider_buys ?? 0,
+    insider_sells: raw?.insider_sells ?? smartMoney.insider_sells ?? 0,
+    insider_buy_value: raw?.insider_buy_value ?? smartMoney.insider_buy_value ?? 0,
+    insider_sell_value: raw?.insider_sell_value ?? smartMoney.insider_sell_value ?? 0,
+    insider_assessment: raw?.insider_assessment ?? smartMoney.insider_assessment ?? "normal",
+    earnings_date: raw?.earnings_date ?? earnings.next_date ?? null,
+    report_timing: raw?.report_timing ?? earnings.timing ?? null,
+    earnings_countdown: raw?.earnings_countdown ?? earnings.countdown ?? null,
+    earnings_today: raw?.earnings_today ?? earnings.is_today ?? false,
+    eps_consensus: raw?.eps_consensus ?? earnings.eps_consensus ?? null,
+    revenue_consensus: raw?.revenue_consensus ?? earnings.revenue_consensus ?? null,
+    beats_of_8: raw?.beats_of_8 ?? earnings.beats_of_8 ?? null,
+    avg_surprise_pct: raw?.avg_surprise_pct ?? earnings.avg_surprise_pct ?? null,
+    last_surprise_pct: raw?.last_surprise_pct ?? earnings.last_surprise_pct ?? null,
+    last_beat: raw?.last_beat ?? earnings.last_beat ?? null,
+    quarterly_history: quarterlyHistory,
+    news_bullets: newsBullets,
+    finbert_sentiment: raw?.finbert_sentiment ?? sentiment.ticker_sentiment ?? null,
+    sentiment_label: raw?.sentiment_label ?? sentiment.ticker_sentiment_label ?? null,
+    sentiment_trend: raw?.sentiment_trend ?? null,
+    sentiment_has_material: raw?.sentiment_has_material ?? Boolean(newsBullets.some((n: any) => n.is_material)),
+    sentiment_count: raw?.sentiment_count ?? sentiment.ticker_article_count ?? newsBullets.length,
+    sentiment_divergence: raw?.sentiment_divergence ?? sentiment.divergence ?? false,
+    market_sentiment_avg: raw?.market_sentiment_avg ?? sentiment.market_avg_sentiment ?? null,
+    sentiment_vs_market: raw?.sentiment_vs_market ?? null,
+    market_sentiment_detail: raw?.market_sentiment_detail ?? null,
+    reddit_sentiment: raw?.reddit_sentiment ?? redditSentiment,
+    fear_greed: raw?.fear_greed ?? fearGreed,
+    sector_earnings_upcoming: raw?.sector_earnings_upcoming ?? earnings.sector_calendar ?? [],
+    is_watchlist: raw?.is_watchlist ?? false,
+    web_prio: raw?.web_prio ?? raw?.watchlist_item?.web_prio ?? null,
+    last_audit: raw?.last_audit ?? null,
+    opportunity_score: raw?.opportunity_score ?? null,
+    torpedo_score: raw?.torpedo_score ?? null,
+    recommendation: raw?.recommendation ?? null,
+    recommendation_label: raw?.recommendation_label ?? null,
+    recommendation_reason: raw?.recommendation_reason ?? null,
+    score_breakdown: raw?.score_breakdown ?? null,
+    relative_strength: relativeStrength,
+    company_profile: companyProfile,
+    exchange: raw?.exchange ?? companyProfile.exchange ?? null,
+    peers: fundamentals.peers ?? raw?.peers ?? [],
+  } as ResearchData;
+}
+
 function colorPct(v: number | null) {
   if (v == null) return "text-[var(--text-muted)]";
   return v >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]";
@@ -2445,12 +2638,13 @@ export default function ResearchDashboard() {
     if (!forceRefresh) {
       const cached = cacheGet<ResearchData>(`research:${tickerUpper}`);
       if (cached) {
-        setData(cached);
-        setOnWatchlist(cached.is_watchlist);
+        const normalizedCached = normalizeResearchData(cached);
+        setData(normalizedCached);
+        setOnWatchlist(normalizedCached.is_watchlist);
         setLoading(false);
-        if (cached.last_audit) {
-          setAiReport(cached.last_audit.report_text);
-          setAiDate(cached.last_audit.date);
+        if (normalizedCached.last_audit) {
+          setAiReport(normalizedCached.last_audit.report_text);
+          setAiDate(normalizedCached.last_audit.date);
         }
         return;
       }
@@ -2461,11 +2655,12 @@ export default function ResearchDashboard() {
     setError(null);
 
     try {
-      const result = await api.getResearchDashboard(
+      const rawResult = await api.getResearchDashboard(
         tickerUpper,
         forceRefresh,
         overrideTicker || undefined,
       );
+      const result = normalizeResearchData(rawResult);
       setData(result);
       setOnWatchlist(result.is_watchlist);
       cacheSet(`research:${tickerUpper}`, result, 600);

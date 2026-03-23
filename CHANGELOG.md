@@ -2,6 +2,41 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [6.3.0] - 2026-03-23 - Data Sources & Scoring Overhaul
+
+### 🔄 Komplette Datenquellen-Integration
+- **Reddit Sentiment**: Aktiviert mit 1h Cache, Retail-Sentiment im Scoring
+- **Fear & Greed Index**: CNN Money Makro-Kontext für Torpedo-Score
+- **yfinance Fallback**: Earnings-History wenn FMP keine Daten liefert
+- **FINRA Short Volume**: Tägliches Short Volume Ratio (präziser als FMP)
+- **FRED Erweiterung**: Consumer Sentiment, Inflation Breakeven, Unemployment
+- **Price Target Upside**: Analyst-Konsens als neues Scoring-Signal
+
+### 🧠 Scoring System v6.2.0
+- **Data Completeness Tracking**: Automatische Erkennung fehlender Datenpunkte
+- **Confidence Gates**: Keine Trade-Empfehlungen bei <50% Datenlage
+- **Recency-Weighted Grades**: Analysten-Updates korrekt nach Datum sortiert
+- **Macro Headwind**: VIX + Fear & Greed + Consumer Sentiment kombiniert
+- **normalize_grade()**: Modul-Funktion statt 4x verschachtelte Definitionen
+- **Semaphore auf Sunday Reports**: Max. 3 parallele DeepSeek-Calls gegen 429 Errors
+
+### 🚫 Kimi Komplett Entfernt
+- **kimi.py**: Gelöscht, alle Aufrufe durch DeepSeek ersetzt
+- **Config & .env**: KIMI_API_KEY entfernt
+- **Admin UI**: Kimi-Dropdown und Checks entfernt
+- **filing_rag.py**: Nur noch DeepSeek mit 100K Zeichen Crop
+
+### 🐛 Performance & Resilienz
+- **httpx.AsyncClient Singleton**: Modul-weite Clients für TCP/Wiederverwendung
+- **shadow_portfolio.py**: yf.Ticker() mit asyncio.to_thread() gegen Event Loop Blockaden
+- **FastAPI lifespan**: on_event deprecated → moderner Context Manager
+- **Frontend Production Mode**: Dev-Mode entfernt, Volumes aus docker-compose.yml
+
+### 📊 Dokumentation
+- **AI-Modell-Stack**: Festgelegt auf DeepSeek + Groq, Kimi entfernt
+- **README.md**: Aktuelle Datenquellen und Scoring-Features
+- **CLAUDE.md**: Architektur-Dokumentation aktualisiert
+
 ## [6.2.2] - 2026-03-23 - 10-Q Tonalitäts-Diff (DeepSeek, kein Gemini)
 
 ### 🧠 Institutioneller Edge (Architektur-Entscheidung)

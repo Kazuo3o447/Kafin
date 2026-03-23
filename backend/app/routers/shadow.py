@@ -40,11 +40,11 @@ VALID_TRADE_REASONS = [
 @router.get("/api/shadow-portfolio")
 async def api_shadow_portfolio_summary():
     cache_key = "shadow_portfolio_summary"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
     result = await get_shadow_portfolio_summary()
-    cache_set(cache_key, result, ttl_seconds=120)
+    await cache_set(cache_key, result, ttl_seconds=120)
     return result
 
 @router.get("/api/shadow-portfolio/trades")

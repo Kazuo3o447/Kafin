@@ -319,7 +319,6 @@ ADMIN_HTML = """
                             <option value="FRED_API_KEY">FRED_API_KEY</option>
                             <option value="COINGLASS_API_KEY">COINGLASS_API_KEY</option>
                             <option value="DEEPSEEK_API_KEY">DEEPSEEK_API_KEY</option>
-                            <option value="KIMI_API_KEY">KIMI_API_KEY</option>
                             <option value="SUPABASE_URL">SUPABASE_URL</option>
                             <option value="SUPABASE_KEY">SUPABASE_KEY</option>
                             <option value="TELEGRAM_BOT_TOKEN">TELEGRAM_BOT_TOKEN</option>
@@ -1152,7 +1151,7 @@ ADMIN_HTML = """
             };
 
             // APIs
-            const apis = ['Finnhub', 'FMP', 'FRED', 'CoinGlass', 'DeepSeek', 'Kimi', 'FinBERT'].map(k => {
+            const apis = ['Finnhub', 'FMP', 'FRED', 'CoinGlass', 'DeepSeek', 'FinBERT'].map(k => {
                 const id = k.toLowerCase();
                 const keySet = data.keys[id];
                 return { id: id, label: k, status: keySet ? (data.api_checks[id] || 'warning') : 'warning', testable: true };
@@ -1316,7 +1315,7 @@ async def get_settings():
     # Check env presence
     expected_keys = [
         "FINNHUB_API_KEY", "FMP_API_KEY", "FRED_API_KEY", "COINGLASS_API_KEY",
-        "DEEPSEEK_API_KEY", "KIMI_API_KEY", "SUPABASE_URL", "SUPABASE_KEY",
+        "DEEPSEEK_API_KEY", "SUPABASE_URL", "SUPABASE_KEY",
         "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"
     ]
     
@@ -1401,7 +1400,6 @@ async def run_status_check(api: str = None):
         "fred": bool(settings.fred_api_key),
         "coinglass": bool(settings.coinglass_api_key),
         "deepseek": bool(settings.deepseek_api_key),
-        "kimi": bool(settings.kimi_api_key),
         "telegram": bool(settings.telegram_bot_token and settings.telegram_chat_id),
         "supabase": bool(settings.supabase_url and settings.supabase_key),
         "finbert": True # Local model, always "configured"
@@ -1444,10 +1442,6 @@ async def run_status_check(api: str = None):
               # Need POST for Chat API, or simple GET if they have a status endpoint?
               # For now, let's just assume OK if key is set, or try a tiny prompt
               checks["deepseek"] = "ok" # Placeholder
-              
-    if api is None or api == "kimi":
-         if keys["kimi"]:
-              checks["kimi"] = "ok" # Placeholder
               
     if api is None or api == "telegram":
          if keys["telegram"]:

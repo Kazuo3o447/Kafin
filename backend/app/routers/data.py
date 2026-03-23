@@ -105,7 +105,7 @@ async def api_ticker_track_record(ticker: str):
     """Aggregiert historische Trefferquote eines Tickers inkl. Audit/PER-Daten."""
     normalized_ticker = ticker.upper()
     cache_key = f"track_record_{normalized_ticker}"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
 
@@ -313,7 +313,7 @@ async def api_ticker_track_record(ticker: str):
     }
 
     response = {"ticker": normalized_ticker, "summary": summary, "history": history}
-    cache_set(cache_key, response, ttl_seconds=300)
+    await cache_set(cache_key, response, ttl_seconds=300)
     return response
 
 @router.get("/performance")
@@ -435,7 +435,7 @@ async def api_sparkline(ticker: str, days: int = 7):
     """Gibt den 7-Tage-Kursverlauf für Sparkline-Charts zurück."""
     logger.info(f"API Call: sparkline for {ticker} ({days}d)")
     cache_key = f"sparkline:{ticker.upper()}:{days}"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
     try:
@@ -454,7 +454,7 @@ async def api_sparkline(ticker: str, days: int = 7):
                 "price": round(float(price), 2)
             })
         result = {"ticker": ticker, "data": data[-days:]}
-        cache_set(cache_key, result, ttl_seconds=300)
+        await cache_set(cache_key, result, ttl_seconds=300)
         return result
     except Exception as e:
         logger.debug(f"Sparkline Fehler für {ticker}: {e}")
@@ -464,7 +464,7 @@ async def api_sparkline(ticker: str, days: int = 7):
 async def api_quick_snapshot(ticker: str):
     ticker = ticker.upper().strip()
     cache_key = f"quick_snapshot_{ticker}"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
 
@@ -614,7 +614,7 @@ async def api_quick_snapshot(ticker: str):
                 snapshot["earnings_today"] = False
                 snapshot["earnings_this_week"] = False
 
-        cache_set(cache_key, snapshot, ttl_seconds=300)
+        await cache_set(cache_key, snapshot, ttl_seconds=300)
         return snapshot
     except Exception as e:
         return {"ticker": ticker, "error": str(e), "price": None}
@@ -673,7 +673,7 @@ async def api_research_dashboard(
         effective_ticker = resolution["resolved_ticker"]
 
     if not force_refresh:
-        cached = cache_get(cache_key)
+        cached = await cache_get(cache_key)
         if cached:
             return cached
 
@@ -980,13 +980,13 @@ async def api_research_dashboard(
             except: pass
         return v
     response = _json_safe(response)
-    cache_set(cache_key, response, ttl_seconds=600)
+    await cache_set(cache_key, response, ttl_seconds=600)
     return response
 
 @router.get("/earnings-radar")
 async def api_earnings_radar(days: int = 14):
     cache_key = f"earnings_radar_{days}"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached: return cached
     now = now_mez()
     from_date, to_date = now.strftime("%Y-%m-%d"), (now + timedelta(days=days)).strftime("%Y-%m-%d")
@@ -1056,7 +1056,7 @@ async def api_earnings_radar(days: int = 14):
         entries.append(entry)
     entries.sort(key=lambda e: (e.get("days_until") or 999))
     result = {"entries": entries, "total": len(entries), "from_date": from_date, "to_date": to_date, "watchlist_count": sum(1 for e in entries if e["is_watchlist"]), "today_count": sum(1 for e in entries if e["is_today"])}
-    cache_set(cache_key, result, ttl_seconds=600)
+    await cache_set(cache_key, result, ttl_seconds=600)
     return result
 
 @router.post("/sympathy-check/{reporter}")
@@ -1469,7 +1469,7 @@ async def api_scoring_config():
     }
 
     response = {"ticker": normalized_ticker, "summary": summary, "history": history}
-    cache_set(cache_key, response, ttl_seconds=300)
+    await cache_set(cache_key, response, ttl_seconds=300)
     return response
 
 @router.get("/performance")
@@ -1591,7 +1591,7 @@ async def api_sparkline(ticker: str, days: int = 7):
     """Gibt den 7-Tage-Kursverlauf für Sparkline-Charts zurück."""
     logger.info(f"API Call: sparkline for {ticker} ({days}d)")
     cache_key = f"sparkline:{ticker.upper()}:{days}"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
     try:
@@ -1610,7 +1610,7 @@ async def api_sparkline(ticker: str, days: int = 7):
                 "price": round(float(price), 2)
             })
         result = {"ticker": ticker, "data": data[-days:]}
-        cache_set(cache_key, result, ttl_seconds=300)
+        await cache_set(cache_key, result, ttl_seconds=300)
         return result
     except Exception as e:
         logger.debug(f"Sparkline Fehler für {ticker}: {e}")
@@ -1620,7 +1620,7 @@ async def api_sparkline(ticker: str, days: int = 7):
 async def api_quick_snapshot(ticker: str):
     ticker = ticker.upper().strip()
     cache_key = f"quick_snapshot_{ticker}"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
 
@@ -1774,7 +1774,7 @@ async def api_quick_snapshot(ticker: str):
                 snapshot["earnings_today"] = False
                 snapshot["earnings_this_week"] = False
 
-        cache_set(cache_key, snapshot, ttl_seconds=300)
+        await cache_set(cache_key, snapshot, ttl_seconds=300)
         return snapshot
     except Exception as e:
         return {"ticker": ticker, "error": str(e), "price": None}
@@ -1863,7 +1863,7 @@ async def api_research_dashboard(
         effective_ticker = resolution["resolved_ticker"]
 
     if not force_refresh:
-        cached = cache_get(cache_key)
+        cached = await cache_get(cache_key)
         if cached:
             return cached
 
@@ -2622,7 +2622,7 @@ async def api_research_dashboard(
         "timestamp": datetime.now().isoformat(),
     }
 
-    cache_set(cache_key, response, ttl_seconds=600)
+    await cache_set(cache_key, response, ttl_seconds=600)
     return response
 
 @router.get("/earnings-radar")
@@ -2663,3 +2663,23 @@ async def api_earnings_radar(days: int = 14):
     except Exception as e:
         logger.error(f"Earnings Radar Fehler: {e}")
         return {"status": "error", "message": str(e)}
+
+
+@router.get("/filing-diff/{ticker}")
+async def api_filing_diff(
+    ticker: str,
+    filing_type: str = "10-Q",
+):
+    """
+    Tonalitäts-Diff zwischen letzten zwei
+    10-Q oder 10-K Berichten via Gemini Flash.
+    Cache: 24h.
+    Benötigt: GEMINI_API_KEY in .env
+    """
+    from backend.app.analysis.filing_rag import (
+        get_filing_diff
+    )
+    return await get_filing_diff(
+        ticker.upper(),
+        filing_type=filing_type.upper(),
+    )

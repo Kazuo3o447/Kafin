@@ -330,7 +330,7 @@ async def get_market_overview() -> dict:
             return {"error": "Mock-Daten nicht verfügbar"}
 
     cache_key = "market:overview:v2"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         logger.debug("Marktübersicht aus Cache")
         return cached
@@ -427,7 +427,7 @@ async def get_market_overview() -> dict:
     logger.info(
         f"Marktübersicht erstellt ({len(hist_data)} Ticker)"
     )
-    cache_set(cache_key, result, ttl_seconds=300)
+    await cache_set(cache_key, result, ttl_seconds=300)
     return result
 
 
@@ -605,7 +605,7 @@ async def get_market_breadth() -> dict:
     ]
 
     cache_key = "market:breadth"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
 
@@ -715,7 +715,7 @@ async def get_market_breadth() -> dict:
         )
     result["breadth_trend_5d"] = breadth_trend
 
-    cache_set(cache_key, result, ttl_seconds=1800)  # 30 Minuten
+    await cache_set(cache_key, result, ttl_seconds=1800)  # 30 Minuten
     return result
 
 
@@ -744,7 +744,7 @@ async def get_intermarket_signals() -> dict:
     }
 
     cache_key = "market:intermarket:v2"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
 
@@ -903,7 +903,7 @@ async def get_intermarket_signals() -> dict:
         signals["stagflation_warning"] = False
 
     result = {"assets": data, "signals": signals}
-    cache_set(cache_key, result, ttl_seconds=600)
+    await cache_set(cache_key, result, ttl_seconds=600)
     return result
 
 
@@ -941,7 +941,7 @@ async def get_market_news_for_sentiment() -> dict:
     from datetime import datetime
 
     cache_key = "market:news_sentiment"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
 
@@ -1139,5 +1139,5 @@ async def get_market_news_for_sentiment() -> dict:
         "fetched_at": datetime.now().isoformat(),
     }
 
-    cache_set(cache_key, result, ttl_seconds=600)
+    await cache_set(cache_key, result, ttl_seconds=600)
     return result

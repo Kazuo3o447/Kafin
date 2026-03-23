@@ -2,7 +2,7 @@
 
 import { FileText, Calendar } from "lucide-react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 export function ActionButtons({ ticker }: { ticker: string }) {
   return (

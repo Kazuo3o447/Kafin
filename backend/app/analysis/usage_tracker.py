@@ -39,7 +39,7 @@ def _redis_key(api: str, model: Optional[str] = None) -> str:
     return f"usage:{today}:{api}{m}"
 
 
-def track_call(
+async def track_call(
     api_name: str,
     model: Optional[str] = None,
     input_tokens: int = 0,
@@ -47,12 +47,11 @@ def track_call(
 ) -> None:
     """
     Registriert einen API-Call im Redis-Puffer.
-    Synchron — kann überall aufgerufen werden.
-    Kein await nötig.
+    Async — muss awaitet werden.
     """
     try:
         key = _redis_key(api_name, model)
-        existing = cache_get(key) or {
+        existing = await cache_get(key) or {
             "call_count":     0,
             "input_tokens":   0,
             "output_tokens":  0,
@@ -83,7 +82,7 @@ def track_call(
         )
 
         # 25h TTL (Tagesgrenze + Puffer)
-        cache_set(key, existing, ttl_seconds=90000)
+        await cache_set(key, existing, ttl_seconds=90000)
 
     except Exception as e:
         logger.debug(f"Usage tracking Fehler: {e}")

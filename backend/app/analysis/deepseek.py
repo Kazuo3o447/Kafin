@@ -10,6 +10,15 @@ logger = get_logger(__name__)
 # Load api config
 CONFIG_YAML_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "config", "apis.yaml")
 
+# Modulweiter HTTP-Client — einmal erstellt, wiederverwendet
+_http_client: httpx.AsyncClient | None = None
+
+def _get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(timeout=300.0)
+    return _http_client
+
 def _load_deepseek_config():
     with open(CONFIG_YAML_PATH, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
@@ -62,53 +71,50 @@ async def call_deepseek(
     # very simple retry backoff
     for attempt in range(3):
         try:
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                response = await client.post(
-                    f"{base_url}/chat/completions",
-                    headers=headers,
-                    json=payload
-                )
-                
-                # Check for HTTP errors and log response body if available
-                if response.status_code != 200:
-                    try:
-                        error_detail = response.json()
-                    except Exception:
-                        error_detail = response.text
-                    logger.error(f"DeepSeek API Error (Status {response.status_code}): {error_detail}")
-                
-                response.raise_for_status()
-                data = response.json()
-                
-                # Logging limits & tokens
-                usage = data.get("usage", {})
-                input_tok  = usage.get("prompt_tokens", 0)
-                output_tok = usage.get("completion_tokens", 0)
-                logger.info(
-                    f"DeepSeek [{model}] "
-                    f"in={input_tok} out={output_tok} tokens"
-                )
-
-                # Usage tracken
+            client = _get_http_client()
+            response = await client.post(
+                f"{base_url}/chat/completions",
+                headers=headers,
+                json=payload
+            )
+            
+            # Check for HTTP errors and log response body if available
+            if response.status_code != 200:
                 try:
-                    from backend.app.analysis.usage_tracker import (
-                        track_call
-                    )
-                    track_call(
-                        api_name="deepseek",
-                        model=model,
-                        input_tokens=input_tok,
-                        output_tokens=output_tok,
-                    )
+                    error_detail = response.json()
                 except Exception:
-                    pass
+                    error_detail = response.text
+                logger.error(f"DeepSeek API Error (Status {response.status_code}): {error_detail}")
+            
+            response.raise_for_status()
+            data = response.json()
+            
+            # Logging limits & tokens
+            usage = data.get("usage", {})
+            input_tok  = usage.get("prompt_tokens", 0)
+            output_tok = usage.get("completion_tokens", 0)
+            logger.info(
+                f"DeepSeek [{model}] "
+                f"in={input_tok} out={output_tok} tokens"
+            )
 
-                message = data["choices"][0]["message"]
-                reasoning = message.get("reasoning_content")
-                if reasoning:
-                    logger.debug(f"DeepSeek Reasoner Denkprozess: {len(reasoning)} Zeichen")
-                return message.get("content", "")
-                
+            # Usage tracken
+            try:
+                from backend.app.analysis.usage_tracker import (
+                    track_call
+                )
+                await track_call(
+                    api_name="deepseek",
+                    model=model,
+                    input_tokens=input_tok,
+                    output_tokens=output_tok,
+                )
+            except Exception as e:
+                logger.debug(f"Usage tracking Fehler: {e}")
+
+            message = data["choices"][0]["message"]
+            return message.get("content", "")
+
         except Exception as e:
             logger.warning(f"DeepSeek call failed (attempt {attempt+1}): {str(e)}")
             await asyncio.sleep(2 ** attempt)  # 1s, 2s, 4s

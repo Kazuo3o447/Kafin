@@ -19,6 +19,7 @@ from backend.app.config import settings
 from backend.app.logger import get_logger
 from backend.app.cache import cache_get, cache_set
 import numpy as np
+import asyncio
 
 logger = get_logger(__name__)
 
@@ -37,7 +38,7 @@ async def get_technical_setup(ticker: str) -> TechnicalSetup:
             return TechnicalSetup(ticker=ticker, current_price=0.0)
 
     cache_key = f"yf:technicals:{ticker.upper()}"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         logger.debug(f"yfinance Cache-Hit für {ticker}")
         return TechnicalSetup(**cached)
@@ -184,7 +185,7 @@ async def get_technical_setup(ticker: str) -> TechnicalSetup:
             change_5d_pct=round(change_5d_pct, 2) if change_5d_pct is not None else None,
             change_1m_pct=round(change_1m_pct, 2) if change_1m_pct is not None else None,
         )
-        cache_set(cache_key, result.dict(), ttl_seconds=300)
+        await cache_set(cache_key, result.dict(), ttl_seconds=300)
         return result
     except Exception as e:
         logger.error(f"yfinance Fehler für {ticker}: {e}")
@@ -455,7 +456,7 @@ async def get_fundamentals_yf(ticker: str) -> Optional[dict]:
         }
 
     cache_key = f"yf:fundamentals:{ticker.upper()}"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         logger.debug(f"yfinance Fundamentals Cache-Hit für {ticker}")
         return cached
@@ -485,7 +486,7 @@ async def get_fundamentals_yf(ticker: str) -> Optional[dict]:
             "analyst_recommendation": info.get("recommendationKey"),
             "number_of_analysts": info.get("numberOfAnalystOpinions"),
         }
-        cache_set(cache_key, result, ttl_seconds=86400)  # 24h für Fundamentals
+        await cache_set(cache_key, result, ttl_seconds=86400)  # 24h für Fundamentals
         return result
     except Exception as e:
         logger.error(f"yfinance Fundamentals Fehler für {ticker}: {e}")
@@ -526,7 +527,7 @@ async def get_options_oi_analysis(ticker: str) -> dict:
     """
     from backend.app.cache import cache_get, cache_set
     cache_key = f"options_oi:{ticker.upper()}"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
 
@@ -630,7 +631,7 @@ async def get_options_oi_analysis(ticker: str) -> dict:
     try:
         import asyncio
         result = await asyncio.to_thread(_calc)
-        cache_set(cache_key, result, ttl_seconds=14400)
+        await cache_set(cache_key, result, ttl_seconds=14400)
         return result
     except Exception as e:
         return {"error": str(e)}
@@ -645,7 +646,7 @@ async def get_vwap(ticker: str) -> dict:
     """
     from backend.app.cache import cache_get, cache_set
     cache_key = f"vwap:{ticker.upper()}"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
 
@@ -707,7 +708,7 @@ async def get_vwap(ticker: str) -> dict:
         result = await asyncio.to_thread(_calc)
         # Kurzes Cache — VWAP ändert sich ständig
         ttl = 120 if result.get("is_market_hours") else 3600
-        cache_set(cache_key, result, ttl_seconds=ttl)
+        await cache_set(cache_key, result, ttl_seconds=ttl)
         return result
     except Exception as e:
         return {"vwap": None, "error": str(e)}

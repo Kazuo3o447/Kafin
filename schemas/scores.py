@@ -21,6 +21,8 @@ class OpportunityScore(BaseModel):
     beta: Optional[float] = None
     quality_score: Optional[float] = None
     mismatch_score: Optional[float] = None
+    data_completeness: float = 1.0   # 0.0–1.0: Anteil verfügbarer Datenpunkte
+    missing_fields: list[str] = []   # Liste der fehlenden Felder für Report
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -35,6 +37,8 @@ class TorpedoScore(BaseModel):
     leadership_instability: float = 0.0
     technical_downtrend: float = 0.0
     macro_headwind: float = 0.0
+    data_completeness: float = 1.0
+    missing_fields: list[str] = []
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -47,4 +51,6 @@ class AuditRecommendation(BaseModel):
     recommendation_label: str = "Kein Trade"
     reasoning: str = ""
     options_suggestion: Optional[str] = None
+    data_completeness: float = 1.0
+    low_confidence: bool = False     # True wenn < 50% Daten
     model_config = ConfigDict(from_attributes=True)

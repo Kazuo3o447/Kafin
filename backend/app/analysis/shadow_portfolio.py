@@ -20,10 +20,13 @@ def _current_quarter() -> str:
 
 async def _get_next_trading_day_close(ticker: str, after_date: datetime) -> float | None:
     try:
-        stock = yf.Ticker(ticker)
-        start = after_date.date()
-        end = start + timedelta(days=7)
-        hist = stock.history(start=str(start), end=str(end))
+        def _fetch():
+            stock = yf.Ticker(ticker)
+            start = after_date.date()
+            end = start + timedelta(days=7)
+            return stock.history(start=str(start), end=str(end))
+
+        hist = await asyncio.to_thread(_fetch)
         if hist.empty:
             logger.warning(f"Keine Kursdaten für {ticker} ab {start}")
             return None
@@ -152,10 +155,14 @@ async def close_shadow_trade(ticker: str, quarter: str) -> Dict[str, Any]:
     if stop_loss and entry_price:
         try:
             entry_dt = datetime.fromisoformat(trade["entry_date"])
-            hist = yf.Ticker(ticker).history(
-                start=entry_dt.date().isoformat(),
-                end=now_mez().date().isoformat(),
-            )
+            
+            def _fetch_stop_loss_check():
+                return yf.Ticker(ticker).history(
+                    start=entry_dt.date().isoformat(),
+                    end=now_mez().date().isoformat(),
+                )
+            
+            hist = await asyncio.to_thread(_fetch_stop_loss_check)
             if not hist.empty:
                 if direction == "long":
                     min_low = float(hist["Low"].min())

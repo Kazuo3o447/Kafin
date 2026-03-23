@@ -8,6 +8,11 @@ services:
     image: pgvector/pgvector:pg16
     container_name: kafin-postgres
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_DB:       kafin
       POSTGRES_USER:     kafin
@@ -33,8 +38,13 @@ services:
       dockerfile: backend/Dockerfile
     container_name: kafin-backend
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
-      - "8000:8000"
+      - "8001:8000"
     env_file:
       - .env
     volumes:
@@ -44,6 +54,8 @@ services:
       - ./prompts:/app/prompts:ro
       - ./fixtures:/app/fixtures:ro
       - ./logs:/app/logs
+      - finbert-cache:/app/model_cache
+      - ./backups:/app/backups
     environment:
       - PYTHONPATH=/app
     depends_on:
@@ -58,6 +70,11 @@ services:
     image: redis:7-alpine
     container_name: kafin-redis
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "6379:6379"
     volumes:
@@ -69,6 +86,11 @@ services:
     image: n8nio/n8n:latest
     container_name: kafin-n8n
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "5678:5678"
     environment:
@@ -85,30 +107,64 @@ services:
     networks:
       - kafin-net
 
+  # Frontend läuft als Production-Build (next start).
+  # Für lokale Entwicklung: docker compose run --rm kafin-frontend npm run dev
   kafin-frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: kafin-frontend
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/next.config.ts:/app/next.config.ts
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8001
       - INTERNAL_API_URL=http://kafin-backend:8000  # <-- WICHTIG: Überschreibt lokale Env-Werte für Container-zu-Container Kommunikation
     depends_on:
       - kafin-backend
     networks:
       - kafin-net
-    command: npm run dev
+
+  kafin-backup:
+    image: postgres:16-alpine
+    container_name: kafin-backup
+    restart: "no"        # Läuft nur einmal, kein Restart
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-kafin_local_dev}
+    volumes:
+      - ./backups:/backups
+    networks:
+      - kafin-net
+    # Wird manuell oder via n8n getriggert
+    # Manuell: docker-compose run kafin-backup
+    entrypoint: >
+      sh -c "
+        BACKUP_FILE=/backups/kafin_$(date +%Y%m%d_%H%M%S).sql.gz &&
+        pg_dump -h postgres -U kafin -d kafin | gzip > $$BACKUP_FILE &&
+        echo 'Backup erstellt: '$$BACKUP_FILE &&
+        ls -lh /backups/ &&
+        find /backups -name '*.sql.gz' -mtime +7 -delete &&
+        echo 'Alte Backups (>7 Tage) bereinigt.'
+      "
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "1"
 
 volumes:
   redis-data:
   n8n-data:
   postgres-data:
+  finbert-cache:    # NEU (persistiert zwischen Rebuilds)
 
 
 networks:

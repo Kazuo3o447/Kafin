@@ -28,6 +28,19 @@ _SECTOR_TO_ETF = {
     "Real Estate": "XLRE",
 }
 
+def _normalize_grade(grade_str) -> str:
+    """Normalisiert Analyst-Grade Strings für Vergleiche."""
+    if not grade_str:
+        return ""
+    return str(grade_str).strip().lower()
+
+_BULLISH_GRADES = frozenset([
+    "strong buy", "buy", "outperform", "overweight", "accumulate"
+])
+_BEARISH_GRADES = frozenset([
+    "sell", "underperform", "underweight", "reduce", "strong sell"
+])
+
 def _load_scoring_config() -> dict:
     return settings.scoring
 
@@ -38,12 +51,24 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     scoring_config = _load_scoring_config()
     weights = scoring_config.get("opportunity_score", {})
     
+    # ── Data Completeness Tracking ────────────────────────────────
+    _missing: list[str] = []
+    _total_fields = 9  # Anzahl gewichteter Eingabe-Dimensionen
+
+    def _track(field_name: str, value_present: bool):
+        if not value_present:
+            _missing.append(field_name)
+    
     # earnings_momentum
-    em = 0.0
+    em = 5.0  # Neutral-Default bei fehlenden Daten
     history = data.get("earnings_history")
+    _track("earnings_momentum", history is not None)
     quarters_beat = getattr(history, "quarters_beat", 0) if not isinstance(history, dict) else history.get("quarters_beat", 0) if history else 0
     avg_surprise = getattr(history, "avg_surprise_percent", 0.0) if not isinstance(history, dict) else history.get("avg_surprise_percent", 0.0) if history else 0.0
-    if quarters_beat == 8 and avg_surprise > 0:
+
+    if history is None or quarters_beat is None:
+        em = 5.0  # Keine Daten = neutral, nicht bullish oder bearish
+    elif quarters_beat == 8 and avg_surprise > 0:
         em = 10.0
     elif quarters_beat == 0:
         em = 0.0
@@ -54,6 +79,7 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     # Je mehr Quartale beaten + je höher avg_surprise,
     # desto höher der implizite Whisper über Konsens.
     whisper_delta = 5.0  # Neutral-Start
+    _track("whisper_delta", data.get("earnings_history") is not None)
     try:
         history = data.get("earnings_history")
         qb = (
@@ -90,6 +116,10 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     # valuation_regime
     vr = 5.0
     val = data.get("valuation")
+    _track("valuation_regime", val is not None and (
+        getattr(val, "pe_ratio", None) or
+        (val.get("pe_ratio") if isinstance(val, dict) else None)
+    ) is not None)
     pe = getattr(val, "pe_ratio", None) if not isinstance(val, dict) else val.get("pe_ratio") if val else None
     sector_pe = getattr(val, "pe_sector_median", 15.0) if not isinstance(val, dict) else val.get("pe_sector_median", 15.0) if val else 15.0
     if pe and sector_pe:
@@ -111,8 +141,9 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     # Mehr Upgrades = Analysten erhöhen Erwartungen
     # = Management liefert positive Signale
     guidance_trend = 5.0
+    grades = data.get("analyst_grades", [])
+    _track("guidance_trend", bool(grades and len(grades) >= 3))
     try:
-        grades = data.get("analyst_grades", [])
         if grades and len(grades) > 0:
             # Mindest-Sample-Gate: erst ab 3 Grades ein Signal
             if len(grades) < 3:
@@ -142,7 +173,19 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
 
                 # Recency-Weighting: neuere Grades zählen mehr
                 # (vereinfacht: bei 5 Grades, die letzten 3 zählen doppelt)
-                recent_grades = grades[:3] if len(grades) >= 3 else grades
+                def _parse_grade_date(g: dict) -> str:
+                    return g.get("date", g.get("gradedDate", g.get("updatedDate", "")))
+
+                try:
+                    grades_sorted = sorted(
+                        grades,
+                        key=_parse_grade_date,
+                        reverse=True  # Neueste zuerst
+                    )
+                except Exception:
+                    grades_sorted = grades  # Fallback unsortiert
+
+                recent_grades = grades_sorted[:3] if len(grades_sorted) >= 3 else grades_sorted
                 recent_upgrades = sum(
                     1 for g in recent_grades
                     if normalize_grade(g.get("newGrade")) in ["strong buy", "buy", "outperform",
@@ -180,6 +223,7 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     # technical_setup — aus echten yfinance-Daten
     technical_setup = 5.0
     tech = data.get("technicals", {})
+    _track("technical_setup", bool(tech))
     if isinstance(tech, dict) and tech:
         trend = tech.get("trend", "sideways")
         rsi = tech.get("rsi_14")
@@ -212,6 +256,9 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     # sector_regime: Sektor-ETF 5T-Performance
     # als Rücken- oder Gegenwind für den Ticker
     sector_regime = 5.0
+    _track("sector_regime", bool(
+        data.get("sector_ranking") and data.get("ticker_sector")
+    ))
     try:
         sector_ranking = data.get("sector_ranking", [])
         ticker_sector = data.get("ticker_sector", "")
@@ -244,20 +291,25 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     except Exception:
         sector_regime = 5.0
 
-    # short_squeeze_potential
-    ss = 0.0
+    # short_squeeze_potential       
+    ss = 5.0  # Neutral wenn keine Daten
     si_data = data.get("short_interest")
-    si_pct = getattr(si_data, "short_interest_percent", 0.0) if not isinstance(si_data, dict) else si_data.get("short_interest_percent", 0.0) if si_data else 0.0
-    dtc = getattr(si_data, "days_to_cover", 0.0) if not isinstance(si_data, dict) else si_data.get("days_to_cover", 0.0) if si_data else 0.0
-    
-    if si_pct > 30 and dtc > 5: ss = 10.0
-    elif 15 <= si_pct <= 30: ss = 5.0
-    elif si_pct < 10: ss = 0.0
-    else: ss = 2.5
+    _track("short_squeeze_potential", si_data is not None)
+    if si_data is None:
+        ss = 5.0
+    else:
+        si_pct = getattr(si_data, "short_interest_percent", 0.0) if not isinstance(si_data, dict) else si_data.get("short_interest_percent", 0.0) if si_data else 0.0
+        dtc = getattr(si_data, "days_to_cover", 0.0) if not isinstance(si_data, dict) else si_data.get("days_to_cover", 0.0) if si_data else 0.0
+        
+        if si_pct > 30 and dtc > 5: ss = 10.0
+        elif 15 <= si_pct <= 30: ss = 5.0
+        elif si_pct < 10: ss = 0.0
+        else: ss = 2.5
 
     # insider_activity
     ia_score = 5.0
     ia = data.get("insider_activity")
+    _track("insider_activity", ia is not None)
     assessment = getattr(ia, "assessment", "") if not isinstance(ia, dict) else ia.get("assessment", "") if ia else ""
     if assessment == "bullish": ia_score = 10.0
     elif assessment == "bearish": ia_score = 0.0
@@ -265,6 +317,7 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     # options_flow
     of_score = 5.0
     options = data.get("options", {})
+    _track("options_flow", bool(options))
     pcr = options.get("put_call_ratio_oi", 0.0) if isinstance(options, dict) else 0.0
     if pcr > 1.2:
         of_score = min(10.0, of_score + 2.0)  # Konträr-Signal
@@ -289,6 +342,15 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
         f"em={em:.1f} tech={technical_setup:.1f}"
     )
     
+    # ── Completeness berechnen ────────────────────────────────────
+    data_completeness = round(
+        1.0 - (len(_missing) / _total_fields), 2
+    )
+    logger.debug(
+        f"[{ticker}] Opp Completeness: {data_completeness:.0%} "
+        f"— fehlend: {_missing or 'keine'}"
+    )
+    
     return OpportunityScore(
         ticker=ticker,
         total_score=round(total_score, 2),
@@ -300,7 +362,9 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
         sector_regime=round(sector_regime, 2),
         short_squeeze_potential=round(ss, 2),
         insider_activity=round(ia_score, 2),
-        options_flow=round(of_score, 2)
+        options_flow=round(of_score, 2),
+        data_completeness=data_completeness,
+        missing_fields=_missing,
     )
 
 async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
@@ -310,19 +374,37 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
     scoring_config = _load_scoring_config()
     weights = scoring_config.get("torpedo_score", {})
     
+    # ── Data Completeness Tracking ────────────────────────────────
+    _missing: list[str] = []
+    _total_fields = 7  # Torpedo hat 7 Dimensionen
+
+    def _track(field_name: str, value_present: bool):
+        if not value_present:
+            _missing.append(field_name)
+    
     # valuation_downside
-    vd = 0.0
+    vd = 4.0  # VORHER: 0.0 — IPO/fehlende Daten = leicht erhöhtes Risiko
     val = data.get("valuation")
-    ps = getattr(val, "ps_ratio", None) if not isinstance(val, dict) else val.get("ps_ratio") if val else None
-    sector_ps = getattr(val, "ps_sector_median", 3.0) if not isinstance(val, dict) else val.get("ps_sector_median", 3.0) if val else 3.0
-    if ps:
-        if ps > sector_ps * 3.0: vd = 10.0
-        elif ps > sector_ps * 1.5: vd = 5.0
-        elif ps < sector_ps: vd = 0.0
+    _track("valuation_downside", val is not None and (
+        getattr(val, "ps_ratio", None) or
+        (val.get("ps_ratio") if isinstance(val, dict) else None)
+    ) is not None)
+    if val is None:
+        vd = 4.0  # Explizit: keine Bewertungsdaten = Vorsicht
+    else:
+        ps = getattr(val, "ps_ratio", None) if not isinstance(val, dict) else val.get("ps_ratio") if val else None
+        sector_ps = getattr(val, "ps_sector_median", 3.0) if not isinstance(val, dict) else val.get("ps_sector_median", 3.0) if val else 3.0
+        if ps:
+            if ps > sector_ps * 3.0: vd = 10.0
+            elif ps > sector_ps * 1.5: vd = 5.0
+            elif ps < sector_ps: vd = 0.0
 
     # expectation_gap — erweitert um Web-Sentiment
     eg_score = 5.0
     options = data.get("options", {})
+    _track("expectation_gap", bool(options and (
+        options.get("implied_volatility_atm") if isinstance(options, dict) else False
+    )))
     iv_atm = (
         options.get("implied_volatility_atm", 0.0)
         if isinstance(options, dict) else 0.0
@@ -406,7 +488,19 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
                 )
 
                 # Recency-Weighting: neuere Grades zählen mehr
-                recent_grades = grades[:3] if len(grades) >= 3 else grades
+                def _parse_grade_date(g: dict) -> str:
+                    return g.get("date", g.get("gradedDate", g.get("updatedDate", "")))
+
+                try:
+                    grades_sorted = sorted(
+                        grades,
+                        key=_parse_grade_date,
+                        reverse=True  # Neueste zuerst
+                    )
+                except Exception:
+                    grades_sorted = grades  # Fallback unsortiert
+
+                recent_grades = grades_sorted[:3] if len(grades_sorted) >= 3 else grades_sorted
                 recent_upgrades_t = sum(
                     1 for g in recent_grades
                     if normalize_grade(g.get("newGrade")) in ["strong buy", "buy", "outperform",
@@ -553,12 +647,16 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
             technical_downtrend = min(10.0, technical_downtrend + 1.5)
 
     # macro_headwind
-    mh = 0.0
+    mh = 5.0  # Neutral-Default wenn keine Macro-Daten
     macro = data.get("macro")
-    vix = getattr(macro, "vix", 0.0) if not isinstance(macro, dict) else macro.get("vix", 0.0) if macro else 0.0
-    if vix > 30: mh = 10.0
-    elif vix < 15: mh = 0.0
-    else: mh = 5.0
+    vix = getattr(macro, "vix", None) if not isinstance(macro, dict) else macro.get("vix") if macro else None
+
+    if vix is not None:
+        if vix > 35:   mh = 10.0
+        elif vix > 25: mh = 8.0
+        elif vix > 20: mh = 6.0
+        elif vix > 15: mh = 4.0
+        else:          mh = 1.0   # VIX < 15 = ruhiger Markt = niedriges Headwind
 
     # Narrative Intelligence: Torpedo Signals via Downsizing
     news_memory = data.get("news_memory", [])

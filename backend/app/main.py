@@ -8,6 +8,7 @@ Config: app_name, environment
 """
 import asyncio
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import FastAPI
@@ -35,73 +36,40 @@ from backend.app.routers.system import router as system_router
 
 logger = get_logger(__name__)
 
-app = FastAPI(
-    title=settings.app_name,
-    version="1.0.0",
-    description="Backend API für die Kafin Earnings-Trading-Plattform",
-)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
 
-# CORS Middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8000", "*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.on_event("startup")
-async def startup_event():
-    # PostgreSQL Connection Pool initialisieren
+    # ── STARTUP ─────────────────────────
     try:
         from backend.app.database import get_pool
         await get_pool()
-        logger.info("PostgreSQL Connection Pool initialisiert")
+        logger.info(
+            "PostgreSQL Connection Pool initialisiert"
+        )
     except Exception as e:
-        logger.error(f"PostgreSQL Connection Fehler: {e}")
-    
-    logger.info(f"Starter {settings.app_name} im [{settings.environment}] Modus.")
-    logger.info("Admin Panel ist verfügbar bei /admin")
-    
+        logger.error(f"PostgreSQL Fehler: {e}")
+
+    logger.info(
+        f"{settings.app_name} [{settings.environment}]"
+    )
     if settings.use_mock_data:
-        logger.warning("Mock-Data-Modus ist AKTIV. Es werden keine echten APIs aufgerufen.")
-    
+        logger.warning("Mock-Data-Modus AKTIV")
+
     await ensure_watchlist_populated()
     await ensure_daily_snapshots_table()
     log_schema_extension_sql()
 
-    # API Usage Tabelle erstellen (einmalig)
+    # Automatische Migrations ausführen
     try:
         from backend.app.database import get_pool
         pool = await get_pool()
-        migration = os.path.join(
-            os.getcwd(), "database", "migrations", "04_api_usage.sql"
-        )
-        if os.path.exists(migration):
-            with open(migration, "r") as f:
-                sql = f.read()
-            async with pool.acquire() as conn:
-                await conn.execute(sql)
-            logger.info("api_usage Tabelle bereit.")
+        await _run_pending_migrations(pool)
     except Exception as e:
-        logger.warning(f"api_usage Migration: {e}")
+        logger.warning(f"Migrations Fehler: {e}")
 
-    # Periodischer Flush für API Usage alle 5 Minuten
-    async def _periodic_flush():
-        while True:
-            await asyncio.sleep(300)
-            try:
-                from backend.app.analysis.usage_tracker import flush_to_db
-                await flush_to_db()
-            except Exception:
-                pass
-
-    asyncio.create_task(_periodic_flush())
-
-    # Warm-Start für Market-Cache
+    # Cache-Warmup (non-blocking)
     async def _warm():
         try:
-            logger.info("Cache-Warm-Start...")
             from backend.app.data.market_overview import (
                 get_market_overview,
                 get_market_breadth,
@@ -113,12 +81,38 @@ async def startup_event():
                 get_intermarket_signals(),
                 return_exceptions=True,
             )
-            logger.info("Cache-Warm-Start abgeschlossen.")
+            logger.info("Cache-Warmup abgeschlossen")
         except Exception as e:
-            logger.warning(f"Warm-Start Fehler: {e}")
+            logger.warning(f"Warmup Fehler: {e}")
 
+    asyncio.create_task(_warm())
+
+    # Embedding-Warmup (non-blocking)
+    async def _warm_embeddings():
+        try:
+            from backend.app.embeddings import embed_text
+            await embed_text("Kafin startup test")
+            logger.info("Embedding-Modell bereit")
+        except Exception as e:
+            logger.warning(f"Embedding nicht geladen: {e}")
+
+    asyncio.create_task(_warm_embeddings())
+
+    # Periodischer Usage-Flush (alle 5min)
+    async def _periodic_flush():
+        while True:
+            await asyncio.sleep(300)
+            try:
+                from backend.app.analysis.usage_tracker\
+                    import flush_to_db
+                await flush_to_db()
+            except Exception:
+                pass
+
+    asyncio.create_task(_periodic_flush())
+
+    # Watchlist Warm-Start
     async def _warm_watchlist():
-        """Watchlist Enriched im Hintergrund vorwärmen."""
         try:
             from backend.app.memory.watchlist import (
                 get_watchlist
@@ -127,12 +121,8 @@ async def startup_event():
             wl = await get_watchlist()
             if not wl:
                 return
-            # Direkt die Cache-Funktion aufrufen
-            # (triggert _fetch_ticker_data_sync für alle Ticker)
             cache_key = "watchlist:enriched:v2"
-            if not cache_get(cache_key):
-                # Nur wenn Cache kalt — ganzen Endpoint simulieren
-                # Wir importieren den Router-Handler direkt
+            if not await cache_get(cache_key):
                 from backend.app.routers.watchlist import (
                     api_watchlist_enriched
                 )
@@ -143,31 +133,41 @@ async def startup_event():
         except Exception as e:
             logger.debug(f"Watchlist warm Fehler: {e}")
 
-    # Watchlist separat — darf länger dauern
     asyncio.create_task(_warm_watchlist())
-    asyncio.create_task(_warm())
 
-    # Embedding-Modell vorwärmen
-    async def _warm_embeddings():
-        try:
-            from backend.app.embeddings import embed_text
-            await embed_text("Kafin startup test")
-            logger.info("Embedding-Modell bereit.")
-        except Exception as e:
-            logger.warning(f"Embedding-Modell nicht geladen: {e}")
+    yield  # Server läuft
 
-    asyncio.create_task(_warm_embeddings())
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Schließt externe Ressourcen sauber beim Server-Shutdown."""
+    # ── SHUTDOWN ────────────────────────
     try:
         from backend.app.database import close_pool
         await close_pool()
-        logger.info("PostgreSQL Connection Pool geschlossen")
+        logger.info("PostgreSQL Pool geschlossen")
     except Exception as e:
-        logger.warning(f"Shutdown Pool Close Fehler: {e}")
+        logger.warning(f"Pool-Close Fehler: {e}")
+
+    try:
+        from backend.app.analysis.usage_tracker\
+            import flush_to_db
+        await flush_to_db()
+        logger.info("Letzter Usage-Flush OK")
+    except Exception:
+        pass
+
+app = FastAPI(
+    title=settings.app_name,
+    version="1.0.0",
+    description="Backend API für die Kafin Earnings-Trading-Plattform",
+    lifespan=lifespan,
+)
+
+# CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:8000", "*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Register modular routers
 app.include_router(admin_router)
@@ -180,3 +180,144 @@ app.include_router(analysis_router)
 app.include_router(shadow_router)
 app.include_router(logs_router)
 app.include_router(system_router)
+
+
+async def _run_pending_migrations(pool) -> None:
+    """Wendet alle noch nicht angewendeten SQL-Migrations an."""
+    migrations_dir = os.path.join(os.getcwd(), "database", "migrations")
+    if not os.path.isdir(migrations_dir):
+        return
+
+    sql_files = sorted(
+        f for f in os.listdir(migrations_dir) if f.endswith(".sql")
+    )
+
+    async with pool.acquire() as conn:
+        # Versionstabelle sicherstellen
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                filename TEXT PRIMARY KEY,
+                applied_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
+        already_applied = {
+            row["filename"]
+            for row in await conn.fetch(
+                "SELECT filename FROM schema_migrations"
+            )
+        }
+
+        for filename in sql_files:
+            if filename in already_applied:
+                logger.debug(f"Migration bereits angewendet: {filename}")
+                continue
+
+            filepath = os.path.join(migrations_dir, filename)
+            with open(filepath, "r", encoding="utf-8") as f:
+                sql = f.read()
+
+            try:
+                await conn.execute(sql)
+                await conn.execute(
+                    "INSERT INTO schema_migrations (filename) VALUES ($1)",
+                    filename,
+                )
+                logger.info(f"Migration angewendet: {filename}")
+            except Exception as e:
+                logger.error(f"Migration fehlgeschlagen [{filename}]: {e}")
+                # Nicht abbrechen — nächste Migration versuchen
+
+
+@app.on_event("startup")
+async def _run_migrations():
+    from backend.app.database import get_pool
+    pool = await get_pool()
+    await _run_pending_migrations(pool)
+
+
+@app.post("/api/admin/backup-database")
+async def api_backup_database():
+    """
+    Löst einen PostgreSQL Backup aus.
+    Speichert in /app/backups/ (Volume gemountet).
+    Nur aus dem internen Netz aufrufbar.
+    """
+    import subprocess
+    import os
+    from datetime import datetime
+
+    backup_dir = "/app/backups"
+    os.makedirs(backup_dir, exist_ok=True)
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_file = f"{backup_dir}/kafin_{ts}.sql.gz"
+
+    pg_host = "postgres"
+    pg_user = "kafin"
+    pg_db   = "kafin"
+    pg_pass = os.getenv(
+        "POSTGRES_PASSWORD", "kafin_local_dev"
+    )
+
+    try:
+        env = os.environ.copy()
+        env["PGPASSWORD"] = pg_pass
+
+        # pg_dump → gzip
+        dump = subprocess.Popen(
+            [
+                "pg_dump",
+                "-h", pg_host,
+                "-U", pg_user,
+                "-d", pg_db,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
+        gzip_proc = subprocess.Popen(
+            ["gzip"],
+            stdin=dump.stdout,
+            stdout=open(backup_file, "wb"),
+            stderr=subprocess.PIPE,
+        )
+        dump.stdout.close()
+        gzip_proc.wait()
+        dump.wait()
+
+        size_mb = os.path.getsize(backup_file) / 1024 / 1024
+
+        # Alte Backups (>7 Tage) löschen
+        import glob, time
+        cutoff = time.time() - 7 * 86400
+        removed = []
+        for f in glob.glob(f"{backup_dir}/*.sql.gz"):
+            if os.path.getmtime(f) < cutoff and f != backup_file:
+                os.remove(f)
+                removed.append(os.path.basename(f))
+
+        logger.info(
+            f"Backup erstellt: {backup_file} "
+            f"({size_mb:.1f}MB)"
+        )
+        return {
+            "success":     True,
+            "file":        backup_file,
+            "size_mb":     round(size_mb, 2),
+            "removed_old": removed,
+            "timestamp":   ts,
+        }
+
+    except FileNotFoundError:
+        # pg_dump nicht im Backend-Container
+        # → Verweis auf docker-compose run
+        return {
+            "success": False,
+            "error":   "pg_dump nicht verfügbar. "
+                       "Nutze: docker-compose run "
+                       "kafin-backup",
+        }
+    except Exception as e:
+        logger.error(f"Backup Fehler: {e}")
+        return {"success": False, "error": str(e)}

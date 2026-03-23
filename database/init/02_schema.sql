@@ -1,6 +1,12 @@
 -- Kafin — PostgreSQL init schema
 -- Copy of database/schema.sql + PostgreSQL migration additions
 
+-- Migrations-Versionstabelle
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    filename TEXT PRIMARY KEY,
+    applied_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS watchlist (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     ticker TEXT NOT NULL UNIQUE,

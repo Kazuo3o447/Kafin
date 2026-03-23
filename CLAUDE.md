@@ -5,11 +5,43 @@ Eine Plattform, die Finanzdaten sammelt, mit einer KI-Kaskade analysiert und wö
 
 ## Architektur
 - Backend: Python FastAPI auf NUC (ZimaOS + Docker)
-- Datenbank: Supabase (gehostetes PostgreSQL)
-- Frontend: Next.js auf Vercel (spätere Phase)
-- KI: FinBERT (lokal) → DeepSeek API → Kimi K2.5 API → Frontier-Fallback
+- Datenbank: PostgreSQL 16 + pgvector (lokal)
+- Frontend: Next.js (lokal mit Docker)
+- KI: FinBERT (lokal) → DeepSeek API → Groq API
 - Alerts: Telegram Bot + E-Mail via n8n
 - Bitcoin: CoinGlass API für Derivate-Daten
+
+## Datenquellen (kostenlos + unlimitiert)
+- **FMP**: Finanzkennzahlen, Earnings, Analyst-Grades
+- **Finnhub**: News, Short Interest, Insider-Transaktionen  
+- **yfinance**: Kursdaten, technische Indikatoren, Fallback Earnings
+- **FRED**: Makro-Daten (VIX, Yield Curve, Fed Funds, Consumer Sentiment)
+- **Reddit Monitor**: Retail Sentiment (gecacht 1h)
+- **Fear & Greed Index**: CNN Money Makro-Kontext
+- **FINRA**: Short Volume Ratio (täglich)
+- **Tavily**: Web-Enrichment Fallback (Budget-kontrolliert)
+
+## AI-Modell-Stack (festgelegt — Stand März 2026)
+
+Kafin verwendet ausschließlich folgende Modelle:
+
+| Aufgabe                        | Modell                  | API        |
+|-------------------------------|-------------------------|------------|
+| Report-Generierung (komplex)  | deepseek-reasoner       | DeepSeek   |
+| Chat / Kurzanalysen           | deepseek-chat           | DeepSeek   |
+| News-Extraktion (schnell)     | llama-3.1-8b-instant    | Groq       |
+
+**Nicht mehr verwendet / explizit ausgeschlossen:**
+- ~~Kimi / moonshot-v1~~ — entfernt, kein aktiver API-Key, kein Use-Case
+- Keine Broad-Index-Shorts (SH, PSQ, SQQQ) als Empfehlung
+
+Fallback-Kaskade:
+1. Groq (kostenlos, schnell) → für News-Extraktion
+2. DeepSeek Chat → für mittlere Analysen
+3. DeepSeek Reasoner → für vollständige Audit-Reports
+
+Frontier-Fallback (manuell): nur wenn DeepSeek API down ist,
+temporär auf einen anderen Provider wechseln. Nie fest verdrahten.
 
 ## Regeln für Agenten
 

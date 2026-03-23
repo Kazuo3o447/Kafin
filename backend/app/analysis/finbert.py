@@ -25,10 +25,38 @@ def _load_model():
         try:
             logger.info("Lade FinBERT-Modell... (einmalig, dauert ~10 Sekunden)")
             from transformers import AutoModelForSequenceClassification, AutoTokenizer
-            import torch  # noqa: F401
+            import torch
+            import os
 
-            _tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
-            _model = AutoModelForSequenceClassification.from_pretrained("ProsusAI/finbert")
+            # NUC i3: 4 Kerne. 2 für FinBERT, 2 für System.
+            # set_num_threads steuert intra-op Parallelismus
+            # set_num_interop_threads steuert inter-op
+            torch.set_num_threads(2)
+            torch.set_num_interop_threads(1)
+            
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            if torch.backends.mps.is_available():
+                device = "mps"
+            
+            logger.info(f"Nutze Device: {device}")
+
+            # Nutze /app/model_cache wenn vorhanden,
+            # sonst HuggingFace Default
+            cache_dir = (
+                "/app/model_cache"
+                if os.path.isdir("/app/model_cache")
+                else None
+            )
+            
+            _tokenizer = AutoTokenizer.from_pretrained(
+                "ProsusAI/finbert",
+                cache_dir=cache_dir,
+            )
+            _model = AutoModelForSequenceClassification.from_pretrained(
+                "ProsusAI/finbert",
+                cache_dir=cache_dir,
+            )
+            _model.to(device)
             _model.eval()
             _finbert_available = True
             logger.info("FinBERT geladen und bereit.")
@@ -66,33 +94,97 @@ def analyze_sentiment(text: str) -> float:
         return 0.0
 
     import torch
-    inputs = _tokenizer(text, return_tensors="pt", truncation=True, max_length=512, padding=True)
+    device = next(_model.parameters()).device
+    inputs = _tokenizer(text, return_tensors="pt", truncation=True, max_length=64, padding=True)
+    inputs = {k: v.to(device) for k, v in inputs.items()}
+    
     with torch.no_grad():
         outputs = _model(**inputs)
         probabilities = torch.nn.functional.softmax(outputs.logits, dim=-1)
+    
     positive = probabilities[0][0].item()
     negative = probabilities[0][1].item()
     score = positive - negative
     return round(score, 4)
 
 
-def analyze_sentiment_batch(texts: list[str]) -> list[float]:
-    """Berechnet Sentiment-Scores für eine Liste von Texten. Effizienter als Einzelaufrufe."""
+def analyze_sentiment_batch(
+    texts: list[str],
+    batch_size: int = 16,
+) -> list[float]:
+    """Batch-Sentiment mit Chunk-Verarbeitung."""
     if settings.use_mock_data:
         return [analyze_sentiment(t) for t in texts]
 
     _load_model()
-    if not _finbert_available or _model is None or _tokenizer is None:
-        return [0.0 for _ in texts]
+    if not _finbert_available or _model is None:
+        return [0.0] * len(texts)
 
     import torch
-    inputs = _tokenizer(texts, return_tensors="pt", truncation=True, max_length=512, padding=True)
-    with torch.no_grad():
-        outputs = _model(**inputs)
-        probabilities = torch.nn.functional.softmax(outputs.logits, dim=-1)
-    scores = []
-    for i in range(len(texts)):
-        positive = probabilities[i][0].item()
-        negative = probabilities[i][1].item()
-        scores.append(round(positive - negative, 4))
-    return scores
+    import time
+    t0 = time.perf_counter()
+    
+    all_scores: list[float] = []
+
+    # In Chunks verarbeiten
+    for i in range(0, len(texts), batch_size):
+        chunk = texts[i : i + batch_size]
+        try:
+            inputs = _tokenizer(
+                chunk,
+                return_tensors="pt",
+                truncation=True,
+                max_length=64,
+                padding=True,
+            )
+            device = next(_model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            
+            with torch.no_grad():
+                outputs = _model(**inputs)
+                probs = torch.nn.functional.softmax(
+                    outputs.logits, dim=-1
+                )
+            for j in range(len(chunk)):
+                pos = probs[j][0].item()
+                neg = probs[j][1].item()
+                # Neutral (idx 2) bewusst ignoriert —
+                # Score repräsentiert Netto-Sentiment
+                all_scores.append(
+                    round(pos - neg, 4)
+                )
+        except Exception as e:
+            logger.warning(
+                f"FinBERT Chunk {i}-{i+batch_size}"
+                f" Fehler: {e}"
+            )
+            all_scores.extend([0.0] * len(chunk))
+
+    elapsed = (time.perf_counter() - t0) * 1000
+    if len(texts) > 1:
+        logger.debug(
+            f"FinBERT Batch {len(texts)} Texte: "
+            f"{elapsed:.0f}ms "
+            f"({elapsed/len(texts):.1f}ms/Text)"
+        )
+    
+    return all_scores
+
+
+async def analyze_sentiment_async(
+    text: str,
+) -> float:
+    """Async-sicherer Wrapper für Event-Loop-Kontext."""
+    import asyncio
+    return await asyncio.to_thread(
+        analyze_sentiment, text
+    )
+
+async def analyze_sentiment_batch_async(
+    texts: list[str],
+) -> list[float]:
+    """Async-sicherer Wrapper für Batch."""
+    import asyncio
+    return await asyncio.to_thread(
+        analyze_sentiment_batch, texts
+    )

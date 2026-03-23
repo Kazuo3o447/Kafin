@@ -7,14 +7,38 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 ### Core Funktionalität
 - **Watchlist Management**: Hinzufügen/Entfernen von Tickern mit automatischer Datenanreicherung
 - **Real-time News**: FinBERT-gestützte Sentiment-Analyse mit Material-Event-Detection
-- **Chart Intelligence v6.1.6**: Immer sichtbare Begründungen + ETF/Index-Unterstützung
+- **Chart Intelligence v6.2.0**: Immer sichtbare Begründungen + ETF/Index-Unterstützung
 - **KI-Analysen**: Groq (News-Extraktion) + DeepSeek (Reports) mit optimierter Modell-Matrix
-- **Modular Architecture v6.1.6**: Fachlich getrennte API-Router für bessere Wartbarkeit
+- **Modular Architecture v6.2.0**: Fachlich getrennte API-Router für bessere Wartbarkeit
 - **PostgreSQL 16 + pgvector**: Lokale Vektordatenbank für semantische Suche (RAG)
 - **API Usage Tracking**: Echtzeit-Token-Counter und Call-Limits für alle APIs
 - **Automatisierung**: n8n-Workflows für tägliche Briefings und wöchentliche Reports
 - **System Monitoring**: Live Status Dashboard mit Service-Health und Latenz-Tracking
 - **Persistent Logging**: RotatingFileHandler mit Docker-Volume-Persistenz
+
+### AI/ML Stack (festgelegt — Stand März 2026)
+- **Report-Generierung (komplex)**: `deepseek-reasoner` (DeepSeek API)
+- **Chat / Kurzanalysen**: `deepseek-chat` (DeepSeek API)  
+- **News-Extraktion (schnell)**: `llama-3.1-8b-instant` (Groq API)
+- **Sentiment-Analyse**: FinBERT (lokal)
+
+### Datenquellen (kostenlos + unlimitiert)
+- **FMP**: Finanzkennzahlen, Earnings, Analyst-Grades
+- **Finnhub**: News, Short Interest, Insider-Transaktionen
+- **yfinance**: Kursdaten, technische Indikatoren, Fallback Earnings
+- **FRED**: Makro-Daten (VIX, Yield Curve, Fed Funds, etc.)
+- **Reddit Monitor**: Retail Sentiment (gecacht 1h)
+- **Fear & Greed Index**: CNN Money Makro-Kontext
+- **FINRA**: Short Volume Ratio (täglich)
+- **Tavily**: Web-Enrichment Fallback (Budget-kontrolliert)
+
+### Scoring System v6.2.0
+- **Data Completeness Tracking**: Automatische Erkennung fehlender Datenpunkte
+- **Confidence Gates**: Keine Trade-Empfehlungen bei <50% Datenlage
+- **Multi-Source Fallbacks**: yfinance → Reddit → Web-Enrichment
+- **Recency-Weighted Grades**: Analysten-Updates nach Datum sortiert
+- **Macro Headwind**: VIX + Fear & Greed + Consumer Sentiment
+- **Price Target Upside**: Analyst-Konsens als Rückenwind-Signal
 
 ### Chart Analysis Overhaul (v6.1.6)
 - **Immer sichtbare Begründungen**: why_entry/why_stop/trend_context ohne Akkordeon-Klick

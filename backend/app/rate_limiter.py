@@ -27,14 +27,8 @@ except Exception as e:
 
 class RateLimiter:
     def __init__(self):
-        self.redis_client = None
         self._local_locks = {}
         self._local_counts = {}
-        
-    async def get_redis(self):
-        if self.redis_client is None:
-            self.redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
-        return self.redis_client
 
     async def wait_for_capacity(self, api_name: str):
         limit = _limits.get(api_name, {}).get("rate_limit", 10)

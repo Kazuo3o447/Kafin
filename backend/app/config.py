@@ -3,12 +3,13 @@ config — Zentrale Konfiguration der Anwendung
 
 Input:  Environment Variables (.env) und config/settings.yaml
 Output: Settings-Objekt (Pydantic Model)
-Deps:   pydantic_settings, yaml, python-dotenv
+Deps:   pydantic_settings, yaml, python-dotenv, functools
 Config: Keine
 API:    Keine
 """
 import os
 import yaml
+from functools import cached_property
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
@@ -34,7 +35,6 @@ class Settings(BaseSettings):
     coinglass_api_key: str = ""
     deepseek_api_key: str = ""
     groq_api_key: str = ""
-    kimi_api_key: str = ""
     tavily_api_key: str = ""
 
     # PostgreSQL (neu)
@@ -64,16 +64,20 @@ class Settings(BaseSettings):
         self.use_mock_data = yaml_data.get("use_mock_data", self.use_mock_data)
         self.log_level = yaml_data.get("log_level", self.log_level)
         self.report_language = yaml_data.get("report_language", self.report_language)
+        
+        # Cache der cached_properties invalidieren
+        for attr in ("apis", "scoring", "alerts"):
+            self.__dict__.pop(attr, None)
 
-    @property
+    @cached_property
     def apis(self) -> dict:
         return load_yaml_config(os.path.join(os.path.dirname(YAML_PATH), "apis.yaml"))
 
-    @property
+    @cached_property
     def scoring(self) -> dict:
         return load_yaml_config(os.path.join(os.path.dirname(YAML_PATH), "scoring.yaml"))
 
-    @property
+    @cached_property
     def alerts(self) -> dict:
         return load_yaml_config(os.path.join(os.path.dirname(YAML_PATH), "alerts.yaml"))
 

@@ -1343,6 +1343,69 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Recent Features */}
+          <div className="card p-6">
+            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Neue Features</h3>
+            <p className="text-sm text-[var(--text-secondary)] mb-4">
+              Die zuletzt dokumentierten Erweiterungen aus v6.1.5 und v6.1.4.
+            </p>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">v6.1.5 — Audit Report Persistenz</h4>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• <strong className="text-[var(--text-primary)]">Audit Reports</strong> speichern jetzt den vollständigen <code>report_text</code></div>
+                  <div>• <strong className="text-[var(--text-primary)]">Research</strong> lädt den letzten Report aus der DB statt neu zu generieren</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Cache</strong> wird nach neuem Audit für Research invalidiert</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Freshness</strong> nur Reports der letzten 30 Tage werden wiederverwendet</div>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">v6.1.4 — Earnings Radar + Performance</h4>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• <strong className="text-[var(--text-primary)]">Earnings Radar</strong> zeigt jetzt Firmenname unter dem Ticker</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Timing</strong> liest Finnhub <code>hour</code> aus und zeigt <code>07:00 MEZ</code> / <code>22:00 MEZ</code></div>
+                  <div>• <strong className="text-[var(--text-primary)]">Tooltip</strong> weist auf die ungefähre Zeitangabe hin</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Performance</strong> Watchlist-/Markets-Caches und Loading-States optimiert</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Scoring Definitions */}
+          <div className="card p-6">
+            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Scoring-Definitionen</h3>
+            <p className="text-sm text-[var(--text-secondary)] mb-4">
+              So versteht die Plattform die beiden Kern-Scores im Research- und Audit-Flow.
+            </p>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-tertiary)] p-4">
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">Opportunity-Score (Opportunität)</h4>
+                <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-3">
+                  Bewertet die <strong className="text-[var(--text-primary)]">Attraktivität des Trades</strong>.
+                  Ein hoher Wert bedeutet: positives Setup, gute Chancen auf einen Trade mit Edge.
+                </p>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• <strong className="text-[var(--text-primary)]">1-3</strong> = schwache Opportunität / kein klarer Edge</div>
+                  <div>• <strong className="text-[var(--text-primary)]">4-6</strong> = neutral bis okay</div>
+                  <div>• <strong className="text-[var(--text-primary)]">7-10</strong> = starke Opportunität / bullisches Setup</div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-tertiary)] p-4">
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">Torpedo-Score</h4>
+                <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-3">
+                  Bewertet das <strong className="text-[var(--text-primary)]">Downside-Risiko</strong>.
+                  Ein hoher Wert bedeutet: viel Fallhöhe, Risiko für einen harten Abverkauf nach Earnings.
+                </p>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• <strong className="text-[var(--text-primary)]">1-3</strong> = geringes Risiko</div>
+                  <div>• <strong className="text-[var(--text-primary)]">4-6</strong> = erhöhtes Risiko / Vorsicht</div>
+                  <div>• <strong className="text-[var(--text-primary)]">7-10</strong> = hoher Torpedo / potenzieller Abverkauf</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Feature Matrix */}
           <div className="card p-6">
             <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Feature-Matrix</h3>
@@ -1351,11 +1414,11 @@ export default function SettingsPage() {
                 <h4 className="font-medium text-[var(--text-primary)] mb-2">Core Features</h4>
                 <div className="grid gap-2 md:grid-cols-3 text-sm">
                   <div className="text-[var(--text-secondary)]">• Marktdashboard (9 Kacheln)</div>
-                  <div className="text-[var(--text-secondary)]">• Watchlist + Research</div>
-                  <div className="text-[var(--text-secondary)]">• Earnings-Radar</div>
+                  <div className="text-[var(--text-secondary)]">• Watchlist + Research + Quick-Add</div>
+                  <div className="text-[var(--text-secondary)]">• Earnings-Radar (Firmenname + MEZ)</div>
                   <div className="text-[var(--text-secondary)]">• News-Feed + Sentiment</div>
                   <div className="text-[var(--text-secondary)]">• Performance-Analyse</div>
-                  <div className="text-[var(--text-secondary)]">• Reports (PDF)</div>
+                  <div className="text-[var(--text-secondary)]">• Reports (PDF) + Audit-Persistenz</div>
                 </div>
               </div>
               <div>

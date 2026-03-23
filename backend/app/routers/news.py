@@ -14,6 +14,7 @@ from backend.app.data.google_news import (
     add_custom_search_term,
     remove_custom_search_term,
 )
+from backend.app.data.market_overview import get_market_news_for_sentiment
 from backend.app.data.news_processor import run_news_pipeline, process_news_for_ticker
 from backend.app.data.macro_processor import fetch_global_macro_events
 from backend.app.data.sec_edgar import scan_filings_for_watchlist
@@ -61,6 +62,12 @@ async def api_remove_search_term(term: str = Query(..., min_length=3)):
     """Deaktiviert einen bestehenden Suchbegriff."""
     success = await remove_custom_search_term(term.strip())
     return {"status": "success" if success else "error"}
+
+@router.get("/api/news/general")
+async def api_get_general_news():
+    """Holt allgemeine Marktnachrichten (Finnhub)."""
+    logger.info("API Call: news/general")
+    return await get_market_news_for_sentiment()
 
 # --- News Pipeline Endpoints ---
 

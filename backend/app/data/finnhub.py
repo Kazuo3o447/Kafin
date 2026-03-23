@@ -17,6 +17,15 @@ from schemas.sentiment import NewsBulletPoint, ShortInterestData, InsiderActivit
 
 logger = get_logger(__name__)
 
+# Modulweiter HTTP-Client — einmal erstellt, wiederverwendet
+_http_client: httpx.AsyncClient | None = None
+
+def _get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(timeout=30.0)
+    return _http_client
+
 FIXTURES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "fixtures", "finnhub")
 
 

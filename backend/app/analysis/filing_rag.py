@@ -2,7 +2,6 @@
 10-Q Tonalitäts-Diff.
 Extrahiert nur relevante Abschnitte (~40-80K Tokens)
 und analysiert mit DeepSeek Chat (128K Kontext).
-Fallback auf Kimi K2.5 (256K) wenn größer.
 
 Kein Gemini nötig. Keine neuen API-Keys.
 Kosten: ~$0.003 pro Analyse.
@@ -15,7 +14,6 @@ logger = get_logger(__name__)
 
 MAX_SECTION_CHARS = 25_000   # Pro Abschnitt
 DEEPSEEK_LIMIT   = 80_000    # Zeichen → ~25K Tokens
-KIMI_LIMIT       = 200_000   # Zeichen → ~65K Tokens
 
 
 DIFF_PROMPT = """Du bist ein erfahrener Buy-Side-Analyst.
@@ -55,18 +53,12 @@ Antworte auf Deutsch. Sei direkt und handelsorientiert.
 Keine Floskeln."""
 
 
-async def _choose_model(text_chars: int) -> str:
+def _choose_model(text_chars: int) -> str:
     """
-    Wählt das beste Modell basierend auf Textmenge.
-    Alles bleibt in den bestehenden Integrationen.
+    Wählt das passende Modell basierend auf Textlänge.
+    Nur DeepSeek wird unterstützt.
     """
-    if text_chars <= DEEPSEEK_LIMIT:
-        return "deepseek-chat"
-    elif text_chars <= KIMI_LIMIT:
-        return "kimi"
-    else:
-        # Zu lang — Abschnitte werden intern gecroppt
-        return "deepseek-chat"
+    return "deepseek-chat"
 
 
 async def _call_model(
@@ -85,31 +77,6 @@ async def _call_model(
             model="deepseek-chat",
             max_tokens=3000,
             temperature=0.1,
-        )
-        return result or None
-
-    elif model == "kimi":
-        from backend.app.config import settings
-        if not settings.kimi_api_key:
-            # Kimi nicht konfiguriert → DeepSeek Fallback
-            logger.info(
-                "Kimi nicht konfiguriert → "
-                "DeepSeek Fallback"
-            )
-            from backend.app.analysis.deepseek import (
-                call_deepseek,
-            )
-            return await call_deepseek(
-                system,
-                prompt[:100_000],  # Crop für DeepSeek
-                model="deepseek-chat",
-                max_tokens=3000,
-                temperature=0.1,
-            )
-
-        from backend.app.analysis.kimi import call_kimi
-        result = await call_kimi(
-            system, prompt, max_tokens=3000
         )
         return result or None
 

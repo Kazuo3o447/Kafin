@@ -29,7 +29,7 @@ export function VolumeProfile({ ticker }: VolumeProfileProps) {
     async function fetchVolumeData() {
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:8000/api/data/volume-profile/${ticker}`);
+        const response = await fetch(`http://localhost:8001/api/data/volume-profile/${ticker}`);
         const result = await response.json();
         setData(result.data || []);
         setAvgVolume(result.avg_volume || 0);

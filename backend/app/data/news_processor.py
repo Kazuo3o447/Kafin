@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from backend.app.config import settings
 from backend.app.logger import get_logger
 from backend.app.data.finnhub import get_company_news
-from backend.app.analysis.finbert import analyze_sentiment_batch
+from backend.app.analysis.finbert import analyze_sentiment_batch_async
 from backend.app.analysis.groq import call_groq
 from backend.app.memory.short_term import save_bullet_points, get_existing_urls
 from backend.app.alerts.telegram import send_telegram_alert, format_narrative_shift_alert
@@ -77,7 +77,7 @@ async def process_news_for_ticker(ticker: str) -> dict:
 
     # STUFE 2: FinBERT-Sentiment
     headlines = [n.headline for n in new_news]
-    sentiment_scores = analyze_sentiment_batch(headlines)
+    sentiment_scores = await analyze_sentiment_batch_async(headlines)
 
     relevance_threshold = settings.alerts.get("finbert", {}).get("relevance_threshold", 0.3)
 
@@ -311,10 +311,10 @@ async def run_news_pipeline(tickers: list[str]) -> list[dict]:
         raw_google_news = await scan_google_news(wl_items)
 
         if raw_google_news:
-            from backend.app.analysis.finbert import analyze_sentiment_batch
+            from backend.app.analysis.finbert import analyze_sentiment_batch_async
 
             headlines = [n["headline"] for n in raw_google_news]
-            scores = analyze_sentiment_batch(headlines)
+            scores = await analyze_sentiment_batch_async(headlines)
 
             relevance_threshold = 0.15
             for news_item, score in zip(raw_google_news, scores):

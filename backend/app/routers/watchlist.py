@@ -42,7 +42,7 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
 
     # Cache-Check
     cache_key = f"yf:enriched_v2:{ticker.upper()}"
-    cached_data = cache_get(cache_key)
+    cached_data = None  # Skip cache in sync function for now
     if cached_data:
         entry.update(cached_data)
         return entry
@@ -318,7 +318,7 @@ async def api_watchlist_enriched():
             concentration_warning = f"⚠️ Klumpenrisiko: {concentration_pct:.0f}% der Watchlist ist im Sektor '{dominant_sector}'. Diversifikation prüfen."
 
     result = {"watchlist": enriched, "concentration_warning": concentration_warning, "sector_distribution": sectors}
-    cache_set(cache_key, result, ttl_seconds=300)
+    await cache_set(cache_key, result, ttl_seconds=300)
     return result
 
 @router.post("")

@@ -30,3 +30,6 @@ htmlcov/
 # Logs
 logs/
 *.log
+
+# Backups
+backups/*.sql.gz

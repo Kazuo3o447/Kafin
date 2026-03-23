@@ -1,4 +1,5 @@
 import os
+import asyncio
 from datetime import datetime, timedelta
 from backend.app.logger import get_logger
 from backend.app.data.finnhub import get_company_news, get_short_interest, get_insider_transactions, get_economic_calendar
@@ -18,6 +19,9 @@ from backend.app.memory.short_term import _calc_sentiment_from_bullets
 from backend.app.analysis.shadow_portfolio import open_shadow_trade
 
 logger = get_logger(__name__)
+
+# Max. gleichzeitige DeepSeek-Calls (Rate Limit Schutz)
+_DEEPSEEK_SEMAPHORE = asyncio.Semaphore(3)
 
 
 def _fmt(value, date, unit="", fallback="Nicht verfügbar"):
@@ -155,6 +159,27 @@ async def generate_audit_report(ticker: str) -> str:
         history = await get_earnings_history(ticker)
     except Exception as e:
         logger.warning(f"Earnings history für {ticker}: {e}")
+
+    # yfinance Fallback wenn FMP keine Earnings-History liefert
+    if not history:
+        try:
+            from backend.app.data.yfinance_data import get_earnings_history_yf
+            from schemas.earnings import EarningsHistorySummary
+            yf_hist_raw = await get_earnings_history_yf(ticker)
+            if yf_hist_raw:
+                history = EarningsHistorySummary(
+                    ticker=ticker,
+                    quarters_beat=yf_hist_raw.get("quarters_beat", 0),
+                    total_quarters=yf_hist_raw.get("total_quarters", 0),
+                    avg_surprise_percent=yf_hist_raw.get("avg_surprise_percent"),
+                    all_quarters=yf_hist_raw.get("all_quarters", []),
+                )
+                logger.info(
+                    f"[{ticker}] Earnings-History via yfinance: "
+                    f"{history.quarters_beat}/{history.total_quarters} Beats"
+                )
+        except Exception as e:
+            logger.debug(f"yfinance Earnings-History Fallback {ticker}: {e}")
 
     metrics = None
     try:
@@ -595,7 +620,20 @@ async def generate_audit_report(ticker: str) -> str:
     # Gewichteter Composite Score
     # FinBERT: 50% (zuverlässig, viele Datenpunkte)
     # Web:     50% (proaktiv, hohe Relevanz für Earnings)
-    social_score_raw = 0.0  # Social Sentiment derzeit nicht verfügbar
+    
+    # Reddit Retail Sentiment (kostenlos, gecacht 1h)
+    reddit_data = {}
+    social_score_raw = 0.0
+    try:
+        from backend.app.data.reddit_monitor import get_reddit_sentiment
+        reddit_data = await get_reddit_sentiment(ticker, hours=24)
+        social_score_raw = reddit_data.get("avg_score") or 0.0
+        logger.debug(
+            f"[{ticker}] Reddit: score={social_score_raw:+.2f}, "
+            f"mentions={reddit_data.get('mention_count', 0)}"
+        )
+    except Exception as e:
+        logger.debug(f"Reddit Sentiment {ticker}: {e}")
 
     composite_sentiment = round(
         finbert_sentiment * 0.5
@@ -631,7 +669,17 @@ async def generate_audit_report(ticker: str) -> str:
         + (" | DIVERGENZ" if sentiment_divergence else "")
     )
     
-    macro = await get_macro_snapshot()
+    from backend.app.data.fear_greed import get_fear_greed_score
+    
+    macro, fear_greed_data = await asyncio.gather(
+        get_macro_snapshot(),
+        get_fear_greed_score(),
+        return_exceptions=True,
+    )
+    if isinstance(macro, Exception):
+        macro = None
+    if isinstance(fear_greed_data, Exception):
+        fear_greed_data = {}
     
     # Assemble data context for scoring
     valuation_ctx = {}
@@ -671,6 +719,13 @@ async def generate_audit_report(ticker: str) -> str:
             or (yf_fundamentals.get("sector") if yf_fundamentals else None)
             or "Unknown"
         ),
+        # NEU: Reddit Sentiment
+        "reddit_sentiment": social_score_raw,
+        "reddit_mentions": reddit_data.get("mention_count", 0),
+        "reddit_label": reddit_data.get("label", "keine Daten"),
+        # NEU: Fear & Greed Score
+        "fear_greed_score": fear_greed_data.get("score", 50.0),
+        "fear_greed_label": fear_greed_data.get("label", "Neutral"),
     }
     
     # 2. Scores
@@ -1231,13 +1286,16 @@ async def generate_sunday_report(tickers: list[str]) -> str:
     except Exception as exc:
         logger.debug(f"Performance Summary nicht verfügbar: {exc}")
 
-    reports = []
-    for t in tickers:
+    async def _safe_audit(t: str) -> str:
+    async with _DEEPSEEK_SEMAPHORE:
         try:
-            reports.append(await generate_audit_report(t))
+            return await generate_audit_report(t)
         except Exception as e:
             logger.error(f"Audit-Report für {t} fehlgeschlagen: {e}")
-            reports.append(f"## {t}\n\nReport-Generierung fehlgeschlagen: {str(e)}")
+            return f"## {t}\n\nReport-Generierung fehlgeschlagen: {str(e)}"
+
+    reports = await asyncio.gather(*[_safe_audit(t) for t in tickers])
+    reports = list(reports)
 
     full_report = "# KAFIN SONNTAGS-AUDIT\n\n"
     if performance_summary:

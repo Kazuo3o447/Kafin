@@ -183,7 +183,7 @@ async def _check_ticker_signals(ticker: str) -> List[Dict]:
         except Exception as exc:  # noqa: BLE001
             logger.debug(f"Score-History Check {ticker}: {exc}")
 
-        cache_set(cache_key, True, ttl_seconds=300)
+        await cache_set(cache_key, True, ttl_seconds=300)
 
     except Exception as exc:  # noqa: BLE001
         logger.debug(f"Signal-Check für {ticker} fehlgeschlagen: {exc}")

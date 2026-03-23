@@ -1,17 +1,22 @@
-FROM node:20-alpine
-
-# Kafin v6.1.4 - Prompt Quality + Modell-Optimierung
-# Aktuelle Features: API Usage Tracking, Prompt Quality v0.4, DeepSeek Modell-Matrix
-
+# Stage 1: Build
+FROM node:20-alpine AS builder
 WORKDIR /app
-
 COPY package*.json ./
 RUN npm ci
-
 COPY . .
-
 RUN npm run build
 
-EXPOSE 3000
+# Stage 2: Nur Standalone-Output
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-CMD ["npm", "start"]
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+CMD ["node", "server.js"]

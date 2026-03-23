@@ -236,6 +236,8 @@ Status bleibt ⛔ BLOCKIERT (API-Key nötig).
 
 ## 🟠 FEATURE: 10-Q Filing RAG (Tonalitäts-Diff)
 
+**Status: ✅ ERLEDIGT — v6.2.2 (23.03.2026)**
+
 **Warum (Edge):**
 In einem 50-seitigen 10-Q verstecken sich die
 wichtigsten Signale in veränderten Formulierungen.
@@ -269,6 +271,14 @@ Neues Modul: backend/app/analysis/filing_rag.py
 Neuer Endpoint: GET /api/data/filing-diff/{ticker}
 Gemini API Key: kostenlos registrieren.
 Cache: 24h (10-Qs ändern sich nicht).
+
+**Implementiert:**
+- ✅ gemini.py: Gemini 1.5 Flash Client
+- ✅ filing_rag.py: SEC EDGAR → Gemini Pipeline
+- ✅ GET /api/data/filing-diff/{ticker} Endpoint
+- ✅ Research: FilingDiffBlock on-demand
+- ✅ 5 Kategorien: Margen, Wachstum, Risiken, Guidance, Liquidität
+- ✅ Gesamt-Signal: BULLISH/BEARISH/GEMISCHT/NEUTRAL
 
 **Aufwand:** ~4h | **Modell:** Sonnet / SWE-1.5
 **Priorität:** Batch 3

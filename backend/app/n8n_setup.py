@@ -299,7 +299,58 @@ async def setup_workflows():
             },
         }
 
-        for wf in [weekday_news_workflow, weekend_news_workflow, sec_workflow, sunday_workflow, morning_workflow, earnings_review_workflow, sentiment_workflow, peer_morning_workflow]:
+        # Workflow 8: Nightly DB Backup (täglich 03:00)
+        backup_workflow = {
+            "name": "Kafin: Nightly DB Backup (täglich 03:00)",
+            "active": True,
+            "nodes": [
+                {
+                    "parameters": {
+                        "rule": {
+                            "interval": [{
+                                "field": "cronExpression",
+                                "expression": "0 3 * * *"
+                            }]
+                        }
+                    },
+                    "name": "Trigger: Täglich 03:00",
+                    "type": "n8n-nodes-base.scheduleTrigger",
+                    "position": [250, 300],
+                    "typeVersion": 1
+                },
+                {
+                    "parameters": {
+                        "url": "http://kafin-backend:8000/api/admin/backup-database",
+                        "method": "POST",
+                        "options": {}
+                    },
+                    "name": "PostgreSQL Backup",
+                    "type": "n8n-nodes-base.httpRequest",
+                    "position": [450, 300],
+                    "typeVersion": 1
+                },
+                {
+                    "parameters": {
+                        "values": {
+                            "string": [{
+                                "name": "log",
+                                "value": "={{$json.success ? 'Backup OK: ' + $json.file : 'Backup FEHLER: ' + $json.error}}"
+                            }]
+                        }
+                    },
+                    "name": "Log Result",
+                    "type": "n8n-nodes-base.set",
+                    "position": [650, 300],
+                    "typeVersion": 1
+                }
+            ],
+            "connections": {
+                "Trigger: Täglich 03:00": {"main": [[{"node": "PostgreSQL Backup", "type": "main", "index": 0}]]},
+                "PostgreSQL Backup": {"main": [[{"node": "Log Result", "type": "main", "index": 0}]]}
+            }
+        }
+
+        for wf in [weekday_news_workflow, weekend_news_workflow, sec_workflow, sunday_workflow, morning_workflow, earnings_review_workflow, sentiment_workflow, peer_morning_workflow, backup_workflow]:
             try:
                 response = await client.post("/api/v1/workflows", json=wf)
                 if response.status_code in (200, 201):

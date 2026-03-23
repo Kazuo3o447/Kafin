@@ -18,7 +18,7 @@ für Aktien-Earnings und Bitcoin. Der Trader entscheidet — die Plattform empfi
 - Backend: Python FastAPI auf NUC (ZimaOS + Docker)
 - Datenbank: Supabase (gehostetes PostgreSQL)
 - Frontend: Next.js auf Vercel (Phase 5)
-- KI: FinBERT (lokal) → DeepSeek API → Kimi K2.5 API → Frontier-Fallback
+- KI: FinBERT (lokal) → DeepSeek API → Groq API
 - Alerts: Telegram Bot + E-Mail via n8n
 - Bitcoin: CoinGlass API für Derivate-Daten
 
@@ -696,16 +696,16 @@ Module für KI-Analyse, Scoring und Report-Generierung.
 | Datei | Abhängigkeit | Beschreibung |
 |-------|-------------|-------------|
 | finbert.py | Lokales Modell | Sentiment-Score für Headlines (-1 bis +1) |
-| deepseek.py | DeepSeek API | News-Zusammenfassung, Stichpunkt-Extraktion |
-| kimi.py | Kimi K2.5 API | Tiefenanalyse Earnings-Transkripte |
+| deepseek.py | DeepSeek API | News-Zusammenfassung, Stichpunkt-Extraktion, Report-Generierung |
+| groq.py | Groq API | Schnelle News-Extraktion (llama-3.1-8b-instant) |
 | scoring.py | config/scoring.yaml, schemas/scores.py | Berechnet Opportunity + Torpedo Score |
 | report_generator.py | Alle obigen Module | Generiert den vollständigen Audit-Report |
 
 ## Datenfluss
 1. data/ Module liefern Rohdaten als Pydantic-Models
 2. finbert.py filtert News-Headlines
-3. deepseek.py extrahiert Stichpunkte aus relevanten News
-4. kimi.py analysiert Earnings-Transkripte (nur für Audit-Reports)
+3. groq.py extrahiert Stichpunkte aus relevanten News (schnell)
+4. deepseek.py analysiert komplexe Daten und generiert Reports
 5. scoring.py berechnet beide Scores aus allen Datenpunkten
 6. report_generator.py kombiniert alles zum fertigen Report
 ```

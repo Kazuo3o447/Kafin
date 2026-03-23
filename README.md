@@ -168,6 +168,8 @@ docker-compose up -d kafin-frontend
 - **Backend API**: Neue Endpoints `/api/reports/generate-after-market` und `/api/reports/briefing-archive`
 - **Database Schema**: `after_market_summary` Spalte zu `daily_snapshots` hinzugefügt
 - **Navigation**: Sidebar um "Briefing" Link erweitert
+- **Snapshot Stabilität**: `daily_snapshots.date` wird jetzt als echtes `DATE` gespeichert; gestrige Snapshots funktionieren wieder ohne `toordinal`-Fehler.
+- **Morning Briefing Fallbacks**: FMP-Ausfälle werden im Analysten-Abschnitt mit yfinance-Fallbacks ergänzt, damit Price-Target- und EPS-Daten nicht leer bleiben.
 
 ## 🐛 Letzte Fixes (22. März 2026)
 - **Prompt Quality v6.1.4**: Alle TODO-Platzhalter implementiert (Max Pain, CEO, Mitarbeiter, Fear & Greed, etc.)

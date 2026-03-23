@@ -1398,15 +1398,23 @@ async def generate_morning_briefing() -> str:
             macro_events.append(bp_text)
 
     # 7. Analysten-Ratings für Watchlist-Ticker (letzte 7 Tage)
-    from backend.app.data.fmp import get_analyst_grades, get_price_target_consensus
+    from backend.app.data.fmp import get_analyst_grades, get_price_target_consensus, get_analyst_estimates
 
     analyst_lines = []
     cutoff_7d = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
 
     for ticker in wl_tickers[:10]:
         try:
-            grades = await get_analyst_grades(ticker)
+            grades = await get_analyst_grades(ticker) or []
             pt = await get_price_target_consensus(ticker)
+            estimates = await get_analyst_estimates(ticker)
+
+            yf_fundamentals = None
+            if not grades or not pt or not estimates:
+                try:
+                    yf_fundamentals = await get_fundamentals_yf(ticker)
+                except Exception as e:
+                    logger.debug(f"yfinance Fundamentals für {ticker}: {e}")
 
             # Nur Ratings der letzten 7 Tage
             recent_grades = [g for g in grades if g.get("date", "") >= cutoff_7d]
@@ -1424,6 +1432,26 @@ async def generate_morning_briefing() -> str:
                 low = pt.get("targetLow", 0)
                 high = pt.get("targetHigh", 0)
                 analyst_lines.append(f"[{ticker}] PT-Konsens: ${consensus:.0f} (Range: ${low:.0f}-${high:.0f})")
+            elif yf_fundamentals and yf_fundamentals.get("analyst_target"):
+                rec = yf_fundamentals.get("analyst_recommendation") or "unknown"
+                n_analysts = yf_fundamentals.get("number_of_analysts") or "n/a"
+                analyst_lines.append(
+                    f"[{ticker}] yfinance PT-Fallback: ${float(yf_fundamentals['analyst_target']):.0f} "
+                    f"({rec}, {n_analysts} Analysts)"
+                )
+
+            if estimates:
+                eps_est = getattr(estimates, "eps_consensus", None)
+                rev_est = getattr(estimates, "revenue_consensus", None)
+                report_date = getattr(estimates, "report_date", None)
+                if eps_est is not None or rev_est is not None:
+                    pieces = []
+                    if eps_est is not None:
+                        pieces.append(f"EPS ${eps_est:.2f}")
+                    if rev_est is not None:
+                        pieces.append(f"Revenue ${float(rev_est):,.0f}")
+                    suffix = f" am {report_date}" if report_date else ""
+                    analyst_lines.append(f"[{ticker}] Analysten-Schätzung{suffix}: " + " | ".join(pieces))
 
         except Exception as e:
             logger.debug(f"Analysten-Daten für {ticker} nicht verfügbar: {e}")

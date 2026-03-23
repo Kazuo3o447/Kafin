@@ -358,9 +358,7 @@ async def get_market_overview() -> dict:
     all_symbols = list(dict.fromkeys(all_symbols))
 
     # Ein einziger HTTP-Request statt 24 einzelne
-    hist_data = await asyncio.to_thread(
-        _batch_download, all_symbols, "1y"
-    )
+    hist_data = await _batch_download(all_symbols, "1y")
 
     result = {
         "timestamp": datetime.now().isoformat(),
@@ -517,7 +515,7 @@ async def save_daily_snapshot(
         ranking = market_data.get("sector_ranking_5d", [])
 
         record = {
-            "date": date.today().isoformat(),
+            "date": date.today(),
             "spy_price": indices.get("SPY", {}).get("price"),
             "spy_change_pct": indices.get("SPY", {}).get("change_1d_pct"),
             "qqq_price": indices.get("QQQ", {}).get("price"),
@@ -580,7 +578,7 @@ async def get_yesterday_snapshot() -> dict | None:
         # Versuche die letzten 3 Tage (für Wochenenden/Feiertage)
         result = await db.table("daily_snapshots") \
             .select("*") \
-            .lt("date", date.today().isoformat()) \
+            .lt("date", date.today()) \
             .order("date", desc=True) \
             .limit(1) \
             .execute_async()

@@ -175,12 +175,13 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 ### 6. Tägliches Morning Briefing
 *   **Marktübersicht**: `market_overview.py` — Index-Chartanalyse (SPY, QQQ, DIA, IWM), 11 Sektor-ETFs mit Rotationsranking, 5 Makro-Proxys (VIX, TLT, UUP, GLD, USO) via yfinance.
 *   **Allgemeine Nachrichten**: Finnhub General News Endpoint mit Qualitätsfilter (Reuters, Bloomberg, CNBC etc.).
-*   **Tages-Snapshot**: `daily_snapshots`-Tabelle in Supabase für Vergleich "gestern vs. heute" mit automatischer Regime-Erkennung.
+*   **Tages-Snapshot**: `daily_snapshots`-Tabelle in Supabase für Vergleich "gestern vs. heute" mit automatischer Regime-Erkennung; `date` wird als echtes `DATE` gespeichert, damit der Snapshot-Vergleich nicht mehr an `toordinal` scheitert.
 *   **DeepSeek-Analyse**: Analytischer Prompt v0.2 mit Vergleich, Kausalität, Widerspruchserkennung, Regime-Einordnung, Cross-Asset-Signalen.
 *   **Scheduling**: n8n Workflow "Morning Briefing (Mo-Fr 07:00)" mit 120s Timeout.
 *   **Admin-Panel**: Blauer "Morning Briefing"-Button im Reports-Tab, Marktübersicht-Karte im Status-Tab mit Auto-Refresh (5min).
 *   **Telegram**: Automatischer Versand mit Chunking für lange Briefings.
 *   **API-Endpoints**: `POST /api/reports/generate-morning`, `GET /api/data/market-overview`.
+*   **Fallbacks**: FMP-Analysten-/Price-Target-Daten werden im Briefing mit yfinance-Fallbacks ergänzt, damit bei API-Limits nicht ganze Abschnitte leer bleiben.
 
 ### 7. Phase 4A: Feedback-Loop
 *   **Langzeit-Gedächtnis**: Audit-Prompt erweitert, DeepSeek-Report speichert Insights + vollständige Reports in Supabase.

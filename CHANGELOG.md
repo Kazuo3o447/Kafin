@@ -2,6 +2,104 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [7.3.0] - 2026-03-23 - Lernpfade + Auto-Trigger
+
+### 🧠 Zwei Lernpfade
+- **`trade_type`** in `decision_snapshots` — "earnings" | "momentum"
+  automatisch gesetzt basierend auf `earnings_countdown` zum Entscheidungszeitpunkt
+- **Performance → Lernpfade**: Unterseite mit getrennten Trefferquoten,
+  Progress-Bar zur Kalibrierung, Zukunftsvision aufklappbar
+- **Endpoint** `GET /api/data/lernpfade-stats` — aggregierte Stats pro Pfad
+
+### ⚡ Earnings Auto-Trigger
+- **Täglich 08:10 CET**: Watchlist-Ticker mit earnings_countdown ≤ 5
+  bekommen automatisch Audit-Report + Shadow Trade (wenn Opp≥6.5/Torpedo≤4.5)
+- **n8n Workflow**: "Kafin: Earnings Auto-Trigger (täglich 08:10)"
+- **Schwelle bewusst strenger**: 6.5/4.5 statt 7/3 — automatische Trades
+  brauchen höhere Qualitätshürde als manuell bestätigte
+
+### 📚 Dokumentation
+- **FUTURE.md**: Separate Scoring-Engines vollständig dokumentiert —
+  Implementierungsplan für Phase 1-4, Gewichtungs-Beispiele, Trigger-Bedingung
+
+## [7.2.0] - 2026-03-23 - Alpaca Integration + Learning Module
+
+### 🔗 Alpaca Paper Trading
+- **`backend/app/data/alpaca.py`**: Account, Positions, Market Orders via httpx
+- **Paper Trade Button**: P1-Signal-Karten im Signal Feed → direkter Alpaca-Order
+- **Bracket Orders**: Stop-Loss und Take-Profit automatisch gesetzt
+- **Shadow Sync**: Alpaca Paper Trades werden auch als Shadow Trade geloggt
+
+### 📊 Performance — 4 Tabs
+- **Tab "Meine Trades"**: Echte Trade-Erfassung (ersetzt separates Journal)
+  mit Alpaca-Account-Banner, Signal-Badges, P&L direction-aware
+- **Tab "Lernkurve"**: Decision Snapshots — Trefferquote, T+1/5/20 Returns,
+  Datenqualitäts-Flags
+- **`real_trades`-Tabelle**: Entry/Exit/These/Alpaca-Order-ID
+- **`decision_snapshots`-Tabelle**: Unveränderlicher Entscheidungs-Kontext
+
+### 🧠 Decision Snapshot / Learning Module
+- **Automatisch bei jedem Audit-Report**: Scores, Rohdaten, Makro, Prompt gespeichert
+- **Top-3-Treiber-Extraktion**: DeepSeek Chat analysiert warum Empfehlung so war
+- **Failure Hypothesis**: 1-Satz Hypothese was schiefgehen könnte
+- **T+1/T+5/T+20 Outcome-Updater**: Täglich 22:30 CET via n8n
+
+### ⚡ Signal Feed: Handlungsempfehlung
+- **On-demand Button**: Action Brief manuell neu generieren (force_refresh)
+- **Aufgeklappter Header-Block** mit Timestamp und Aktualisieren-Button
+
+### 🗃️ Sidebar final
+- "Dashboard" → "Signal Feed" (Zap-Icon)
+- "Reports" entfernt → "Briefing" ersetzt es
+- "Bitcoin" ergänzt
+- "Journal" nicht separat — in Performance integriert
+
+## [7.1.1] - 2026-03-23 - Robustheitsfixes
+
+### 🛠️ Stabilität
+- **BTC-Lagebericht robuster**: Fehlende CoinGlass-/Snapshot-Daten werden jetzt
+  sauber mit Safe-Formatting (`N/A`) statt Zahlformat-Fehlern behandelt
+- **Momentum-Ranking korrekt bei 0.0**: Relative Stärke bleibt auch bei exakten
+  Null-Veränderungen erhalten und wird nicht mehr als Missing interpretiert
+
+## [7.1.0] - 2026-03-23 - Trader-Entscheidungsbrücke
+
+### 🔗 Journal × Signal Feed
+- **Offene Positionen im Signal Feed**: Jedes Signal zeigt ob eine offene
+  Journal-Position für diesen Ticker existiert — mit direction-Badge und
+  position_risk (high/positive/neutral)
+- **Aktive Signale im Journal**: Offene Positionen zeigen welche Signal-Feed-
+  Alerts aktuell aktiv sind — direkt im Journal-Eintrag
+- **After-Market Briefing kennt Positionen**: Kommentiert Stop-Anpassungen
+  und Position-Risiken für offene Trades
+
+### 📋 Session-Plan
+- **Täglich 08:05 CET**: DeepSeek Reasoner generiert 3 aktionierbare Setups
+  mit konkretem Entry, Stop, Ziel und R:R
+- **Quellen**: Watchlist-Scores (Opp≥6/Torpedo≤5) + Chart-Analyst-Levels +
+  aktive Signal-Feed-Signale
+- **Briefing-Page**: Session-Plan als dritter Block zwischen Pre/After-Market
+- **n8n**: `session_plan` Cron 08:05 Mo–Fr
+
+### ₿ Bitcoin-Modul
+- **`/btc` Page**: Kurs + Open Interest + Funding Rate + Long/Short Ratio + DXY
+- **CoinGlass Integration**: `coinglass.py` vollständig implementiert
+- **KI-Lagebericht**: DeepSeek Chat generiert BTC-Lagebericht on-demand
+  und täglich im After-Market Briefing
+- **DXY-Korrelation**: "Stark — BTC Gegenwind / Schwach — Rückenwind"
+- **Sidebar-Link**: /btc in Navigation
+
+### 📊 Momentum-Ranking
+- **Relative Stärke vs. SPY**: Watchlist-Ranking nach 1T/5T/20T relativer
+  Performance, Composite Score (50% 5T + 30% 20T + 20% 1T)
+- **On-demand auf Watchlist-Page**: Berechnen-Button, 15 Min Cache
+- **Signal**: strong_outperform / outperform / neutral / underperform /
+  strong_underperform
+
+### 📅 Wirtschaftskalender Impact
+- **Bad-News-is-Good-News Badge**: Bei High-Impact-Daten-Miss von Fed-
+  sensitiven Events (CPI, NFP, PCE etc.) → "Miss → Fed-Pivot möglich"
+
 ## [6.4.0] - 2026-03-23 - Trader-Entscheidungsqualität
 
 ### 📊 Chart & Analyse

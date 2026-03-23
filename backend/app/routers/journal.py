@@ -16,6 +16,7 @@ from typing import Optional
 from datetime import date
 from backend.app.database import get_supabase_client
 from backend.app.logger import get_logger
+from backend.app.cache import cache_get
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["journal"])
@@ -73,6 +74,33 @@ async def get_journal(ticker: Optional[str] = None, limit: int = 100):
             else:
                 e["pnl"] = None
                 e["pnl_pct"] = None
+
+        # Aktive Signale für offene Positionen aus Cache
+        try:
+            feed_cache = await cache_get("signals:feed")
+            signal_map: dict[str, list] = {}
+            if feed_cache:
+                for sig in (feed_cache.get("signals") or []):
+                    t = (sig.get("ticker") or "").upper()
+                    if t not in signal_map:
+                        signal_map[t] = []
+                    signal_map[t].append({
+                        "signal_type": sig.get("signal_type"),
+                        "priority":    sig.get("priority"),
+                        "headline":    sig.get("headline"),
+                    })
+            # An offene Positionen anhängen
+            for e in entries:
+                if e.get("exit_date") is None:
+                    t = (e.get("ticker") or "").upper()
+                    e["active_signals"] = signal_map.get(t, [])
+                else:
+                    e["active_signals"] = []
+        except Exception as ex:
+            logger.warning(f"Signal cache for journal: {ex}")
+            for e in entries:
+                e["active_signals"] = []
+
         return {"entries": entries, "total": len(entries)}
     except Exception as ex:
         logger.error(f"Journal GET fehler: {ex}")

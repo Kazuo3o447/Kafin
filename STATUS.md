@@ -8,6 +8,18 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 3. Skimme die historischen Meilensteine nur für Kontext oder Audit-Zwecke.
 
 ## 🟢 Aktueller Stand
+- **Lernpfade v7.3.0**: Zwei Lernpfade (Earnings/Momentum), Unterseite
+  in Performance, Auto-Trigger Earnings 08:10, FUTURE.md Scoring-Engines
+- **Learning Module + Alpaca v7.2.0**: Decision Snapshots automatisch bei
+  Audit-Reports, T+1/5/20 Outcome-Tracking, Failure Hypothesis, Performance
+  4-Tab-Layout (KI-Trefferquote / Paper Trades / Meine Trades / Lernkurve),
+  Alpaca Paper Trading Backend, Signal Feed Handlungsempfehlung on-demand
+- **Robustheitsfix v7.1.1**: BTC-Lagebericht nutzt Safe-Formatting bei fehlenden
+  Daten, Momentum-Ranking behandelt 0.0-Veränderungen korrekt als gültige Werte
+- **Trader-Entscheidungsbrücke v7.1.0**: Journal × Signal Feed verknüpft
+  (Positions-Badges in beiden Richtungen), Session-Plan 08:05 CET (Reasoner),
+  Bitcoin-Modul aktiviert (/btc, CoinGlass), Momentum-Ranking Watchlist,
+  Bad-News-is-Good-News Kontext im Wirtschaftskalender
 - **Signal Feed v7.0**: Root-Dashboard zeigt jetzt den Anomaly Feed mit Preparation Setups, Signal-Config und Live-Action-Brief.
 - **Markets Dashboard v2**: Marktübersicht, Marktbreite, Intermarket, Fear & Greed und Market Audit sind wieder über die API erreichbar; Frontend-Requests laufen standardmäßig relativ über `/api`.
 - **Frontend Routing Fixes**: Harte `localhost:8001`-Defaults wurden durch relative API-Requests bzw. lokale `8000`-Fallbacks ersetzt, damit Daten im Dev-Modus und im Docker-Stack zuverlässig ankommen.
@@ -68,6 +80,18 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 | Trade-Journal      | `backend/app/routers/journal.py`                  | CRUD für trade_journal-Tabelle          |
 | Journal-Page       | `frontend/src/app/journal/page.tsx`               | P&L-Tracking, Entry/Exit-Erfassung     |
 | DeepSeek Multi-Turn| `backend/app/analysis/deepseek.py`               | `call_deepseek_chat()` für Chat         |
+| Bitcoin-Seite      | `frontend/src/app/btc/page.tsx`              | Kurs, OI, Funding, L/S, KI-Lagebericht |
+| CoinGlass Client   | `backend/app/data/coinglass.py`              | OI, Funding Rate, L/S, Liquidations    |
+| Momentum-Ranking   | `GET /api/data/watchlist-momentum`           | Rel. Stärke vs. SPY, Composite Score   |
+| Alpaca Client     | `backend/app/data/alpaca.py`                | Paper Trading: Account, Positions, Orders   |
+| Real Trades       | `GET/POST/PUT/DELETE /api/data/real-trades` | Echte Trades des Traders                    |
+| Decision Snapshots| `GET /api/data/decision-snapshots`          | Entscheidungs-Kontext + Outcomes            |
+| Outcome Updater   | `POST /api/data/decision-snapshots/update-outcomes` | T+1/5/20 Returns täglich     |
+| Lernpfade Stats   | `GET /api/data/lernpfade-stats`             | Earnings vs Momentum Trefferquoten          |
+| Earnings Auto-Trigger | `POST /api/reports/trigger-earnings-audits` | Watchlist Earnings Auto-Audit             |
+| Session Plan       | `POST /api/reports/generate-session-plan`    | Reasoner, täglich 08:05                |
+| BTC Snapshot       | `GET /api/data/btc/snapshot`                 | Vollständige Derivate-Daten            |
+| BTC Report         | `POST /api/reports/generate-btc`             | DeepSeek Chat Lagebericht              |
 | Prompt Templates | `prompts/audit_report.md`, `prompts/post_earnings.md`, `prompts/morning_briefing.md` | KI-Prompts v0.4 mit vollständigen Platzhaltern |
 | API Usage Endpoint | `GET /api/admin/api-usage` | Aggregierte API Usage mit Echtzeit-Daten und Limits |
 | News Pipeline | `backend/app/data/news_processor.py` | News-Extraction mit Groq, Rate Limit 20/h |

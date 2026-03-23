@@ -1126,6 +1126,63 @@ async def generate_audit_report(ticker: str) -> str:
             }).execute_async()
             logger.info(f"Audit-Report für {ticker} in Supabase gespeichert")
             
+            # Decision Snapshot für Learning-Modul erstellen
+            try:
+                # Tage bis Earnings berechnen (für trade_type)
+                earnings_countdown = None
+                if estimates and hasattr(estimates, 'report_date') and estimates.report_date:
+                    try:
+                        from datetime import date as _date_cls
+                        earnings_date = (
+                            estimates.report_date if hasattr(estimates.report_date, "toordinal")
+                            else _date_cls.fromisoformat(str(estimates.report_date))
+                        )
+                        earnings_countdown = (earnings_date - _date_cls.today()).days
+                    except Exception:
+                        pass
+
+                await _save_decision_snapshot(
+                    ticker=ticker,
+                    opportunity_score=opp_score.total_score if opp_score else 0,
+                    torpedo_score=torp_score.total_score if torp_score else 0,
+                    recommendation=rec.recommendation if rec else "unknown",
+                    prompt_text=user_prompt[:8000],  # auf 8000 Zeichen kappen
+                    report_text=mock_response,
+                    raw_data={
+                        "valuation": valuation_ctx,
+                        "technicals": technicals.dict() if technicals else {},
+                        "short_interest": short_interest.dict() if short_interest else {},
+                        "insiders": insiders.dict() if insiders else {},
+                        "options": options.dict() if options else {},
+                        "earnings_history": history.dict() if history else {},
+                        "news_memory": news_memory if news_memory else [],
+                        "social": social.dict() if social else {},
+                        "macro": macro.dict() if macro else {},
+                        "chart_analysis": chart_data,
+                        "relative_strength": {
+                            "spy_1d_pct": spy.get("change_1d_pct"),
+                            "spy_5d_pct": spy.get("change_5d_pct"),
+                            "spy_1m_pct": spy.get("change_1m_pct"),
+                            "sector_etf_5d_pct": sector_etf.get("change_5d_pct"),
+                            "sector_etf_1m_pct": sector_etf.get("change_1m_pct"),
+                            "ticker_1d_pct": ticker_1d_pct,
+                            "ticker_5d_pct": ticker_5d,
+                            "ticker_1m_pct": ticker_1m,
+                        },
+                        "expected_move": {
+                            "pct": expected_move_pct,
+                            "usd": expected_move_usd,
+                        },
+                        "price_change_30d": price_change_30d,
+                        "fear_greed": fear_greed_data,
+                        "reddit_sentiment": reddit_data,
+                        "earnings_countdown": earnings_countdown,
+                    },
+                    earnings_countdown=earnings_countdown,
+                )
+            except Exception as snap_err:
+                logger.warning(f"Decision Snapshot für {ticker} konnte nicht gespeichert werden: {snap_err}")
+            
             # Redis Cache für Research invalidieren
             try:
                 from backend.app.cache import cache_invalidate
@@ -1788,7 +1845,38 @@ async def generate_after_market_report() -> str:
     except Exception:
         pass
 
-    # 5. Morgen im Fokus — Earnings der nächsten 2 Tage
+    # 5. Offene Journal-Positionen
+    open_pos_lines: list[str] = []
+    try:
+        from backend.app.database import get_pool as _get_pool
+        _pool = await _get_pool()
+        async with _pool.acquire() as _conn:
+            _rows = await _conn.fetch("""
+                SELECT ticker, direction, entry_price, shares,
+                       stop_price, target_price, entry_date
+                FROM trade_journal
+                WHERE exit_date IS NULL
+                ORDER BY entry_date DESC
+                LIMIT 10
+            """)
+        for r in _rows:
+            t  = r["ticker"]
+            d  = r["direction"].upper()
+            ep = r.get("entry_price") or 0
+            sh = r.get("shares") or 0
+            st = r.get("stop_price")
+            tg = r.get("target_price")
+            capital = round(ep * sh, 0)
+            line = f"[{t}] {d} | Entry ${ep:.2f} × {sh} Shares (${capital:,.0f})"
+            if st:
+                line += f" | Stop ${st:.2f}"
+            if tg:
+                line += f" | Ziel ${tg:.2f}"
+            open_pos_lines.append(line)
+    except Exception as e:
+        logger.warning(f"After-market open positions: {e}")
+
+    # 6. Morgen im Fokus — Earnings der nächsten 2 Tage
     upcoming: list[str] = []
     try:
         from backend.app.data.finnhub import get_earnings_calendar
@@ -1851,6 +1939,11 @@ HANDLUNGSEMPFEHLUNG:
 [Eine konkrete Empfehlung für morgen. Was vorbereiten? Was vermeiden?]
 [KEINE breiten Index-Shorts. Sektor-ETF-Puts, Einzeltitel, Pair-Trades wenn bärisch.]
 
+OFFENE POSITIONEN — falls vorhanden:
+Prüfe explizit ob die heutigen Marktentwicklungen die offenen Positionen
+betreffen. Stop anpassen? Position schließen? Trailing Stop sinnvoll?
+Nenne konkrete Ticker und konkrete Preislevels.
+
 ABSOLUT REGELN:
 - Maximal 40 Zeilen. Kein Fülltext.
 - Jede Zeile: Information oder Einordnung.
@@ -1867,11 +1960,8 @@ MAKRO:
 EARNINGS HEUTE (aus DB):
 {chr(10).join(earnings_today) if earnings_today else 'Keine Earnings-Daten heute.'}
 
-SCORE-VERÄNDERUNGEN HEUTE:
-{chr(10).join(score_changes) if score_changes else 'Keine signifikanten Veränderungen.'}
-
-MATERIAL EVENTS HEUTE:
-{chr(10).join(material_today) if material_today else 'Keine Material Events.'}
+OFFENE POSITIONEN ({len(open_pos_lines)} Trades):
+{chr(10).join(open_pos_lines) if open_pos_lines else 'Keine offenen Positionen.'}
 
 EARNINGS MORGEN/ÜBERMORGEN:
 {chr(10).join(upcoming) if upcoming else 'Keine bekannten Earnings.'}
@@ -1900,3 +1990,368 @@ Erstelle das After-Market Briefing."""
         logger.warning(f"After-market save error: {e}")
 
     return result
+
+
+async def generate_session_plan() -> str:
+    """
+    Täglicher Session-Plan — max 3 aktionierbare Setups.
+    DeepSeek Reasoner: Watchlist-Scores + Chart-Levels + Signal Feed.
+    Täglich 08:05 CET nach dem Pre-Market Briefing.
+    """
+    from backend.app.memory.watchlist import get_watchlist
+    from backend.app.data.fred import get_macro_snapshot
+    from backend.app.cache import cache_get
+    from backend.app.analysis.chart_analyst import analyze_chart
+    from backend.app.db import get_supabase_client
+
+    logger.info("Generiere Session Plan...")
+
+    wl = await get_watchlist()
+    wl_tickers = [item["ticker"] for item in wl]
+
+    macro: dict = {}
+    try:
+        m = await get_macro_snapshot()
+        macro = m.dict() if hasattr(m, "dict") else (m or {})
+    except Exception:
+        pass
+
+    # Aktive Signale aus Cache (P1+P2 nur)
+    active_signals: list[dict] = []
+    try:
+        feed = await cache_get("signals:feed")
+        if feed:
+            active_signals = [s for s in (feed.get("signals") or [])
+                              if s.get("priority") in [1, 2]][:8]
+    except Exception:
+        pass
+
+    # Top-Kandidaten: Opp>=6, Torpedo<=5, max 5 Ticker
+    scored: list[dict] = []
+    db = get_supabase_client()
+    if db:
+        try:
+            rows = (await db.table("score_history")
+                    .select("ticker,opportunity_score,torpedo_score")
+                    .in_("ticker", wl_tickers)
+                    .order("date", desc=True)
+                    .limit(len(wl_tickers) * 2)
+                    .execute_async()).data or []
+            seen: set = set()
+            for row in rows:
+                t = row.get("ticker", "").upper()
+                if t in seen:
+                    continue
+                seen.add(t)
+                opp  = row.get("opportunity_score") or 0
+                torp = row.get("torpedo_score") or 10
+                if opp >= 6 and torp <= 5:
+                    scored.append({"ticker": t, "opp": opp, "torp": torp})
+            scored.sort(key=lambda x: x["opp"] - x["torp"], reverse=True)
+            scored = scored[:5]
+        except Exception as e:
+            logger.warning(f"Session plan scores: {e}")
+
+    # Chart-Levels parallel laden
+    chart_levels: dict[str, dict] = {}
+    if scored:
+        async def _get_lvl(t: str):
+            try:
+                return t, await analyze_chart(t)
+            except Exception:
+                return t, {}
+        results = await asyncio.gather(*[_get_lvl(x["ticker"]) for x in scored])
+        for t, lv in results:
+            if lv and not lv.get("error"):
+                chart_levels[t] = lv
+
+    macro_str = (
+        f"Regime: {macro.get('regime','?')} | VIX: {macro.get('vix','?')} | "
+        f"Fed: {macro.get('fed_rate','?')}% | "
+        f"Credit: {macro.get('credit_spread_bps','?')}bp"
+    )
+
+    setup_lines: list[str] = []
+    for s in scored:
+        t   = s["ticker"]
+        lv  = chart_levels.get(t, {})
+        ez  = lv.get("entry_zone") or {}
+        sl  = lv.get("stop_loss")
+        t1  = lv.get("target_1")
+        t2  = lv.get("target_2")
+        bias = lv.get("bias", "neutral")
+        line = (
+            f"{t}: Opp={s['opp']:.1f} Torp={s['torp']:.1f} Bias={bias}"
+            + (f" | Entry ${ez.get('low',0):.2f}-${ez.get('high',0):.2f}" if ez else "")
+            + (f" | Stop ${sl:.2f}" if sl else "")
+            + (f" | T1 ${t1:.2f}" if t1 else "")
+            + (f" | T2 ${t2:.2f}" if t2 else "")
+        )
+        setup_lines.append(line)
+
+    sig_lines = [
+        f"[P{s.get('priority')}] {s.get('ticker')}: {s.get('headline','')}"
+        for s in active_signals
+    ]
+
+    today = datetime.now().strftime("%d.%m.%Y")
+    SYSTEM = f"""Du bist Head-of-Trading. Es ist 08:05 CET.
+Erstelle den Session-Plan für heute — exakt 3 aktionierbare Setups.
+Makro: {macro_str}
+
+FORMAT (exakt einhalten, max 25 Zeilen):
+
+SESSION PLAN {today}
+
+SETUP 1: [TICKER] — [5 Wörter Empfehlung]
+Thesis: [1 Satz]
+Entry: $X.XX–$X.XX | Stop: $X.XX | Ziel 1: $X.XX | Ziel 2: $X.XX
+R:R: 1:X | Katalysator: [Was macht heute den Unterschied?]
+
+SETUP 2: [TICKER] — [Empfehlung]
+[gleiche Struktur]
+
+SETUP 3: [TICKER] — [Empfehlung]
+[gleiche Struktur]
+
+HEUTE MEIDEN: [Ticker] — [1-Satz Begründung]
+
+REGEL: Niemals SH/PSQ/SQQQ. Bei bärisch: Sektor-ETF-Puts oder Pair-Trades."""
+
+    USER = (
+        f"SETUPS ({len(setup_lines)} Kandidaten):\n"
+        + ("\n".join(setup_lines) if setup_lines else "Keine qualifizierten Setups.")
+        + f"\n\nAKTIVE SIGNALE:\n"
+        + ("\n".join(sig_lines) if sig_lines else "Keine aktiven Signale.")
+        + "\n\nSession Plan:"
+    )
+
+    result = await call_deepseek(SYSTEM, USER, model="deepseek-reasoner", max_tokens=1000)
+
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            await conn.execute("""
+                INSERT INTO daily_snapshots (date, session_plan, session_plan_generated_at)
+                VALUES ($1, $2, NOW())
+                ON CONFLICT (date) DO UPDATE
+                SET session_plan = $2,
+                    session_plan_generated_at = NOW()
+            """, today_str, result)
+    except Exception as e:
+        logger.warning(f"Session plan save: {e}")
+
+    return result
+
+
+async def generate_btc_report() -> str:
+    """
+    Bitcoin-Lagebericht — DeepSeek Chat.
+    Ersetzt den BTC-Teil des früheren Sunday Reports.
+    Wird im After-Market Briefing als eigener Block gezeigt.
+    """
+    from backend.app.data.coinglass import get_full_btc_snapshot
+
+    logger.info("Generiere BTC Report...")
+
+    snapshot = await get_full_btc_snapshot()
+    price_d  = snapshot.get("price") or {}
+    oi_d     = snapshot.get("open_interest") or {}
+    fund_d   = snapshot.get("funding_rate") or {}
+    ls_d     = snapshot.get("long_short") or {}
+    liq_d    = snapshot.get("liquidations") or {}
+    dxy      = snapshot.get("dxy")
+
+    def _fmt_currency(value) -> str:
+        try:
+            if value is None or value == "N/A":
+                return "N/A"
+            return f"${float(value):,.0f}"
+        except Exception:
+            return "N/A"
+
+    def _fmt_pct(value, digits: int = 2, signed: bool = True) -> str:
+        try:
+            if value is None or value == "N/A":
+                return "N/A"
+            value = float(value)
+            prefix = "+" if signed and value > 0 else ""
+            return f"{prefix}{value:.{digits}f}%"
+        except Exception:
+            return "N/A"
+
+    SYSTEM = """Du bist Bitcoin-Derivate-Analyst.
+Erstelle einen präzisen BTC-Lagebericht in max 20 Zeilen.
+
+FORMAT:
+BTC LAGEBERICHT [Datum]
+
+KURS & TREND: [Kurs, 7T-Trend, Interpretation]
+OPEN INTEREST: [OI in Mrd $, Veränderung 24h, was bedeutet das?]
+FUNDING RATE: [Rate, Interpretation — wer zahlt?]
+LONG/SHORT RATIO: [Retail-Sentiment — bullish oder bearish?]
+LIQUIDATIONSCLUSTER: [nächste wichtige Levels falls verfügbar]
+DXY-KORRELATION: [DXY steigend = BTC Gegenwind / fallend = Rückenwind]
+
+EINSCHÄTZUNG: [Long / Short / Abwarten] + konkrete Begründung
+SCHLÜSSEL-LEVELS: [wichtige Support/Resistance für die nächsten 7 Tage]
+
+REGEL: Niemals "einfach kaufen/verkaufen" — immer Level und Begründung.
+Sprache: Deutsch."""
+
+    USER = f"""BITCOIN DATEN:
+Kurs: {_fmt_currency(price_d.get('price'))} | 7T: {_fmt_pct(price_d.get('change_7d_pct'), 2)} | Trend: {price_d.get('trend', 'N/A')}
+14T Hoch: {_fmt_currency(price_d.get('high_14d'))} | 14T Tief: {_fmt_currency(price_d.get('low_14d'))}
+
+Open Interest: {_fmt_currency(oi_d.get('total_oi_usd'))} | 24h: {_fmt_pct(oi_d.get('change_24h_pct'), 2)}
+Funding Rate: {_fmt_pct(fund_d.get('avg_funding_rate_pct'), 4)} ({fund_d.get('interpretation', 'N/A')})
+Long/Short: {ls_d.get('long_pct', 'N/A')}% Long / {ls_d.get('short_pct', 'N/A')}% Short
+Liquidationscluster: {liq_d.get('note', 'Daten nicht verfügbar') if not liq_d.get('available') else 'Verfügbar'}
+DXY: {dxy or 'N/A'}
+
+BTC Lagebericht:"""
+
+    result = await call_deepseek(SYSTEM, USER, model="deepseek-chat",
+                               temperature=0.3, max_tokens=600)
+
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            await conn.execute("""
+                INSERT INTO daily_snapshots (date, btc_report, btc_report_generated_at)
+                VALUES ($1, $2, NOW())
+                ON CONFLICT (date) DO UPDATE
+                SET btc_report = $2, btc_report_generated_at = NOW()
+            """, today_str, result)
+    except Exception as e:
+        logger.warning(f"BTC report save: {e}")
+
+    return result
+
+
+async def _save_decision_snapshot(
+    ticker: str,
+    opportunity_score: float,
+    torpedo_score: float,
+    recommendation: str,
+    prompt_text: str,
+    report_text: str,
+    raw_data: dict,
+    earnings_countdown: int | None = None,
+) -> None:
+    """
+    Speichert einen Decision Snapshot für das Learning-Modul.
+    Ruft DeepSeek Chat auf, um Top-Treiber und Failure-Hypothese zu extrahieren,
+    und speichert alles in der decision_snapshots Tabelle.
+    """
+    from backend.app.database import get_pool
+    import json
+
+    logger.info(f"Speichere Decision Snapshot für {ticker}")
+
+    # Lernpfad bestimmen: Earnings oder Momentum?
+    # Earnings: Report wurde generiert weil Earnings ≤ 7 Tage entfernt
+    # Momentum: alles andere (Score-Threshold, Signal-Trigger, manuell außerhalb Earnings)
+    trade_type = "earnings" if (
+        earnings_countdown is not None and 0 <= earnings_countdown <= 7
+    ) else "momentum"
+
+    # 1. DeepSeek Chat: Top-Treiber extrahieren
+    top_drivers = []
+    try:
+        drivers_prompt = f"""Analysiere die folgenden Daten zu {ticker} und extrahiere die 3 wichtigsten Treiber für die Entscheidung.
+
+Daten:
+{json.dumps(raw_data, indent=2, default=str)[:4000]}
+
+Antworte mit einem JSON-Array von Strings, z.B.:
+["Hohe Short Interest von 15% erhöht Squeeze-Risiko", "Starkes Q4 Beat mit 23% Surprise", "RSI überbought bei 75 zeigt Konsolidierungsbedarf"]
+
+Nur die Treiber, kein zusätzlicher Text."""
+
+        drivers_response = await call_deepseek(
+            system_prompt="Du bist ein quantitativer Analyst. Extrahiere präzise, faktentreibende Entscheidungsgründe. Antworte nur mit einem JSON-Array.",
+            user_prompt=drivers_prompt,
+            model="deepseek-chat",
+            temperature=0.1,
+            max_tokens=200,
+        )
+
+        # JSON parsen
+        import re
+        json_match = re.search(r"\[.*?\]", drivers_response, re.DOTALL)
+        if json_match:
+            top_drivers = json.loads(json_match.group())
+            if isinstance(top_drivers, list):
+                top_drivers = [str(d)[:200] for d in top_drivers[:3]]  # max 3, je 200 Zeichen
+            else:
+                top_drivers = []
+        else:
+            logger.warning(f"Keine gültige JSON-Treiber-Antwort für {ticker}: {drivers_response[:100]}...")
+            top_drivers = []
+    except Exception as e:
+        logger.warning(f"DeepSeek Treiber-Extraktion für {ticker}: {e}")
+        top_drivers = []
+
+    # 2. DeepSeek Chat: Failure-Hypothese
+    failure_hypothesis = ""
+    try:
+        hypothesis_prompt = f"""Basierend auf den Daten zu {ticker}, formuliere eine präzise Failure-Hypothese.
+
+Daten:
+{json.dumps(raw_data, indent=2, default=str)[:4000]}
+
+Empfehlung: {recommendation}
+
+Antworte mit einem einzigen Satz, der erklärt, warum diese Entscheidung falsch liegen könnte.
+Beispiel: "Die These scheitert, weil die anstehenden Earnings den hohen IV nicht rechtfertigen."
+
+Nur die Hypothese, kein zusätzlicher Text."""
+
+        hypothesis_response = await call_deepseek(
+            system_prompt="Du bist ein quantitativer Analyst. Formuliere knappe, konkrete Failure-Hypothesen. Antworte nur mit einem Satz.",
+            user_prompt=hypothesis_prompt,
+            model="deepseek-chat",
+            temperature=0.2,
+            max_tokens=100,
+        )
+
+        failure_hypothesis = str(hypothesis_response).strip()
+        if len(failure_hypothesis) > 300:
+            failure_hypothesis = failure_hypothesis[:300] + "..."
+    except Exception as e:
+        logger.warning(f"DeepSeek Failure-Hypothese für {ticker}: {e}")
+        failure_hypothesis = ""
+
+    # 3. In DB speichern
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO decision_snapshots (
+                    ticker, decision_date, opportunity_score, torpedo_score,
+                    recommendation, top_drivers, failure_hypothesis,
+                    prompt_text, report_text, raw_data, created_at,
+                    trade_type, earnings_countdown_at_decision
+                ) VALUES (
+                    $1, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11
+                )
+            """, 
+                ticker,
+                opportunity_score,
+                torpedo_score,
+                recommendation,
+                top_drivers,
+                failure_hypothesis,
+                prompt_text,
+                report_text,
+                json.dumps(raw_data, default=str),
+                trade_type,
+                earnings_countdown,
+            )
+        logger.info(f"Decision Snapshot für {ticker} gespeichert: {len(top_drivers)} Treiber, Hypothese={'Ja' if failure_hypothesis else 'Nein'}")
+    except Exception as e:
+        logger.error(f"Decision Snapshot DB-Speicher für {ticker}: {e}")
+        raise

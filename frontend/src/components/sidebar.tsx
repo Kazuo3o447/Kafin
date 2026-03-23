@@ -3,32 +3,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  ListChecks,
-  FileText,
-  Newspaper,
-  LineChart,
-  Terminal,
-  Settings,
-  CalendarDays,
-  Search,
-  BarChart2,
-  BookOpen,
-  Zap,
+  Zap, BarChart2, ListChecks, Search, CalendarDays,
+  FileText, CircleDollarSign, Newspaper, LineChart,
+  Settings, Terminal,
 } from "lucide-react";
 import { useMemo } from "react";
 
 const navItems = [
-  { label: "Signal Feed", href: "/", icon: Zap },
-  { label: "Briefing", href: "/briefing", icon: FileText },
-  { label: "Markets", href: "/markets", icon: BarChart2 },
-  { label: "Watchlist", href: "/watchlist", icon: ListChecks },
-  { label: "Research", href: "/research", icon: Search },
-  { label: "Earnings-Radar", href: "/earnings", icon: CalendarDays },
-  { label: "Reports", href: "/reports", icon: FileText },
-  { label: "News", href: "/news", icon: Newspaper },
-  { label: "Journal", href: "/journal", icon: BookOpen },
-  { label: "Performance", href: "/performance", icon: LineChart },
-  { label: "Einstellungen", href: "/settings", icon: Settings },
+  { label: "Signal Feed",   href: "/",           icon: Zap },
+  { label: "Markets",       href: "/markets",     icon: BarChart2 },
+  { label: "Watchlist",     href: "/watchlist",   icon: ListChecks },
+  { label: "Research",      href: "/research",    icon: Search },
+  { label: "Earnings-Radar",href: "/earnings",    icon: CalendarDays },
+  { label: "Briefing",      href: "/briefing",    icon: FileText },
+  { label: "Bitcoin",       href: "/btc",         icon: CircleDollarSign },
+  { label: "News",          href: "/news",        icon: Newspaper },
+  { label: "Performance",   href: "/performance", icon: LineChart },
+  { label: "Einstellungen", href: "/settings",    icon: Settings },
 ];
 
 export function Sidebar() {

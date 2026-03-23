@@ -101,6 +101,11 @@ type NewsMemory = {
   latest_bullet?: string;
 };
 
+type FinbertTestResult = {
+  score: number;
+  label: string;
+};
+
 type TabId = "uebersicht" | "pipeline" | "apis" | "daten" | "signal_feed" | "konfiguration";
 
 type ApiUsageModel = {
@@ -313,6 +318,11 @@ export default function SettingsPage() {
   const [feedConfig, setFeedConfig] = useState<Record<string, { value: number | string; enabled: boolean }> | null>(null);
   const [feedConfigLoading, setFeedConfigLoading] = useState(false);
   const [feedConfigSaving, setFeedConfigSaving] = useState(false);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [selectedTicker, setSelectedTicker] = useState("");
+  const [newsMemory, setNewsMemory] = useState<NewsMemory | null>(null);
+  const [finbertTestText, setFinbertTestText] = useState("");
+  const [finbertResult, setFinbertResult] = useState<FinbertTestResult | null>(null);
   const [searchTerms, setSearchTerms] = useState<SearchTerm[]>([]);
   const [termsLoading, setTermsLoading] = useState(false);
   const [termAction, setTermAction] = useState<string | null>(null);
@@ -377,9 +387,66 @@ export default function SettingsPage() {
   const loadWatchlist = async () => {
     try {
       const result = await api.getWatchlist();
-      // Watchlist loading logic if needed
+      const items = Array.isArray(result)
+        ? result
+        : (result?.watchlist || result?.items || []);
+      setWatchlist(items);
+      if (!selectedTicker && items.length > 0) {
+        setSelectedTicker(items[0].ticker);
+      }
     } catch (error) {
       console.error("Watchlist load error", error);
+    }
+  };
+
+  const loadNewsMemory = async (tickerArg?: string) => {
+    const ticker = tickerArg || selectedTicker;
+    if (!ticker) return;
+
+    try {
+      const result = await fetchJsonSafe<{
+        ticker: string;
+        count: number;
+        bullet_points: Array<{ date?: string; bullet_points?: string[] } | string>;
+      }>(`/api/news/memory/${ticker}`);
+
+      if (result) {
+        const latest = Array.isArray(result.bullet_points) && result.bullet_points.length > 0
+          ? result.bullet_points[0]
+          : null;
+        setNewsMemory({
+          count: result.count ?? 0,
+          last_date: typeof latest === "object" && latest && "date" in latest ? latest.date : undefined,
+          latest_bullet: typeof latest === "string"
+            ? latest
+            : typeof latest === "object" && latest && "bullet_points" in latest
+              ? latest.bullet_points?.[0]
+              : undefined,
+        });
+      }
+    } catch (error) {
+      console.error("News memory load error", error);
+    }
+  };
+
+  const testFinbert = async () => {
+    if (!finbertTestText.trim()) return;
+    setLoadingAction("finbert-test");
+    try {
+      const result = await fetchJsonSafe<{ text: string; sentiment_score: number }>(
+        `/api/finbert/analyze?text=${encodeURIComponent(finbertTestText.trim())}`,
+        { method: "POST" }
+      );
+
+      if (result) {
+        const score = Number(result.sentiment_score ?? 0);
+        const label = score > 0.15 ? "positive" : score < -0.15 ? "negative" : "neutral";
+        setFinbertResult({ score, label });
+      }
+    } catch (error) {
+      console.error("FinBERT test error", error);
+    } finally {
+      setLoadingAction(null);
     }
   };
 
@@ -487,6 +554,12 @@ export default function SettingsPage() {
       loadScoringConfig();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "daten" && selectedTicker) {
+      loadNewsMemory(selectedTicker);
+    }
+  }, [activeTab, selectedTicker]);
 
   useEffect(() => {
     if (activeTab === "signal_feed") {
@@ -1037,7 +1110,7 @@ export default function SettingsPage() {
                 {loadingAction === "db-status" ? "Lade..." : "DB-Status laden"}
               </button>
             </div>
-            {dbStatus.tables && (
+            {dbStatus?.tables && (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="border-b border-[var(--border)]">

@@ -1,20 +1,25 @@
-# Alerts Configuration
+# Kafin — Alert & Schedule Konfiguration
+# Stand: v7.1.0
+
 telegram:
   enabled: true
 email:
   enabled: true
 
 schedules:
-  # sunday_report: "0 20 * * 0"     # ENTFERNT — ersetzt durch Pre/After-Market
+  # sunday_report: "0 20 * * 0"       # DEAKTIVIERT — ersetzt durch Pre/After-Market
   pre_market_briefing:  "0 8 * * 1-5"   # Mo–Fr 08:00 CET
+  earnings_auto_trigger: "10 8 * * 1-5"   # Mo–Fr 08:10 CET
+  session_plan:         "5 8 * * 1-5"   # Mo–Fr 08:05 CET
   after_market_report:  "15 22 * * 1-5" # Mo–Fr 22:15 CET
+  snapshot_outcome_update: "30 22 * * 1-5" # Mo–Fr 22:30 CET
   news_pipeline:        "*/30 * * * *"
   sec_scanner:          "*/10 * * * *"
 
 sentiment_monitor:
   enabled: true
-  price_rise_threshold: 2.0      # Kurs +X% in 2h gilt als Anstieg
-  sentiment_drop_threshold: 0.30 # Sentiment -X Punkte gilt als Kippen
-  divergence_threshold: 0.40     # |FinBERT - Web| > X = Divergenz
-  cooldown_hours: 4              # Min. Stunden zwischen Alerts pro Ticker
-  active_hours: "08:00-22:00"    # Nur in diesen Stunden aktiv (CET)
+  price_rise_threshold: 2.0
+  sentiment_drop_threshold: 0.30
+  divergence_threshold: 0.40
+  cooldown_hours: 4
+  active_hours: "08:00-22:00"

@@ -51,6 +51,27 @@ type CorrelationData = {
   error?: string;
 };
 
+type MomentumItem = {
+  ticker: string;
+  price: number | null;
+  chg_1d_pct: number | null;
+  chg_5d_pct: number | null;
+  chg_20d_pct: number | null;
+  rs_1d: number | null;
+  rs_5d: number | null;
+  rs_20d: number | null;
+  composite_score: number;
+  signal: "strong_outperform" | "outperform" | "neutral" | "underperform" | "strong_underperform";
+};
+
+type MomentumData = {
+  rankings: MomentumItem[];
+  spy_1d: number | null;
+  spy_5d: number | null;
+  spy_20d: number | null;
+  calculated_at: string;
+};
+
 // Sorting and filtering types
 type SortField = "opportunity_score" | "torpedo_score" | "change_pct" | "change_5d_pct" | "earnings_countdown" | "rvol" | "week_opp_delta";
 type SortDir = "asc" | "desc";
@@ -617,6 +638,8 @@ export default function WatchlistPage() {
   const [corrData, setCorrData] = useState<CorrelationData | null>(null);
   const [corrLoading, setCorrLoading] = useState(false);
   const [corrVisible, setCorrVisible] = useState(false);
+  const [momentumData, setMomentumData] = useState<MomentumData | null>(null);
+  const [momentumLoading, setMomentumLoading] = useState(false);
   const [newTicker, setNewTicker] = useState({ ticker: "", company_name: "", sector: "", notes: "" });
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
@@ -743,6 +766,19 @@ export default function WatchlistPage() {
       setCorrLoading(false);
     }
   }, [corrLoading]);
+
+  const loadMomentum = useCallback(async () => {
+    if (momentumLoading) return;
+    setMomentumLoading(true);
+    try {
+      const result = await api.getWatchlistMomentum();
+      setMomentumData(result);
+    } catch (e: any) {
+      console.warn("Momentum nicht ladbar:", e?.message);
+    } finally {
+      setMomentumLoading(false);
+    }
+  }, [momentumLoading]);
 
   const alerts = useMemo(
     () => buildAlerts(watchlist),
@@ -1029,6 +1065,102 @@ export default function WatchlistPage() {
           <p className="text-xs text-[var(--text-muted)]">
             Zeigt wie stark deine Positionen miteinander korrelieren.
           </p>
+        )}
+      </div>
+
+      {/* Momentum-Ranking */}
+      <div className="card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em]
+                       text-[var(--text-muted)]">
+            Relative Stärke vs. SPY
+          </p>
+          <button
+            onClick={loadMomentum}
+            disabled={momentumLoading}
+            className="text-xs text-[var(--accent-blue)] hover:opacity-80 disabled:opacity-40"
+          >
+            {momentumLoading ? "Berechne…" : momentumData ? "Aktualisieren" : "Berechnen"}
+          </button>
+        </div>
+
+        {!momentumData && !momentumLoading && (
+          <p className="text-xs text-[var(--text-muted)]">
+            Zeigt welche Watchlist-Titel den Markt schlagen und welche hinterherhinken.
+          </p>
+        )}
+
+        {momentumData && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs min-w-[480px]">
+              <thead>
+                <tr>
+                  <th className="text-left pb-2 text-[var(--text-muted)] font-medium">Ticker</th>
+                  <th className="text-right pb-2 text-[var(--text-muted)] font-medium px-2">1T</th>
+                  <th className="text-right pb-2 text-[var(--text-muted)] font-medium px-2">5T</th>
+                  <th className="text-right pb-2 text-[var(--text-muted)] font-medium px-2">20T</th>
+                  <th className="text-right pb-2 text-[var(--text-muted)] font-medium px-2">RS vs SPY</th>
+                  <th className="text-right pb-2 text-[var(--text-muted)] font-medium px-2">Signal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* SPY Baseline */}
+                <tr className="border-t border-[var(--border)] bg-[var(--bg-tertiary)]/30">
+                  <td className="py-1.5 font-mono font-semibold text-[var(--text-muted)]">SPY</td>
+                  <td className="text-right py-1.5 px-2 font-mono text-[var(--text-muted)]">
+                    {momentumData.spy_1d != null ? `${momentumData.spy_1d >= 0 ? "+" : ""}${momentumData.spy_1d.toFixed(1)}%` : "—"}
+                  </td>
+                  <td className="text-right py-1.5 px-2 font-mono text-[var(--text-muted)]">
+                    {momentumData.spy_5d != null ? `${momentumData.spy_5d >= 0 ? "+" : ""}${momentumData.spy_5d.toFixed(1)}%` : "—"}
+                  </td>
+                  <td className="text-right py-1.5 px-2 font-mono text-[var(--text-muted)]">
+                    {momentumData.spy_20d != null ? `${momentumData.spy_20d >= 0 ? "+" : ""}${momentumData.spy_20d.toFixed(1)}%` : "—"}
+                  </td>
+                  <td className="text-right py-1.5 px-2 text-[var(--text-muted)] font-mono">Baseline</td>
+                  <td className="text-right py-1.5 px-2" />
+                </tr>
+                {momentumData.rankings.map((item, i) => {
+                  const sigColor =
+                    item.signal === "strong_outperform" ? "text-[var(--accent-green)]" :
+                    item.signal === "outperform"        ? "text-[var(--accent-green)]/70" :
+                    item.signal === "neutral"           ? "text-[var(--text-muted)]" :
+                    item.signal === "underperform"      ? "text-[var(--accent-red)]/70" :
+                                                          "text-[var(--accent-red)]";
+                  const fmtRs = (v: number | null) =>
+                    v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+                  return (
+                    <tr key={item.ticker}
+                      className={`border-t border-[var(--border)] ${i % 2 === 0 ? "" : "bg-[var(--bg-tertiary)]/20"}`}>
+                      <td className="py-2">
+                        <a href={`/research/${item.ticker}`}
+                          className="font-mono font-bold text-[var(--accent-blue)] hover:underline">
+                          {item.ticker}
+                        </a>
+                      </td>
+                      <td className={`text-right py-2 px-2 font-mono ${(item.chg_1d_pct || 0) >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"}`}>
+                        {item.chg_1d_pct != null ? `${item.chg_1d_pct >= 0 ? "+" : ""}${item.chg_1d_pct.toFixed(1)}%` : "—"}
+                      </td>
+                      <td className={`text-right py-2 px-2 font-mono ${(item.chg_5d_pct || 0) >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"}`}>
+                        {item.chg_5d_pct != null ? `${item.chg_5d_pct >= 0 ? "+" : ""}${item.chg_5d_pct.toFixed(1)}%` : "—"}
+                      </td>
+                      <td className={`text-right py-2 px-2 font-mono ${(item.chg_20d_pct || 0) >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"}`}>
+                        {item.chg_20d_pct != null ? `${item.chg_20d_pct >= 0 ? "+" : ""}${item.chg_20d_pct.toFixed(1)}%` : "—"}
+                      </td>
+                      <td className={`text-right py-2 px-2 font-mono font-semibold ${sigColor}`}>
+                        {fmtRs(item.rs_5d)}
+                      </td>
+                      <td className={`text-right py-2 px-2 text-[10px] font-medium ${sigColor}`}>
+                        {item.signal.replace(/_/g, " ")}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p className="text-[10px] text-[var(--text-muted)] mt-2">
+              RS-Spalte: 5T-Relative Stärke vs. SPY · Composite: 50% 5T + 30% 20T + 20% 1T
+            </p>
+          </div>
         )}
       </div>
 

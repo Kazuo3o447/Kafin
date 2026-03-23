@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from backend.app.logger import get_logger
 from backend.app.cache import cache_get, cache_set, cache_invalidate
 from backend.app.db import get_supabase_client
+from backend.app.database import get_pool
 from backend.app.data.finnhub import (
     get_earnings_calendar, get_company_news, get_short_interest, get_insider_transactions,
     get_economic_calendar,
@@ -1751,6 +1752,28 @@ async def api_signals_feed(force_refresh: bool = False):
     dedup_hours = int(cfg.get("dedup_hours", 24))
     quiet_days = int(cfg.get("quiet_period_pre_earnings_days", 2))
 
+    # Offene Journal-Positionen für Cross-Referenz
+    open_positions: dict[str, dict] = {}  # ticker → position
+    try:
+        db_j = get_supabase_client()
+        if db_j:
+            rows = (await db_j.table("trade_journal")
+                    .select("ticker,direction,entry_price,shares,stop_price,target_price,entry_date")
+                    .is_("exit_date", "null")
+                    .execute_async()).data or []
+            for row in rows:
+                t = (row.get("ticker") or "").upper()
+                open_positions[t] = {
+                    "direction":    row.get("direction", "long"),
+                    "entry_price":  row.get("entry_price"),
+                    "shares":       row.get("shares"),
+                    "stop_price":   row.get("stop_price"),
+                    "target_price": row.get("target_price"),
+                    "entry_date":   str(row.get("entry_date", "")),
+                }
+    except Exception as e:
+        logger.warning(f"Open positions for signal feed: {e}")
+
     raw_signals: list[dict] = []
     preparation_setups: list[dict] = []
 
@@ -1852,6 +1875,27 @@ async def api_signals_feed(force_refresh: bool = False):
         sig["is_new"] = is_new
         sig["is_resolved"] = False
         sig["bullets"] = _compose_signal_bullets(sig.get("_item", {}), sig)
+        
+        # Offene Position für diesen Ticker?
+        pos = open_positions.get(sig["ticker"])
+        sig["open_position"] = pos  # None wenn keine Position
+        if pos:
+            # Risiko-Kontext: Signale die eine bestehende Position betreffen sind kritischer
+            # Torpedo-Anstieg bei einer Long-Position = Warnung
+            # Torpedo-Anstieg bei keiner Position = normales Signal
+            direction = pos.get("direction", "long")
+            if sig["signal_type"] == "torpedo_rising" and direction == "long":
+                sig["position_risk"] = "high"
+            elif sig["signal_type"] == "setup_improving" and direction == "long":
+                sig["position_risk"] = "positive"
+            elif sig["signal_type"] == "sma50_break" and direction == "long":
+                sig["position_risk"] = "high"
+            else:
+                sig["position_risk"] = "neutral"
+        else:
+            sig["open_position"] = None
+            sig["position_risk"] = None
+        
         sig.pop("_item", None)
         enriched_signals.append(sig)
         if is_new:
@@ -1910,6 +1954,8 @@ async def api_signals_feed(force_refresh: bool = False):
         "oldest_data_at": generated_at,
         "config_snapshot": cfg,
         "macro_regime": macro_dict.get("regime", "UNKNOWN"),
+        "open_positions_count": len(open_positions),
+        "tickers_with_positions": list(open_positions.keys()),
     }
     await cache_set(cache_key, response, ttl_seconds=300)
     return response
@@ -1957,3 +2003,669 @@ async def api_save_signal_feed_config(body: dict):
         return {"success": True}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/btc/snapshot")
+async def api_btc_snapshot():
+    """
+    Vollständiger Bitcoin-Snapshot: Kurs, OI, Funding, L/S, Liquidations.
+    Cache: 15 Min (Funding/OI ändern sich langsam).
+    """
+    cache_key = "btc:full_snapshot"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+    try:
+        from backend.app.data.coinglass import get_full_btc_snapshot
+        snapshot = await get_full_btc_snapshot()
+
+        # DXY als BTC-Gegenwind-Indikator (bereits in FRED vorhanden)
+        dxy = None
+        try:
+            from backend.app.data.fred import get_macro_snapshot
+            macro = await get_macro_snapshot()
+            dxy = getattr(macro, "dxy", None) or (macro.get("dxy") if isinstance(macro, dict) else None)
+        except Exception:
+            pass
+
+        snapshot["dxy"] = dxy
+        snapshot["fetched_at"] = datetime.utcnow().isoformat()
+
+        await cache_set(cache_key, snapshot, ttl_seconds=900)
+        return snapshot
+    except Exception as e:
+        logger.error(f"BTC snapshot: {e}")
+        return {"error": str(e), "price": {}, "fetched_at": datetime.utcnow().isoformat()}
+
+
+@router.get("/watchlist-momentum")
+async def api_watchlist_momentum():
+    """
+    Relative Stärke aller Watchlist-Ticker vs. SPY.
+    Perioden: 1T, 5T, 20T.
+    Cache: 15 Min (Intraday-Update).
+    """
+    cache_key = "watchlist:momentum"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    watchlist = await get_watchlist()
+    tickers = [w["ticker"].upper() for w in watchlist if w.get("ticker")]
+    if not tickers:
+        return {"rankings": [], "spy_1d": None, "spy_5d": None, "spy_20d": None}
+
+    def _fetch_all(all_tickers: list[str]):
+        import yfinance as yf
+        hist = yf.download(
+            all_tickers + ["SPY"],
+            period="25d",
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+        )["Close"]
+        return hist
+
+    try:
+        hist = await asyncio.to_thread(_fetch_all, tickers)
+
+        # SPY Baseline
+        spy = hist["SPY"] if "SPY" in hist.columns else None
+        spy_1d  = round((float(spy.iloc[-1]) - float(spy.iloc[-2])) / float(spy.iloc[-2]) * 100, 2) if spy is not None and len(spy) >= 2 else None
+        spy_5d  = round((float(spy.iloc[-1]) - float(spy.iloc[-5])) / float(spy.iloc[-5]) * 100, 2) if spy is not None and len(spy) >= 5 else None
+        spy_20d = round((float(spy.iloc[-1]) - float(spy.iloc[-20])) / float(spy.iloc[-20]) * 100, 2) if spy is not None and len(spy) >= 20 else None
+
+        rankings = []
+        for ticker in tickers:
+            col = ticker if ticker in hist.columns else None
+            if col is None:
+                continue
+            prices = hist[col].dropna()
+            if len(prices) < 2:
+                continue
+            p_now  = float(prices.iloc[-1])
+            p_1d   = float(prices.iloc[-2]) if len(prices) >= 2 else p_now
+            p_5d   = float(prices.iloc[-5]) if len(prices) >= 5 else p_now
+            p_20d  = float(prices.iloc[-20]) if len(prices) >= 20 else p_now
+
+            chg_1d  = round((p_now - p_1d)  / p_1d  * 100, 2) if p_1d  else None
+            chg_5d  = round((p_now - p_5d)  / p_5d  * 100, 2) if p_5d  else None
+            chg_20d = round((p_now - p_20d) / p_20d * 100, 2) if p_20d else None
+
+            # Relative Stärke vs. SPY
+            rs_1d  = round(chg_1d  - spy_1d,  2) if chg_1d  is not None and spy_1d  is not None else None
+            rs_5d  = round(chg_5d  - spy_5d,  2) if chg_5d  is not None and spy_5d  is not None else None
+            rs_20d = round(chg_20d - spy_20d, 2) if chg_20d is not None and spy_20d is not None else None
+
+            # Composite Score: 50% 5T + 30% 20T + 20% 1T
+            composite = 0.0
+            weights = 0.0
+            if rs_5d is not None:  composite += rs_5d  * 0.5; weights += 0.5
+            if rs_20d is not None: composite += rs_20d * 0.3; weights += 0.3
+            if rs_1d is not None:  composite += rs_1d  * 0.2; weights += 0.2
+            composite_score = round(composite / weights, 2) if weights > 0 else 0
+
+            rankings.append({
+                "ticker":         ticker,
+                "price":          round(p_now, 2),
+                "chg_1d_pct":     chg_1d,
+                "chg_5d_pct":     chg_5d,
+                "chg_20d_pct":    chg_20d,
+                "rs_1d":          rs_1d,
+                "rs_5d":          rs_5d,
+                "rs_20d":         rs_20d,
+                "composite_score": composite_score,
+                "signal": (
+                    "strong_outperform" if composite_score > 3 else
+                    "outperform"        if composite_score > 1 else
+                    "neutral"           if composite_score > -1 else
+                    "underperform"      if composite_score > -3 else
+                    "strong_underperform"
+                ),
+            })
+
+        # Sortierung: beste relative Stärke zuerst
+        rankings.sort(key=lambda x: x["composite_score"], reverse=True)
+
+        result = {
+            "rankings": rankings,
+            "spy_1d":   spy_1d,
+            "spy_5d":   spy_5d,
+            "spy_20d":  spy_20d,
+            "calculated_at": datetime.utcnow().isoformat(),
+        }
+        await cache_set(cache_key, result, ttl_seconds=900)
+        return result
+
+    except Exception as e:
+        logger.error(f"Watchlist momentum: {e}")
+        return {"rankings": [], "error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ALPACA PAPER TRADING
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/alpaca/account")
+async def api_alpaca_account():
+    """Alpaca Paper Trading Account-Status."""
+    from backend.app.data.alpaca import get_alpaca_account
+    account = await get_alpaca_account()
+    if account is None:
+        return {"configured": False,
+                "message": "ALPACA_API_KEY nicht gesetzt"}
+    return {"configured": True, **account}
+
+
+@router.get("/alpaca/positions")
+async def api_alpaca_positions():
+    """Offene Alpaca Paper-Trading-Positionen."""
+    from backend.app.data.alpaca import get_alpaca_positions
+    positions = await get_alpaca_positions()
+    return {"positions": positions, "count": len(positions)}
+
+
+@router.post("/alpaca/paper-trade")
+async def api_alpaca_paper_trade(body: dict):
+    """
+    Alpaca Paper Trade aus Kafin-Empfehlung eröffnen.
+    Body: ticker, direction ("long"|"short"), qty, stop_loss?,
+          take_profit?, signal_type?, source_signal_id?
+    """
+    from backend.app.data.alpaca import place_market_order, _configured
+    if not _configured():
+        raise HTTPException(status_code=503,
+                            detail="Alpaca nicht konfiguriert")
+
+    ticker    = (body.get("ticker") or "").upper()
+    direction = body.get("direction", "long")
+    qty       = float(body.get("qty", 0))
+
+    if not ticker:
+        raise HTTPException(status_code=400, detail="ticker fehlt")
+    if qty <= 0:
+        raise HTTPException(status_code=400, detail="qty muss > 0 sein")
+
+    side       = "buy" if direction == "long" else "sell"
+    stop_loss  = body.get("stop_loss")
+    take_profit= body.get("take_profit")
+
+    # Client-Order-ID für Rückverfolgung
+    import uuid
+    client_id = f"kafin_{ticker}_{uuid.uuid4().hex[:8]}"
+
+    result = await place_market_order(
+        ticker      = ticker,
+        qty         = qty,
+        side        = side,
+        stop_loss   = float(stop_loss) if stop_loss else None,
+        take_profit = float(take_profit) if take_profit else None,
+        client_order_id = client_id,
+    )
+
+    # Bei Erfolg: auch als Shadow Trade loggen für Kafin-Tracking
+    if result.get("success"):
+        try:
+            from backend.app.analysis.shadow_portfolio import open_shadow_trade
+            await open_shadow_trade(
+                ticker            = ticker,
+                recommendation    = "STRONG BUY" if direction == "long" else "STRONG SHORT",
+                opportunity_score = float(body.get("opportunity_score", 7.0)),
+                torpedo_score     = float(body.get("torpedo_score", 3.0)),
+                trade_reason      = body.get("signal_type", "manual"),
+                manual_entry      = True,
+            )
+        except Exception as e:
+            logger.warning(f"Shadow sync für Alpaca trade: {e}")
+
+    return result
+
+
+def _calc_real_trade_pnl(entry: dict) -> None:
+    """Berechnet PnL für einen Real-Trade serverseitig."""
+    ep = entry.get("entry_price")
+    xp = entry.get("exit_price")
+    sh = entry.get("shares")
+    if ep and xp and sh:
+        direction = entry.get("direction", "long")
+        mult = 1 if direction == "long" else -1
+        pnl = mult * (float(xp) - float(ep)) * float(sh)
+        pnl_pct = mult * ((float(xp) - float(ep)) / float(ep)) * 100
+        entry["pnl"] = round(pnl, 2)
+        entry["pnl_pct"] = round(pnl_pct, 2)
+    else:
+        entry["pnl"] = None
+        entry["pnl_pct"] = None
+
+
+def _calc_snapshot_return(snapshot: dict, price_field: str, return_field: str) -> None:
+    """Fallback-Helfer für Snapshot-Returns, falls Werte nachträglich fehlen."""
+    base = snapshot.get("price_at_decision")
+    price = snapshot.get(price_field)
+    if base and price and snapshot.get(return_field) is None:
+        try:
+            snapshot[return_field] = round(((float(price) - float(base)) / float(base)) * 100, 4)
+        except Exception:
+            snapshot[return_field] = None
+
+
+@router.get("/real-trades")
+async def api_get_real_trades(ticker: str | None = None):
+    db = get_supabase_client()
+    if not db:
+        return {"entries": [], "total": 0}
+
+    try:
+        query = db.table("real_trades").select("*").order("entry_date", desc=True).limit(100)
+        if ticker:
+            query = query.eq("ticker", ticker.upper())
+        result = await query.execute_async()
+        entries = result.data or []
+
+        signal_map: dict[str, list[dict]] = {}
+        try:
+            feed_cache = await cache_get("signals:feed")
+            if feed_cache:
+                for sig in (feed_cache.get("signals") or []):
+                    t = (sig.get("ticker") or "").upper()
+                    if not t:
+                        continue
+                    signal_map.setdefault(t, []).append({
+                        "signal_type": sig.get("signal_type"),
+                        "priority": sig.get("priority"),
+                        "headline": sig.get("headline"),
+                    })
+        except Exception as ex:
+            logger.warning(f"Signal cache for real_trades: {ex}")
+
+        for entry in entries:
+            _calc_real_trade_pnl(entry)
+            if entry.get("exit_date") is None:
+                entry["active_signals"] = signal_map.get((entry.get("ticker") or "").upper(), [])
+            else:
+                entry["active_signals"] = []
+
+        return {"entries": entries, "total": len(entries)}
+    except Exception as ex:
+        logger.error(f"real_trades GET: {ex}")
+        return {"entries": [], "total": 0, "error": str(ex)}
+
+
+@router.post("/real-trades")
+async def api_create_real_trade(body: dict):
+    db = get_supabase_client()
+    if not db:
+        raise HTTPException(status_code=503, detail="DB nicht verfügbar")
+
+    try:
+        ticker = (body.get("ticker") or "").upper().strip()
+        if not ticker:
+            raise HTTPException(status_code=400, detail="ticker fehlt")
+
+        entry_price = float(body.get("entry_price") or 0)
+        if entry_price <= 0:
+            raise HTTPException(status_code=400, detail="entry_price muss > 0 sein")
+
+        record = {
+            "ticker": ticker,
+            "direction": body.get("direction", "long"),
+            "entry_date": str(body.get("entry_date") or datetime.now().strftime("%Y-%m-%d")),
+            "entry_price": entry_price,
+            "shares": float(body.get("shares")) if body.get("shares") not in (None, "") else None,
+            "stop_price": float(body.get("stop_price")) if body.get("stop_price") not in (None, "") else None,
+            "target_price": float(body.get("target_price")) if body.get("target_price") not in (None, "") else None,
+            "thesis": body.get("thesis"),
+            "opportunity_score": float(body.get("opportunity_score")) if body.get("opportunity_score") not in (None, "") else None,
+            "torpedo_score": float(body.get("torpedo_score")) if body.get("torpedo_score") not in (None, "") else None,
+            "recommendation": body.get("recommendation"),
+            "snapshot_id": body.get("snapshot_id"),
+            "alpaca_order_id": body.get("alpaca_order_id"),
+            "exit_date": str(body.get("exit_date")) if body.get("exit_date") not in (None, "") else None,
+            "exit_price": float(body.get("exit_price")) if body.get("exit_price") not in (None, "") else None,
+            "exit_reason": body.get("exit_reason"),
+            "notes": body.get("notes"),
+        }
+
+        result = await db.table("real_trades").insert(record).execute_async()
+        return {"success": True, "entry": (result.data or [{}])[0]}
+    except HTTPException:
+        raise
+    except Exception as ex:
+        logger.error(f"real_trades POST: {ex}")
+        raise HTTPException(status_code=500, detail=str(ex))
+
+
+@router.put("/real-trades/{trade_id}")
+async def api_update_real_trade(trade_id: int, body: dict):
+    db = get_supabase_client()
+    if not db:
+        raise HTTPException(status_code=503, detail="DB nicht verfügbar")
+
+    try:
+        update = {k: v for k, v in body.items() if v is not None}
+        if "ticker" in update and isinstance(update["ticker"], str):
+            update["ticker"] = update["ticker"].upper().strip()
+        if "entry_date" in update:
+            update["entry_date"] = str(update["entry_date"])
+        if "exit_date" in update:
+            update["exit_date"] = str(update["exit_date"])
+        update["updated_at"] = datetime.utcnow().isoformat()
+
+        result = await db.table("real_trades").update(update).eq("id", trade_id).execute_async()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Nicht gefunden")
+        return {"success": True, "entry": result.data[0]}
+    except HTTPException:
+        raise
+    except Exception as ex:
+        logger.error(f"real_trades PUT: {ex}")
+        raise HTTPException(status_code=500, detail=str(ex))
+
+
+@router.delete("/real-trades/{trade_id}")
+async def api_delete_real_trade(trade_id: int):
+    db = get_supabase_client()
+    if not db:
+        raise HTTPException(status_code=503, detail="DB nicht verfügbar")
+
+    try:
+        await db.table("real_trades").delete().eq("id", trade_id).execute_async()
+        return {"success": True}
+    except Exception as ex:
+        logger.error(f"real_trades DELETE: {ex}")
+        raise HTTPException(status_code=500, detail=str(ex))
+
+
+@router.get("/decision-snapshots")
+async def api_get_decision_snapshots(ticker: str | None = None, limit: int = 50):
+    db = get_supabase_client()
+    if not db:
+        return {"snapshots": [], "total": 0}
+
+    try:
+        query = db.table("decision_snapshots").select("*").order("created_at", desc=True).limit(limit)
+        if ticker:
+            query = query.eq("ticker", ticker.upper())
+        result = await query.execute_async()
+        snapshots = result.data or []
+
+        for snapshot in snapshots:
+            _calc_snapshot_return(snapshot, "price_t1", "return_t1_pct")
+            _calc_snapshot_return(snapshot, "price_t5", "return_t5_pct")
+            _calc_snapshot_return(snapshot, "price_t20", "return_t20_pct")
+
+        return {"snapshots": snapshots, "total": len(snapshots)}
+    except Exception as ex:
+        logger.error(f"decision_snapshots GET: {ex}")
+        return {"snapshots": [], "total": 0, "error": str(ex)}
+
+
+@router.post("/decision-snapshots/{snapshot_id}/outcome")
+async def api_update_snapshot_outcome(snapshot_id: int, body: dict):
+    db = get_supabase_client()
+    if not db:
+        raise HTTPException(status_code=503, detail="DB nicht verfügbar")
+
+    try:
+        update: dict = {}
+        for field in [
+            "price_t1",
+            "price_t5",
+            "price_t20",
+            "return_t1_pct",
+            "return_t5_pct",
+            "return_t20_pct",
+            "direction_correct_t1",
+            "direction_correct_t5",
+            "failure_hypothesis",
+            "data_quality_flag",
+        ]:
+            if field in body:
+                update[field] = body[field]
+
+        await db.table("decision_snapshots").update(update).eq("id", snapshot_id).execute_async()
+        return {"success": True}
+    except Exception as ex:
+        logger.error(f"decision_snapshots outcome: {ex}")
+        raise HTTPException(status_code=500, detail=str(ex))
+
+
+@router.post("/decision-snapshots/update-outcomes")
+async def api_update_snapshot_outcomes_batch():
+    """
+    Aktualisiert T+1, T+5, T+20 Outcomes für alle Snapshots ohne Returns.
+    Lädt historische Preise via yfinance und berechnet Returns.
+    """
+    from backend.app.database import get_pool
+    import asyncio
+    import yfinance as yf
+    from datetime import datetime, timedelta
+
+    logger.info("Starte batch Outcome-Update für Decision Snapshots")
+
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            # Snapshots ohne Returns finden (älter als 1 Tag, um T+1 zu ermöglichen)
+            cutoff_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+            rows = await conn.fetch("""
+                SELECT id, ticker, decision_date, recommendation, opportunity_score, torpedo_score
+                FROM decision_snapshots
+                WHERE decision_date <= $1
+                  AND (price_t1 IS NULL OR price_t5 IS NULL OR price_t20 IS NULL)
+                ORDER BY decision_date DESC
+                LIMIT 100
+            """, cutoff_date)
+
+            if not rows:
+                return {"updated": 0, "checked": 0, "message": "Keine Snapshots zum Updaten gefunden"}
+
+            logger.info(f"Gefunden: {len(rows)} Snapshots zum Updaten")
+
+            # Preise in Batches laden (Performance)
+            tickers_set = {row["ticker"] for row in rows}
+            prices_by_ticker = {}
+
+            # Historische Preise für jeden Ticker laden
+            for ticker in tickers_set:
+                try:
+                    # yfinance synchron in asyncio.to_thread ausführen
+                    def fetch_prices(t):
+                        stock = yf.Ticker(t)
+                        # 30 Tage History für T+20 Coverage
+                        hist = stock.history(period="30d")
+                        if hist.empty:
+                            return {}
+                        return {
+                            "dates": hist.index.strftime("%Y-%m-%d").tolist(),
+                            "close": hist["Close"].tolist(),
+                        }
+
+                    price_data = await asyncio.to_thread(fetch_prices, ticker)
+                    if price_data:
+                        prices_by_ticker[ticker] = price_data
+                except Exception as e:
+                    logger.warning(f"yfinance Preis-Lade für {ticker}: {e}")
+
+            updated = 0
+            checked = 0
+
+            # Jeden Snapshot updaten
+            for row in rows:
+                checked += 1
+                ticker = row["ticker"]
+                decision_date = row["decision_date"]
+                prices = prices_by_ticker.get(ticker)
+
+                if not prices:
+                    logger.warning(f"Keine Preisdaten für {ticker}")
+                    continue
+
+                try:
+                    # Date-Index finden
+                    dates = prices["dates"]
+                    close_prices = prices["close"]
+
+                    # Decision-Date Index
+                    if decision_date not in dates:
+                        logger.warning(f"Decision Date {decision_date} nicht in Preisdaten für {ticker}")
+                        continue
+
+                    dec_idx = dates.index(decision_date)
+                    updates = {}
+
+                    # T+1 (nächster Handelstag)
+                    if dec_idx + 1 < len(dates):
+                        price_t1 = close_prices[dec_idx + 1]
+                        updates["price_t1"] = float(price_t1)
+                        # Return berechnen (wenn wir auch Decision-Preis haben)
+                        if dec_idx < len(close_prices):
+                            price_decision = close_prices[dec_idx]
+                            if price_decision > 0:
+                                updates["return_t1_pct"] = round(((price_t1 - price_decision) / price_decision) * 100, 2)
+                                # Direction correctness
+                                direction = "long" if row["recommendation"] in ["buy", "long"] else "short"
+                                if direction == "long":
+                                    updates["direction_correct_t1"] = updates["return_t1_pct"] > 0
+                                else:
+                                    updates["direction_correct_t1"] = updates["return_t1_pct"] < 0
+
+                    # T+5
+                    if dec_idx + 5 < len(dates):
+                        price_t5 = close_prices[dec_idx + 5]
+                        updates["price_t5"] = float(price_t5)
+                        if dec_idx < len(close_prices):
+                            price_decision = close_prices[dec_idx]
+                            if price_decision > 0:
+                                updates["return_t5_pct"] = round(((price_t5 - price_decision) / price_decision) * 100, 2)
+
+                    # T+20
+                    if dec_idx + 20 < len(dates):
+                        price_t20 = close_prices[dec_idx + 20]
+                        updates["price_t20"] = float(price_t20)
+                        if dec_idx < len(close_prices):
+                            price_decision = close_prices[dec_idx]
+                            if price_decision > 0:
+                                updates["return_t20_pct"] = round(((price_t20 - price_decision) / price_decision) * 100, 2)
+
+                    # DB Update
+                    if updates:
+                        set_clauses = []
+                        values = []
+                        param_idx = 1
+                        for field, value in updates.items():
+                            set_clauses.append(f"{field} = ${param_idx}")
+                            values.append(value)
+                            param_idx += 1
+
+                        values.append(row["id"])  # WHERE id
+
+                        await conn.execute(f"""
+                            UPDATE decision_snapshots
+                            SET {', '.join(set_clauses)}
+                            WHERE id = ${param_idx}
+                        """, *values)
+
+                        updated += 1
+                        logger.debug(f"Snapshot {row['id']} ({ticker}) aktualisiert: {list(updates.keys())}")
+
+                except Exception as e:
+                    logger.warning(f"Fehler beim Update von Snapshot {row['id']} ({ticker}): {e}")
+
+            logger.info(f"Batch Outcome-Update abgeschlossen: {updated}/{checked} Snapshots aktualisiert")
+            return {
+                "updated": updated,
+                "checked": checked,
+                "message": f"{updated} von {checked} Snapshots aktualisiert"
+            }
+
+    except Exception as e:
+        logger.error(f"Batch Outcome-Update Fehler: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/lernpfade-stats")
+async def api_lernpfade_stats():
+    """
+    Aggregierte Statistiken beider Lernpfade für die Performance-Unterseite.
+    Cache: 10 Min.
+    """
+    cache_key = "lernpfade:stats"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT
+                    trade_type,
+                    COUNT(*)                                          AS total,
+                    COUNT(*) FILTER (WHERE return_t5_pct IS NOT NULL) AS with_outcome,
+                    COUNT(*) FILTER (
+                        WHERE direction_correct_t5 = TRUE
+                    )                                                 AS correct_t5,
+                    AVG(return_t5_pct)
+                        FILTER (WHERE return_t5_pct IS NOT NULL)      AS avg_return_t5,
+                    COUNT(*) FILTER (
+                        WHERE data_quality_flag IS NOT NULL
+                          AND data_quality_flag != 'good'
+                    )                                                 AS data_issues
+                FROM decision_snapshots
+                GROUP BY trade_type
+            """)
+
+        def _stats(row) -> dict:
+            if not row:
+                return {
+                    "total": 0, "with_outcome": 0, "correct_t5": 0,
+                    "accuracy_t5_pct": None, "avg_return_t5": None,
+                    "data_quality_issues": 0, "by_recommendation": {},
+                }
+            total   = row["total"] or 0
+            w_out   = row["with_outcome"] or 0
+            correct = row["correct_t5"] or 0
+            return {
+                "total":          total,
+                "with_outcome":   w_out,
+                "correct_t5":     correct,
+                "accuracy_t5_pct": round((correct / w_out) * 100, 1)
+                                   if w_out > 0 else None,
+                "avg_return_t5":  round(float(row["avg_return_t5"]), 2)
+                                   if row["avg_return_t5"] else None,
+                "data_quality_issues": row["data_issues"] or 0,
+                "by_recommendation": {},
+            }
+
+        row_map = {r["trade_type"]: r for r in rows}
+        MIN_FOR_CALIBRATION = 15
+
+        result = {
+            "earnings":   _stats(row_map.get("earnings")),
+            "momentum":   _stats(row_map.get("momentum")),
+            "total_snapshots": sum(r["total"] or 0 for r in rows),
+            "min_snapshots_for_calibration": MIN_FOR_CALIBRATION,
+            "calibration_ready": (
+                (_stats(row_map.get("earnings"))["with_outcome"] >= MIN_FOR_CALIBRATION)
+                and
+                (_stats(row_map.get("momentum"))["with_outcome"] >= MIN_FOR_CALIBRATION)
+            ),
+        }
+        await cache_set(cache_key, result, ttl_seconds=600)
+        return result
+
+    except Exception as e:
+        logger.error(f"Lernpfade stats: {e}")
+        return {
+            "earnings": {"total": 0, "with_outcome": 0, "correct_t5": 0,
+                          "accuracy_t5_pct": None, "avg_return_t5": None,
+                          "data_quality_issues": 0, "by_recommendation": {}},
+            "momentum": {"total": 0, "with_outcome": 0, "correct_t5": 0,
+                          "accuracy_t5_pct": None, "avg_return_t5": None,
+                          "data_quality_issues": 0, "by_recommendation": {}},
+            "total_snapshots": 0,
+            "min_snapshots_for_calibration": 15,
+            "calibration_ready": False,
+            "error": str(e),
+        }

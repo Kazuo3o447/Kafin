@@ -115,6 +115,67 @@ ON trade_journal(ticker);
 CREATE INDEX IF NOT EXISTS idx_journal_entry_date
 ON trade_journal(entry_date DESC);
 
+-- Decision Snapshots: Unveränderlicher Empfehlungs-Snapshot
+CREATE TABLE IF NOT EXISTS decision_snapshots (
+    id                  BIGSERIAL PRIMARY KEY,
+    ticker              VARCHAR(20)    NOT NULL,
+    created_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    opportunity_score   NUMERIC(4,1),
+    torpedo_score       NUMERIC(4,1),
+    recommendation      VARCHAR(50),
+    macro_regime        VARCHAR(50),
+    vix                 NUMERIC(6,2),
+    credit_spread_bps   NUMERIC(8,2),
+    top_drivers         JSONB,
+    top_risks           JSONB,
+    price_at_decision   NUMERIC(12,4),
+    rsi_at_decision     NUMERIC(6,2),
+    iv_atm_at_decision  NUMERIC(6,2),
+    earnings_date       DATE,
+    prompt_snapshot     TEXT,
+    model_used          VARCHAR(50),
+    price_t1            NUMERIC(12,4),
+    price_t5            NUMERIC(12,4),
+    price_t20           NUMERIC(12,4),
+    return_t1_pct       NUMERIC(8,4),
+    return_t5_pct       NUMERIC(8,4),
+    return_t20_pct      NUMERIC(8,4),
+    direction_correct_t1 BOOLEAN,
+    direction_correct_t5 BOOLEAN,
+    failure_hypothesis  TEXT,
+    data_quality_flag   VARCHAR(50)
+);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_ticker
+ON decision_snapshots(ticker, created_at DESC);
+
+-- Real Trades: Echte Positionen des Traders
+CREATE TABLE IF NOT EXISTS real_trades (
+    id                BIGSERIAL PRIMARY KEY,
+    ticker            VARCHAR(20)   NOT NULL,
+    direction         VARCHAR(10)   NOT NULL DEFAULT 'long',
+    entry_date        DATE          NOT NULL,
+    entry_price       NUMERIC(12,4) NOT NULL,
+    shares            NUMERIC(12,4),
+    stop_price        NUMERIC(12,4),
+    target_price      NUMERIC(12,4),
+    thesis            TEXT,
+    opportunity_score NUMERIC(4,1),
+    torpedo_score     NUMERIC(4,1),
+    recommendation    VARCHAR(50),
+    snapshot_id       BIGINT,
+    alpaca_order_id   TEXT,
+    exit_date         DATE,
+    exit_price        NUMERIC(12,4),
+    exit_reason       VARCHAR(100),
+    notes             TEXT,
+    created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_real_trades_ticker
+ON real_trades(ticker, entry_date DESC);
+
 CREATE TABLE IF NOT EXISTS signal_feed_config (
     key         VARCHAR(80) PRIMARY KEY,
     value       JSONB       NOT NULL,
@@ -295,8 +356,164 @@ async def add_after_market_summary_column():
         logger.error(f"After-Market Summary Spalte hinzufügen fehlgeschlagen: {e}")
 
 
+async def add_session_plan_columns():
+    """Fügt session_plan Spalten zu daily_snapshots hinzu falls nicht vorhanden."""
+    try:
+        db = get_supabase_client()
+        if db is None:
+            return
+
+        # Session Plan Spalten zu daily_snapshots (falls noch nicht vorhanden)
+        await db.execute("""
+            ALTER TABLE daily_snapshots
+            ADD COLUMN IF NOT EXISTS session_plan TEXT,
+            ADD COLUMN IF NOT EXISTS session_plan_generated_at TIMESTAMPTZ;
+        """)
+        
+        logger.info("session_plan Spalten zu daily_snapshots hinzugefügt (falls nicht vorhanden)")
+    except Exception as e:
+        logger.error(f"Session Plan Spalten hinzufügen fehlgeschlagen: {e}")
+
+
+async def add_btc_report_columns():
+    """Fügt btc_report Spalten zu daily_snapshots hinzu falls nicht vorhanden."""
+    try:
+        db = get_supabase_client()
+        if db is None:
+            return
+
+        # BTC Report Spalten zu daily_snapshots (falls noch nicht vorhanden)
+        await db.execute("""
+            ALTER TABLE daily_snapshots
+            ADD COLUMN IF NOT EXISTS btc_report TEXT,
+            ADD COLUMN IF NOT EXISTS btc_report_generated_at TIMESTAMPTZ;
+        """)
+        
+        logger.info("btc_report Spalten zu daily_snapshots hinzugefügt (falls nicht vorhanden)")
+    except Exception as e:
+        logger.error(f"BTC Report Spalten hinzufügen fehlgeschlagen: {e}")
+
+
+async def ensure_decision_snapshots_table():
+    """Erstellt die decision_snapshots Tabelle und den Index falls sie nicht existiert."""
+    try:
+        db = get_supabase_client()
+        if db is None:
+            return
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS decision_snapshots (
+                id                  BIGSERIAL PRIMARY KEY,
+                ticker              VARCHAR(20)    NOT NULL,
+                created_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+                opportunity_score   NUMERIC(4,1),
+                torpedo_score       NUMERIC(4,1),
+                recommendation      VARCHAR(50),
+                macro_regime        VARCHAR(50),
+                vix                 NUMERIC(6,2),
+                credit_spread_bps   NUMERIC(8,2),
+                top_drivers         JSONB,
+                top_risks           JSONB,
+                price_at_decision   NUMERIC(12,4),
+                rsi_at_decision     NUMERIC(6,2),
+                iv_atm_at_decision  NUMERIC(6,2),
+                earnings_date       DATE,
+                prompt_snapshot     TEXT,
+                model_used          VARCHAR(50),
+                price_t1            NUMERIC(12,4),
+                price_t5            NUMERIC(12,4),
+                price_t20           NUMERIC(12,4),
+                return_t1_pct       NUMERIC(8,4),
+                return_t5_pct       NUMERIC(8,4),
+                return_t20_pct      NUMERIC(8,4),
+                direction_correct_t1 BOOLEAN,
+                direction_correct_t5 BOOLEAN,
+                failure_hypothesis  TEXT,
+                data_quality_flag   VARCHAR(50),
+                trade_type          VARCHAR(20) CHECK (trade_type IN ('earnings','momentum')) DEFAULT 'earnings',
+                earnings_countdown_at_decision INT
+            );
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_snapshots_ticker
+            ON decision_snapshots(ticker, created_at DESC);
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_snapshots_trade_type
+            ON decision_snapshots(trade_type, created_at DESC);
+        """)
+    except Exception as e:
+        logger.error(f"decision_snapshots Setup fehlgeschlagen: {e}")
+
+
+async def migrate_decision_snapshots_trade_type():
+    """Fügt trade_type und earnings_countdown_at_decision zu bestehenden decision_snapshots hinzu."""
+    try:
+        db = get_supabase_client()
+        if db is None:
+            return
+
+        await db.execute("""
+            ALTER TABLE decision_snapshots
+            ADD COLUMN IF NOT EXISTS trade_type VARCHAR(20)
+                CHECK (trade_type IN ('earnings','momentum'))
+                DEFAULT 'earnings',
+            ADD COLUMN IF NOT EXISTS earnings_countdown_at_decision INT
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_snapshots_trade_type
+            ON decision_snapshots(trade_type, created_at DESC)
+        """)
+        logger.info("decision_snapshots migration: trade_type columns added")
+    except Exception as e:
+        logger.error(f"decision_snapshots migration fehlgeschlagen: {e}")
+
+
+async def ensure_real_trades_table():
+    """Erstellt die real_trades Tabelle und den Index falls sie nicht existiert."""
+    try:
+        db = get_supabase_client()
+        if db is None:
+            return
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS real_trades (
+                id                BIGSERIAL PRIMARY KEY,
+                ticker            VARCHAR(20)   NOT NULL,
+                direction         VARCHAR(10)   NOT NULL DEFAULT 'long',
+                entry_date        DATE          NOT NULL,
+                entry_price       NUMERIC(12,4) NOT NULL,
+                shares            NUMERIC(12,4),
+                stop_price        NUMERIC(12,4),
+                target_price      NUMERIC(12,4),
+                thesis            TEXT,
+                opportunity_score NUMERIC(4,1),
+                torpedo_score     NUMERIC(4,1),
+                recommendation    VARCHAR(50),
+                snapshot_id       BIGINT,
+                alpaca_order_id   TEXT,
+                exit_date         DATE,
+                exit_price        NUMERIC(12,4),
+                exit_reason       VARCHAR(100),
+                notes             TEXT,
+                created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+                updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+            );
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_real_trades_ticker
+            ON real_trades(ticker, entry_date DESC);
+        """)
+    except Exception as e:
+        logger.error(f"real_trades Setup fehlgeschlagen: {e}")
+
+
 async def init_db():
     """Initialisiert die Datenbank mit allen Tabellen und Defaults."""
     await ensure_daily_snapshots_table()
     await ensure_signal_feed_config()
     await add_after_market_summary_column()
+    await add_session_plan_columns()
+    await add_btc_report_columns()
+    await ensure_decision_snapshots_table()
+    await ensure_real_trades_table()

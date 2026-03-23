@@ -140,6 +140,141 @@ async def api_morning_archive(days: int = 7):
     except Exception as e:
         return {"reports": [], "error": str(e)}
 
+
+@router.post("/trigger-earnings-audits")
+async def api_trigger_earnings_audits():
+    """
+    Täglich 08:10 via n8n.
+    Prüft Watchlist auf Ticker mit earnings_countdown ≤ 5.
+    Generiert Audit-Report + öffnet Shadow Trade wenn noch kein
+    offener Trade für diesen Ticker/Quarter existiert.
+    Gibt zurück: welche Ticker verarbeitet wurden.
+    """
+    import asyncio
+
+    from backend.app.analysis.shadow_portfolio import open_shadow_trade, _current_quarter
+    from backend.app.db import get_supabase_client
+
+    logger.info("[Auto-Trigger] Earnings-Audit-Check gestartet")
+
+    wl = await get_watchlist()
+    processed = []
+    skipped = []
+    errors = []
+
+    db = get_supabase_client()
+
+    for item in wl:
+        ticker = (item.get("ticker") or "").upper()
+        if not ticker:
+            continue
+
+        ec = item.get("earnings_countdown")
+        if ec is None or ec < 0 or ec > 5:
+            skipped.append({"ticker": ticker, "reason": f"earnings_countdown={ec}"})
+            continue
+
+        already_open = False
+        if db:
+            try:
+                quarter = _current_quarter()
+                existing = await (
+                    db.table("shadow_trades")
+                    .select("id")
+                    .eq("ticker", ticker)
+                    .eq("quarter", quarter)
+                    .eq("status", "open")
+                    .execute_async()
+                )
+                already_open = bool(getattr(existing, "data", None))
+            except Exception as e:
+                logger.warning(f"Shadow trade check {ticker}: {e}")
+
+        if already_open:
+            skipped.append({"ticker": ticker, "reason": "shadow_trade_already_open"})
+            continue
+
+        try:
+            logger.info(f"[Auto-Trigger] Generiere Audit-Report: {ticker} (Earnings in {ec}T)")
+            report_text = await generate_audit_report(ticker)
+
+            if isinstance(report_text, str) and report_text.startswith("Fehler:"):
+                errors.append({"ticker": ticker, "error": report_text})
+                continue
+
+            rec = None
+            opp = None
+            torp = None
+
+            if db:
+                try:
+                    audit_row = await (
+                        db.table("audit_reports")
+                        .select("recommendation, opportunity_score, torpedo_score")
+                        .eq("ticker", ticker)
+                        .eq("report_type", "audit")
+                        .order("created_at", desc=True)
+                        .limit(1)
+                        .execute_async()
+                    )
+                    latest = (audit_row.data or [{}])[0]
+                    rec = latest.get("recommendation")
+                    opp = latest.get("opportunity_score")
+                    torp = latest.get("torpedo_score")
+                except Exception as e:
+                    logger.warning(f"Audit score lookup {ticker}: {e}")
+
+            opp_val = float(opp or 0)
+            torp_val = float(torp or 10)
+            rec_val = str(rec or "").upper()
+
+            trade_result = None
+            if rec_val in ("STRONG BUY", "BUY") and opp_val >= 6.5 and torp_val <= 4.5:
+                trade_result = await open_shadow_trade(
+                    ticker=ticker,
+                    recommendation=rec_val,
+                    opportunity_score=opp_val,
+                    torpedo_score=torp_val,
+                    trade_reason=f"auto_earnings_trigger_T{ec}",
+                    manual_entry=False,
+                )
+            elif rec_val in ("STRONG SHORT", "SHORT") and torp_val >= 6.5 and opp_val <= 4.5:
+                trade_result = await open_shadow_trade(
+                    ticker=ticker,
+                    recommendation=rec_val,
+                    opportunity_score=opp_val,
+                    torpedo_score=torp_val,
+                    trade_reason=f"auto_earnings_trigger_T{ec}",
+                    manual_entry=False,
+                )
+
+            processed.append({
+                "ticker": ticker,
+                "ec": ec,
+                "rec": rec_val or None,
+                "opp": opp_val,
+                "torp": torp_val,
+                "trade": trade_result or "skipped_no_strong_signal",
+            })
+
+        except Exception as e:
+            logger.error(f"[Auto-Trigger] Fehler {ticker}: {e}")
+            errors.append({"ticker": ticker, "error": str(e)})
+
+        await asyncio.sleep(3)
+
+    summary = {
+        "processed": len(processed),
+        "skipped": len(skipped),
+        "errors": len(errors),
+        "detail": {"processed": processed, "skipped": skipped, "errors": errors},
+    }
+    logger.info(
+        f"[Auto-Trigger] Abgeschlossen: {summary['processed']} verarbeitet, "
+        f"{summary['skipped']} übersprungen, {summary['errors']} Fehler"
+    )
+    return summary
+
 @router.post("/scan-earnings-results")
 async def api_scan_earnings_results():
     """Scannt nach neuen Earnings und triggert Post-Earnings-Reviews."""

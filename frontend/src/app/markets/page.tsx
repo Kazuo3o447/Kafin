@@ -1367,6 +1367,22 @@ function EconomicCalendarBlock({ data, timestamp, onRefresh, loading }: { data?:
                     <span>•</span>
                     <span>{event.country}</span>
                   </div>
+                  {/* Bei High-Impact-Events mit negativem Ergebnis: Fed-Kontext */}
+                  {event.impact === "high" && event.actual && event.estimate && (
+                    (() => {
+                      const isMiss = parseFloat(event.actual) < parseFloat(event.estimate);
+                      const isFedSensitive = ["CPI", "NFP", "Unemployment", "PCE", "PPI",
+                        "GDP", "Retail Sales"].some(k =>
+                          event.title.toUpperCase().includes(k.toUpperCase())
+                        );
+                      if (!isMiss || !isFedSensitive) return null;
+                      return (
+                        <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded ml-2">
+                          Miss → Fed-Pivot möglich
+                        </span>
+                      );
+                    })()
+                  )}
                 </div>
                 <div className="text-right">
                   <span className={`px-2 py-1 rounded text-xs font-medium ${getImpactColor(event.impact)}`}>

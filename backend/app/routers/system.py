@@ -165,6 +165,79 @@ async def full_system_diagnostics():
         results["services"]["n8n"] = {"status": "error", "error_code": "N8N_ERR", "details": repr(e)}
         logger.error(f"❌ n8n: ERROR - {e}")
 
+    # 8. Alpaca Paper Trading
+    logger.info("🔍 Testing Alpaca Paper Trading...")
+    try:
+        from backend.app.data.alpaca import get_alpaca_account, _configured
+        if not _configured():
+            results["services"]["alpaca"] = {
+                "status":  "warning",
+                "details": "ALPACA_API_KEY nicht gesetzt — Paper Trading deaktiviert",
+            }
+            logger.warning("⚠️ Alpaca: nicht konfiguriert")
+        else:
+            t0 = time.time()
+            account = await get_alpaca_account()
+            ms = round((time.time() - t0) * 1000)
+            if account:
+                equity = account.get("equity", 0)
+                results["services"]["alpaca"] = {
+                    "status":     "ok",
+                    "latency_ms": ms,
+                    "details":    f"Paper Trading aktiv · Equity ${equity:,.0f}",
+                }
+                logger.info(f"✅ Alpaca: OK ({ms}ms, equity ${equity:,.0f})")
+            else:
+                results["services"]["alpaca"] = {
+                    "status":     "error",
+                    "error_code": "ALPACA_AUTH_ERR",
+                    "details":    "Account-Abfrage fehlgeschlagen — Keys prüfen",
+                }
+                logger.error("❌ Alpaca: Auth-Fehler")
+    except Exception as e:
+        results["services"]["alpaca"] = {
+            "status":     "error",
+            "error_code": "ALPACA_ERR",
+            "details":    repr(e),
+        }
+        logger.error(f"❌ Alpaca: ERROR - {e}")
+
+    # 9. CoinGlass
+    logger.info("🔍 Testing CoinGlass API...")
+    try:
+        from backend.app.data.coinglass import get_btc_price_and_trend
+        from backend.app.config import settings as _settings
+        if not _settings.coinglass_api_key:
+            results["services"]["coinglass"] = {
+                "status":  "warning",
+                "details": "COINGLASS_API_KEY nicht gesetzt — BTC-Derivate-Daten deaktiviert",
+            }
+            logger.warning("⚠️ CoinGlass: nicht konfiguriert")
+        else:
+            t0 = time.time()
+            btc = await get_btc_price_and_trend()
+            ms = round((time.time() - t0) * 1000)
+            if btc and btc.get("price"):
+                results["services"]["coinglass"] = {
+                    "status":     "ok",
+                    "latency_ms": ms,
+                    "details":    f"BTC ${btc['price']:,.0f} · 7T {btc.get('change_7d_pct',0):+.1f}%",
+                }
+                logger.info(f"✅ CoinGlass: OK ({ms}ms)")
+            else:
+                results["services"]["coinglass"] = {
+                    "status":  "warning",
+                    "details": "Keine BTC-Daten erhalten — Free-Tier-Limit möglich",
+                }
+                logger.warning("⚠️ CoinGlass: keine Daten")
+    except Exception as e:
+        results["services"]["coinglass"] = {
+            "status":     "error",
+            "error_code": "COINGLASS_ERR",
+            "details":    repr(e),
+        }
+        logger.error(f"❌ CoinGlass: ERROR - {e}")
+
     if any(s.get("status") == "error" for s in results["services"].values()):
         results["status"] = "degraded"
         logger.warning("⚠️ System status: DEGRADED")

@@ -48,6 +48,28 @@ export const api = {
   getLongTermMemory: (ticker: string) => fetchAPI(`/api/data/long-term-memory/${ticker}`),
   getTickerTrackRecord: (ticker: string) => fetchAPI(`/api/data/ticker-track-record/${ticker}`),
   getPerformance: () => fetchAPI("/api/data/performance"),
+  getAlpacaAccount: () => fetchAPI("/api/data/alpaca/account"),
+  getAlpacaPositions: () => fetchAPI("/api/data/alpaca/positions"),
+  openAlpacaPaperTrade: (data: Record<string, unknown>) =>
+    fetchAPI("/api/data/alpaca/paper-trade", { method: "POST", body: JSON.stringify(data) }),
+  getRealTrades: (ticker?: string) =>
+    fetchAPI(`/api/data/real-trades${ticker ? `?ticker=${ticker}` : ""}`),
+  createRealTrade: (data: Record<string, unknown>) =>
+    fetchAPI("/api/data/real-trades", { method: "POST", body: JSON.stringify(data) }),
+  updateRealTrade: (id: number, data: Record<string, unknown>) =>
+    fetchAPI(`/api/data/real-trades/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteRealTrade: (id: number) =>
+    fetchAPI(`/api/data/real-trades/${id}`, { method: "DELETE" }),
+  getDecisionSnapshots: (ticker?: string, limit = 50) =>
+    fetchAPI((() => {
+      const params = new URLSearchParams();
+      if (ticker) params.set("ticker", ticker);
+      params.set("limit", String(limit));
+      const query = params.toString();
+      return `/api/data/decision-snapshots${query ? `?${query}` : ""}`;
+    })()),
+  updateSnapshotOutcome: (id: number, data: Record<string, unknown>) =>
+    fetchAPI(`/api/data/decision-snapshots/${id}/outcome`, { method: "POST", body: JSON.stringify(data) }),
   getShadowPortfolio: () => fetchAPI("/api/shadow-portfolio"),
   getShadowTrades: (status = "all") => fetchAPI(`/api/shadow-portfolio/trades?status=${status}`),
   getShadowWeeklyReport: () => fetchAPI("/api/shadow-portfolio/weekly-report"),
@@ -156,6 +178,20 @@ export const api = {
   // Briefing
   generateAfterMarketReport: () =>
     fetchAPI("/api/reports/generate-after-market", { method: "POST" }),
+  generateSessionPlan: () =>
+    fetchAPI("/api/reports/generate-session-plan", { method: "POST" }),
+  generateBtcReport: () =>
+    fetchAPI("/api/reports/generate-btc", { method: "POST" }),
   getBriefingArchive: (days = 7) =>
     fetchAPI(`/api/reports/briefing-archive?days=${days}`),
+
+  // Bitcoin
+  getBtcSnapshot: () => fetchAPI("/api/data/btc/snapshot"),
+  getBtcLatestReport: () => fetchAPI("/api/reports/btc-latest"),
+
+  // Watchlist Momentum
+  getWatchlistMomentum: () => fetchAPI("/api/data/watchlist-momentum"),
+
+  // Lernpfade Stats
+  getLernpfadeStats: () => fetchAPI("/api/data/lernpfade-stats"),
 };

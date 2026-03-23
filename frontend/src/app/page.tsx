@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { TrendingUp, TrendingDown, Activity, DollarSign, Percent, Circle, RefreshCw, ArrowDownRight, ArrowUpRight, Info, Calendar as CalendarIcon, Clock, AlertTriangle, Zap, Brain, ChevronRight } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, DollarSign, Percent, Circle, RefreshCw, ArrowDownRight, ArrowUpRight, Info, Calendar as CalendarIcon, Clock, AlertTriangle, Zap, Brain, ChevronRight, ChevronDown, ChevronUp, X } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { api } from "@/lib/api";
 import { cachedFetch, cacheAge, cacheInvalidateAll } from "@/lib/clientCache";
@@ -135,6 +135,23 @@ function formatPct(value?: number, fallback = "--") {
   return `${formatted}%`;
 }
 
+function formatAge(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (seconds < 60) return `vor ${seconds}s`;
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `vor ${minutes}m`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `vor ${hours}h`;
+
+  return `vor ${Math.floor(hours / 24)}d`;
+}
+
 type SignalFeedItem = {
   ticker: string;
   signal_type: string;
@@ -146,6 +163,15 @@ type SignalFeedItem = {
   value?: number | null;
   threshold?: number | null;
   generated_at?: string;
+  open_position?: {
+    direction: "long" | "short";
+    entry_price: number | null;
+    shares: number | null;
+    stop_price: number | null;
+    target_price: number | null;
+    entry_date: string;
+  } | null;
+  position_risk: "high" | "positive" | "neutral" | null;
 };
 
 type SignalPreparation = {
@@ -171,11 +197,23 @@ type SignalFeedResponse = {
   macro_regime?: string;
 };
 
+type PaperTradeModalState = {
+  signal: SignalFeedItem;
+  qty: string;
+  useStop: boolean;
+  useTakeProfit: boolean;
+};
+
 function SignalFeedView() {
   const [feed, setFeed] = useState<SignalFeedResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [briefRefreshing, setBriefRefreshing] = useState(false);
+  const [briefExpanded, setBriefExpanded] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tradeModal, setTradeModal] = useState<PaperTradeModalState | null>(null);
+  const [tradingInProgress, setTradingInProgress] = useState(false);
+  const [tradeResult, setTradeResult] = useState<string | null>(null);
 
   const loadFeed = useCallback(async (forceRefresh = false) => {
     if (forceRefresh) {
@@ -195,6 +233,81 @@ function SignalFeedView() {
       setRefreshing(false);
     }
   }, []);
+
+  async function refreshActionBrief() {
+    if (briefRefreshing) return;
+    setBriefRefreshing(true);
+    try {
+      const result = await api.getSignalsFeed(true);
+      setFeed(result);
+    } catch (e: any) {
+      setError(e?.message || "Handlungsempfehlung konnte nicht neu generiert werden.");
+    } finally {
+      setBriefRefreshing(false);
+    }
+  }
+
+  async function executePaperTrade() {
+    if (!tradeModal || tradingInProgress) return;
+    const qty = parseFloat(tradeModal.qty);
+    if (!qty || qty <= 0) return;
+
+    setTradingInProgress(true);
+    try {
+      const sig = tradeModal.signal;
+      const pos = sig.open_position;
+      const direction = sig.signal_type === "setup_improving"
+        ? "long"
+        : sig.signal_type === "torpedo_rising"
+          ? "short"
+          : "long";
+
+      let entryPrice = Number(pos?.entry_price ?? 0);
+      if (!entryPrice || entryPrice <= 0) {
+        try {
+          const snapshot = await api.getQuickSnapshot(sig.ticker);
+          entryPrice = Number(snapshot?.current_price ?? 1);
+        } catch {
+          entryPrice = 1;
+        }
+      }
+
+      const alpacaResult = await api.openAlpacaPaperTrade({
+        ticker: sig.ticker,
+        direction,
+        qty,
+        stop_loss: tradeModal.useStop ? pos?.stop_price ?? undefined : undefined,
+        take_profit: tradeModal.useTakeProfit ? pos?.target_price ?? undefined : undefined,
+        signal_type: sig.signal_type,
+        opportunity_score: Number(feed?.config_snapshot?.["torpedo_delta_min"] ?? 7),
+        torpedo_score: 3,
+      });
+
+      if (alpacaResult.success) {
+        await api.createRealTrade({
+          ticker: sig.ticker,
+          direction,
+          entry_date: new Date().toISOString().slice(0, 10),
+          entry_price: entryPrice,
+          shares: qty,
+          stop_price: tradeModal.useStop ? pos?.stop_price ?? undefined : undefined,
+          target_price: tradeModal.useTakeProfit ? pos?.target_price ?? undefined : undefined,
+          thesis: sig.headline,
+          alpaca_order_id: alpacaResult.order_id || undefined,
+        });
+        setTradeResult(
+          `✅ Paper Trade eröffnet: ${sig.ticker} ${direction.toUpperCase()} × ${qty} — Order ${alpacaResult.order_id?.slice(0, 8)}...`
+        );
+        setTradeModal(null);
+      } else {
+        setTradeResult(`❌ Fehler: ${alpacaResult.error || alpacaResult.detail || "Unbekannt"}`);
+      }
+    } catch (e: any) {
+      setTradeResult(`❌ ${e?.message || "Unbekannter Fehler"}`);
+    } finally {
+      setTradingInProgress(false);
+    }
+  }
 
   useEffect(() => {
     loadFeed();
@@ -251,6 +364,48 @@ function SignalFeedView() {
         </div>
       </div>
 
+      {feed?.action_brief && (
+        <div className="card border border-[var(--accent-blue)]/20">
+          <div
+            className="flex cursor-pointer items-center justify-between p-4"
+            onClick={() => setBriefExpanded((e) => !e)}
+          >
+            <div className="flex items-center gap-2">
+              <Brain size={14} className="text-[var(--accent-blue)]" />
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--accent-blue)]">
+                Handlungsempfehlung
+              </p>
+              <span className="text-[10px] text-[var(--text-muted)]">{formatAge(feed.feed_generated_at)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  refreshActionBrief();
+                }}
+                disabled={briefRefreshing}
+                title="Neu generieren (Reasoner)"
+                className="flex items-center gap-1 rounded border border-[var(--accent-blue)]/30 px-2 py-0.5 text-[10px] text-[var(--accent-blue)] hover:opacity-80 disabled:opacity-40"
+              >
+                <RefreshCw size={10} className={briefRefreshing ? "animate-spin" : ""} />
+                Aktualisieren
+              </button>
+              {briefExpanded ? (
+                <ChevronUp size={14} className="text-[var(--text-muted)]" />
+              ) : (
+                <ChevronDown size={14} className="text-[var(--text-muted)]" />
+              )}
+            </div>
+          </div>
+
+          {briefExpanded && (
+            <div className="border-t border-[var(--border)] px-4 pb-4 pt-3">
+              <p className="text-sm leading-relaxed text-[var(--text-primary)]">{feed.action_brief}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-200">
           <div className="flex items-center gap-2 font-semibold text-red-300">
@@ -292,15 +447,6 @@ function SignalFeedView() {
           </Link>
         </div>
         <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-primary)]">{feed?.today_synthesis || "Keine aktiven Signale."}</p>
-        <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
-          <div className="flex items-center gap-2 text-[var(--text-muted)]">
-            <Brain size={15} className="text-[var(--accent-blue)]" />
-            <span className="text-xs uppercase tracking-[0.24em]">Action Brief</span>
-          </div>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-primary)]">
-            {feed?.action_brief || "Kein Action Brief verfügbar."}
-          </p>
-        </div>
       </section>
 
       <section>
@@ -330,9 +476,39 @@ function SignalFeedView() {
                   <div className="flex items-center gap-2">
                     {signal.is_new && <span className="rounded-full bg-[var(--accent-green)]/10 px-2 py-1 text-[10px] font-semibold text-[var(--accent-green)]">NEW</span>}
                     {signal.is_resolved && <span className="rounded-full bg-[var(--accent-amber)]/10 px-2 py-1 text-[10px] font-semibold text-[var(--accent-amber)]">RESOLVED</span>}
+                    {/* Position-Badge wenn offene Position vorhanden */}
+                    {signal.open_position && (
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
+                        signal.position_risk === "high"
+                          ? "bg-[var(--accent-red)]/10 text-[var(--accent-red)]"
+                          : signal.position_risk === "positive"
+                            ? "bg-[var(--accent-green)]/10 text-[var(--accent-green)]"
+                            : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
+                      }`}>
+                        {signal.open_position.direction === "long" ? "▲ Long" : "▼ Short"}
+                        {" "}${signal.open_position.entry_price?.toFixed(0)}
+                      </span>
+                    )}
                     <span className="rounded-full border border-[var(--border)] px-2 py-1 text-[10px] text-[var(--text-muted)]">
                       P{signal.priority}
                     </span>
+                    {signal.priority === 1 && !signal.is_resolved && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTradeModal({
+                            signal,
+                            qty: "1",
+                            useStop: Boolean(signal.open_position?.stop_price),
+                            useTakeProfit: Boolean(signal.open_position?.target_price),
+                          });
+                        }}
+                        title="Alpaca Paper Trade eröffnen"
+                        className="whitespace-nowrap rounded border border-[var(--accent-blue)]/30 bg-[var(--accent-blue)]/10 px-2 py-1 text-[10px] font-medium text-[var(--accent-blue)] hover:bg-[var(--accent-blue)]/20"
+                      >
+                        Paper Trade
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -415,6 +591,95 @@ function SignalFeedView() {
           <p className="text-sm text-[var(--text-muted)]">Noch keine gelösten Signale im 24h-Fenster.</p>
         )}
       </section>
+
+      {tradeModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setTradeModal(null)}
+        >
+          <div
+            className="card mx-4 w-full max-w-sm space-y-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-[var(--text-primary)]">
+                Paper Trade: {tradeModal.signal.ticker}
+              </p>
+              <button onClick={() => setTradeModal(null)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="rounded-lg bg-[var(--bg-tertiary)] p-3 text-xs text-[var(--text-secondary)]">
+              {tradeModal.signal.headline}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-[var(--text-muted)]">Anzahl Shares / Kontrakte</label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={tradeModal.qty}
+                onChange={(e) => setTradeModal((prev) => prev ? { ...prev, qty: e.target.value } : null)}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-sm font-mono text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                autoFocus
+              />
+            </div>
+
+            {tradeModal.signal.open_position && (
+              <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] p-3 text-xs text-[var(--text-secondary)]">
+                <p className="font-semibold text-[var(--text-primary)]">Risikoeinstellungen</p>
+                <label className="flex items-center justify-between gap-3">
+                  <span>Stop-Loss übernehmen</span>
+                  <input
+                    type="checkbox"
+                    checked={tradeModal.useStop}
+                    onChange={(e) => setTradeModal((prev) => prev ? { ...prev, useStop: e.target.checked } : null)}
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-3">
+                  <span>Take-Profit übernehmen</span>
+                  <input
+                    type="checkbox"
+                    checked={tradeModal.useTakeProfit}
+                    onChange={(e) => setTradeModal((prev) => prev ? { ...prev, useTakeProfit: e.target.checked } : null)}
+                  />
+                </label>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={executePaperTrade}
+                disabled={tradingInProgress || !tradeModal.qty}
+                className="flex-1 rounded-lg bg-[var(--accent-blue)] py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40"
+              >
+                {tradingInProgress ? <RefreshCw size={14} className="mx-auto animate-spin" /> : "Paper Trade eröffnen"}
+              </button>
+              <button
+                onClick={() => setTradeModal(null)}
+                className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+              >
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tradeResult && (
+        <div
+          className={`fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border px-4 py-3 text-sm font-medium shadow-lg ${
+            tradeResult.startsWith("✅")
+              ? "border-[var(--accent-green)]/30 bg-[var(--accent-green)]/10 text-[var(--accent-green)]"
+              : "border-[var(--accent-red)]/30 bg-[var(--accent-red)]/10 text-[var(--accent-red)]"
+          }`}
+          onClick={() => setTradeResult(null)}
+        >
+          {tradeResult}
+        </div>
+      )}
     </div>
   );
 }

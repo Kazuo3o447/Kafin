@@ -3,13 +3,15 @@
 import { useState, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { RefreshCw, Sun, Moon, ArrowLeft, ChevronDown, ChevronUp } from "lucide-react";
+import { RefreshCw, Sun, Moon, ArrowLeft, ChevronDown, ChevronUp, Zap } from "lucide-react";
 import { api } from "@/lib/api";
 
 type BriefingDay = {
   date: string;
   pre_market: string | null;
   after_market: string | null;
+  session_plan: string | null;
+  session_plan_at: string | null;
 };
 
 function ReportBlock({
@@ -67,8 +69,13 @@ function ReportBlock({
 export default function BriefingPage() {
   const [reports, setReports]         = useState<BriefingDay[]>([]);
   const [loading, setLoading]         = useState(true);
-  const [generating, setGenerating]   = useState<"pre" | "after" | null>(null);
+  const [generating, setGenerating]   = useState<"pre" | "after" | "plan" | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<{
+    pre: boolean;
+    after: boolean;
+    plan: boolean;
+  }>({ pre: true, after: false, plan: true });
 
   const loadReports = useCallback(async () => {
     setLoading(true);
@@ -107,6 +114,18 @@ export default function BriefingPage() {
       await loadReports();
     } catch (e) {
       console.error("After-Market generate error", e);
+    } finally {
+      setGenerating(null);
+    }
+  }
+
+  async function triggerSessionPlan() {
+    setGenerating("plan");
+    try {
+      await api.generateSessionPlan();
+      await loadReports();
+    } catch (e) {
+      console.error("Session Plan generate error", e);
     } finally {
       setGenerating(null);
     }
@@ -157,6 +176,16 @@ export default function BriefingPage() {
               : <Moon size={12} />}
             After-Market
           </button>
+          <button
+            onClick={triggerSessionPlan}
+            disabled={generating !== null}
+            className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-40"
+          >
+            {generating === "plan"
+              ? <RefreshCw size={12} className="animate-spin" />
+              : <Zap size={12} className="text-[var(--accent-blue)]" />}
+            Session Plan
+          </button>
         </div>
       </div>
 
@@ -175,7 +204,7 @@ export default function BriefingPage() {
             >
               {formatDate(r.date)}
               <span className="ml-1.5 opacity-60">
-                {[r.pre_market ? "☀" : "", r.after_market ? "🌙" : ""].filter(Boolean).join("")}
+                {[r.pre_market ? "☀" : "", r.after_market ? "🌙" : "", r.session_plan ? "⚡" : ""].filter(Boolean).join("")}
               </span>
             </button>
           ))}
@@ -190,6 +219,39 @@ export default function BriefingPage() {
         </div>
       ) : current ? (
         <div className="space-y-4">
+          {/* Session Plan */}
+          {current.session_plan && (
+            <div className="card border-l-4 border-l-[var(--accent-blue)]">
+              <div
+                className="flex items-center justify-between p-4 cursor-pointer"
+                onClick={() => setExpanded(prev => ({ ...prev, plan: !prev.plan }))}
+              >
+                <div className="flex items-center gap-2">
+                  <Zap size={13} className="text-[var(--accent-blue)]" />
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--accent-blue)]">
+                    Session Plan
+                  </p>
+                  {current.session_plan_at && (
+                    <span className="text-[10px] text-[var(--text-muted)]">
+                      {new Date(current.session_plan_at).toLocaleTimeString(
+                        "de-DE", { hour: "2-digit", minute: "2-digit" }
+                      )} Uhr
+                    </span>
+                  )}
+                </div>
+                {expanded.plan
+                  ? <ChevronUp size={14} className="text-[var(--text-muted)]" />
+                  : <ChevronDown size={14} className="text-[var(--text-muted)]" />}
+              </div>
+              {expanded.plan && (
+                <div className="px-4 pb-4 border-t border-[var(--border)] pt-3">
+                  <div className="whitespace-pre-wrap text-sm text-[var(--text-primary)] leading-relaxed font-mono">
+                    {current.session_plan}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <ReportBlock
             title={`Pre-Market · ${formatDate(current.date)}`}
             report={current.pre_market}

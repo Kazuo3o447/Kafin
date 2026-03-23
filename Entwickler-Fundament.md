@@ -1118,6 +1118,23 @@ Verwendung:
 
 ---
 
+# TEIL 11: ARCHITEKTUR-ENTSCHEIDUNGEN (v7.2.0)
+
+## Decision Snapshot Architektur (v7.2.0)
+Wird automatisch in `generate_audit_report()` angelegt.
+Enthält: Scores, Makro, Rohdaten, vollständiger Prompt (max 8000 Zeichen),
+Top-3-Treiber (DeepSeek Chat JSON-Extraktion), Failure Hypothesis.
+T+1/5/20 Outcomes: täglich 22:30 via n8n POST /update-outcomes.
+Keine manuelle Pflege nötig außer data_quality_flag.
+
+### Alpaca Integration
+Rein httpx-basiert — kein SDK. Base URL aus .env.
+IMMER Paper Trading URL: https://paper-api.alpaca.markets
+Bracket Orders: stop_loss + take_profit in einer Order.
+Fehler werden als {"error": "..."} zurückgegeben, niemals als Exception nach oben.
+
+---
+
 # TEIL 10: ERSTE SCHRITTE
 
 ## Reihenfolge zum Aufsetzen des Repositories

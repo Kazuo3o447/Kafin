@@ -110,6 +110,48 @@ tests/          → Test-Dateien
 - `routers/data.py` — Signal Feed (`/api/data/signals/feed`, `/api/data/signal-feed-config`)
 - `routers/reports.py` — Pre/After-Market Briefing (`/api/reports/generate-after-market`, `/api/reports/briefing-archive`)
 
+## Neue API-Endpunkte (v7.1.0)
+- GET  /api/data/watchlist-momentum     — Rel. Stärke Ranking vs. SPY
+- GET  /api/data/btc/snapshot           — Bitcoin Derivate-Snapshot
+- POST /api/reports/generate-session-plan — Session-Plan (Reasoner)
+- POST /api/reports/generate-btc        — BTC KI-Lagebericht
+- GET  /api/reports/btc-latest          — Letzter BTC-Report
+
+## Neue DB-Spalten (v7.1.0, daily_snapshots)
+- session_plan TEXT
+- session_plan_generated_at TIMESTAMPTZ
+- btc_report TEXT
+- btc_report_generated_at TIMESTAMPTZ
+
+## Neue API-Endpunkte (v7.2.0)
+- GET  /api/data/alpaca/account          — Paper Trading Account
+- GET  /api/data/alpaca/positions        — Offene Positionen
+- POST /api/data/alpaca/paper-trade      — Order platzieren
+- GET  /api/data/real-trades             — Echte Trades
+- POST /api/data/real-trades             — Trade erfassen
+- PUT  /api/data/real-trades/{id}        — Exit eintragen
+- GET  /api/data/decision-snapshots      — Alle Snapshots
+- POST /api/data/decision-snapshots/update-outcomes — T+1/5/20 updaten
+
+## Neue API-Endpunkte (v7.3.0)
+- GET  /api/data/lernpfade-stats          — Lernpfade Performance-Statistiken (earnings + momentum)
+- POST /api/reports/trigger-earnings-audits — Earnings Auto-Trigger (täglich 08:10)
+
+## Neue DB-Tabellen (v7.2.0)
+- `real_trades`          — Echte Trades des Traders
+- `decision_snapshots`   — Kafin-Entscheidungskontext + Outcomes
+
+## Wichtige Architektur-Entscheidungen
+- Journal existiert NICHT als separate Seite — ist Tab 3 in Performance
+- Shadow Portfolio = KI-simulierte Trades (automatisch)
+- Real Trades = vom Trader manuell/per Alpaca eröffnet
+- Decision Snapshots = unveränderlicher Tatort-Foto jeder Kafin-Empfehlung
+- Alpaca nur Paper Trading — ALPACA_BASE_URL=https://paper-api.alpaca.markets
+
+## Robustheitsfixes (v7.1.1)
+- BTC-Lagebericht nutzt Safe-Formatting für fehlende Snapshot-/CoinGlass-Daten
+- Momentum-Ranking behandelt 0.0-Veränderungen korrekt als gültige Werte
+
 ## Neue API-Endpunkte (v6.4.0)
 - GET  /api/data/peer-comparison/{ticker}   — Peer-Metriken parallel
 - GET  /api/data/watchlist-correlation      — 30T Korrelationsmatrix

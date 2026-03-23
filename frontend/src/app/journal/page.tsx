@@ -24,6 +24,11 @@ type JournalEntry = {
   notes: string | null;
   pnl: number | null;
   pnl_pct: number | null;
+  active_signals: Array<{
+    signal_type: string;
+    priority: number;
+    headline: string;
+  }>;
 };
 
 const EXIT_REASONS = [
@@ -312,6 +317,31 @@ export default function JournalPage() {
                       Bestätigen
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Aktive Signale für diese Position */}
+              {e.active_signals && e.active_signals.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {e.active_signals.map((sig: {
+                    signal_type: string;
+                    priority: number;
+                    headline: string;
+                  }, i: number) => (
+                    <span
+                      key={i}
+                      title={sig.headline}
+                      className={`text-[10px] px-2 py-0.5 rounded font-medium ${
+                        sig.priority === 1
+                          ? "bg-[var(--accent-red)]/10 text-[var(--accent-red)]"
+                          : sig.priority === 2
+                            ? "bg-amber-500/10 text-amber-400"
+                            : "bg-[var(--accent-green)]/10 text-[var(--accent-green)]"
+                      }`}
+                    >
+                      {sig.signal_type.replace(/_/g, " ")}
+                    </span>
+                  ))}
                 </div>
               )}
 

@@ -350,7 +350,49 @@ async def setup_workflows():
             }
         }
 
-        for wf in [weekday_news_workflow, weekend_news_workflow, sec_workflow, sunday_workflow, morning_workflow, earnings_review_workflow, sentiment_workflow, peer_morning_workflow, backup_workflow]:
+        # Workflow 9: Earnings Auto-Trigger (täglich 08:10 Mo-Fr)
+        earnings_auto_trigger_workflow = {
+            "name": "Kafin: Earnings Auto-Trigger (täglich 08:10)",
+            "active": True,
+            "nodes": [
+                {
+                    "parameters": {
+                        "rule": {
+                            "interval": [{
+                                "field": "cronExpression",
+                                "expression": "10 8 * * 1-5"
+                            }]
+                        }
+                    },
+                    "name": "Trigger: Mo-Fr 08:10 CET",
+                    "type": "n8n-nodes-base.scheduleTrigger",
+                    "position": [250, 300],
+                    "typeVersion": 1
+                },
+                {
+                    "parameters": {
+                        "url": "http://kafin-backend:8000/api/reports/trigger-earnings-audits",
+                        "method": "POST",
+                        "options": {"timeout": 300000}  # 5 Min — mehrere Ticker
+                    },
+                    "name": "Earnings Audits triggern",
+                    "type": "n8n-nodes-base.httpRequest",
+                    "position": [450, 300],
+                    "typeVersion": 1
+                }
+            ],
+            "connections": {
+                "Trigger: Mo-Fr 08:10 CET": {
+                    "main": [[{
+                        "node": "Earnings Audits triggern",
+                        "type": "main",
+                        "index": 0
+                    }]]
+                }
+            }
+        }
+
+        for wf in [weekday_news_workflow, weekend_news_workflow, sec_workflow, sunday_workflow, morning_workflow, earnings_review_workflow, sentiment_workflow, peer_morning_workflow, backup_workflow, earnings_auto_trigger_workflow]:
             try:
                 response = await client.post("/api/v1/workflows", json=wf)
                 if response.status_code in (200, 201):

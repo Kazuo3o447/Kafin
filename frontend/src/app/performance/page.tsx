@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { TrendingUp, TrendingDown, Target, Award, Loader2 } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, Award, Loader2, Plus, RefreshCw, Trash2, Info } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { cachedFetch, cacheAge } from "@/lib/clientCache";
@@ -52,6 +52,91 @@ type ShadowSummary = {
   worst_trade: { ticker: string; pnl_pct: number } | null;
   open_trades: ShadowTrade[];
   closed_trades: ShadowTrade[];
+};
+
+type RealTrade = {
+  id: number;
+  ticker: string;
+  direction: "long" | "short";
+  entry_date: string;
+  entry_price: number;
+  shares: number | null;
+  stop_price: number | null;
+  target_price: number | null;
+  thesis: string | null;
+  opportunity_score: number | null;
+  torpedo_score: number | null;
+  recommendation: string | null;
+  snapshot_id: number | null;
+  alpaca_order_id: string | null;
+  exit_date: string | null;
+  exit_price: number | null;
+  exit_reason: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  pnl: number | null;
+  pnl_pct: number | null;
+  active_signals: Array<{ signal_type: string; priority: number; headline: string }>;
+};
+
+type DecisionSnapshot = {
+  id: number;
+  ticker: string;
+  created_at: string;
+  opportunity_score: number | null;
+  torpedo_score: number | null;
+  recommendation: string | null;
+  macro_regime: string | null;
+  vix: number | null;
+  credit_spread_bps: number | null;
+  top_drivers: Array<{ factor: string; score: number; reasoning: string }> | null;
+  top_risks: Array<{ factor: string; score: number; reasoning: string }> | null;
+  price_at_decision: number | null;
+  rsi_at_decision: number | null;
+  iv_atm_at_decision: number | null;
+  earnings_date: string | null;
+  prompt_snapshot: string | null;
+  model_used: string | null;
+  price_t1: number | null;
+  price_t5: number | null;
+  price_t20: number | null;
+  return_t1_pct: number | null;
+  return_t5_pct: number | null;
+  return_t20_pct: number | null;
+  direction_correct_t1: boolean | null;
+  direction_correct_t5: boolean | null;
+  failure_hypothesis: string | null;
+  data_quality_flag: string | null;
+};
+
+type AlpacaAccount = {
+  configured: boolean;
+  equity?: number;
+  cash?: number;
+  buying_power?: number;
+  pnl_today?: number;
+  status?: string;
+  currency?: string;
+};
+
+type RealTradeFormState = {
+  ticker: string;
+  direction: "long" | "short";
+  entry_date: string;
+  entry_price: string;
+  shares: string;
+  stop_price: string;
+  target_price: string;
+  thesis: string;
+  opportunity_score: string;
+  torpedo_score: string;
+  recommendation: string;
+  exit_date: string;
+  exit_price: string;
+  exit_reason: string;
+  notes: string;
+  alpaca_order_id: string;
 };
 
 function buildEquityCurve(
@@ -185,23 +270,49 @@ function EquityCurveChart({
 export default function PerformancePage() {
   const [performance, setPerformance] = useState<PerformanceData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"track_record" | "shadow">("track_record");
+  const [activeTab, setActiveTab] = useState<"track_record" | "shadow" | "my_trades" | "learning">("track_record");
   const [shadowData, setShadowData] = useState<ShadowSummary | null>(null);
   const [loadingShadow, setLoadingShadow] = useState(false);
+  const [realTrades, setRealTrades] = useState<RealTrade[]>([]);
+  const [loadingRealTrades, setLoadingRealTrades] = useState(false);
+  const [snapshots, setSnapshots] = useState<DecisionSnapshot[]>([]);
+  const [loadingSnapshots, setLoadingSnapshots] = useState(false);
+  const [alpacaAccount, setAlpacaAccount] = useState<AlpacaAccount | null>(null);
+  const [alpacaPositions, setAlpacaPositions] = useState<Array<{
+    ticker: string;
+    qty: number;
+    side: string;
+    entry_price: number;
+    current_price: number;
+    market_value: number;
+    unrealized_pnl: number;
+    unrealized_pct: number;
+  }>>([]);
+  const [loadingAlpaca, setLoadingAlpaca] = useState(false);
 
   const [fromCache, setFromCache] = useState(false);
   const [dataAge, setDataAge] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Trade Modal State
-  const [showTradeModal, setShowTradeModal] = useState(false);
-  const [tradeForm, setTradeForm] = useState({
+  const [showRealTradeModal, setShowRealTradeModal] = useState(false);
+  const [realTradeForm, setRealTradeForm] = useState<RealTradeFormState>({
     ticker: "",
-    direction: "long" as "long" | "short",
-    trade_reason: "",
+    direction: "long",
+    entry_date: "",
+    entry_price: "",
+    shares: "",
+    stop_price: "",
+    target_price: "",
+    thesis: "",
+    opportunity_score: "",
+    torpedo_score: "",
+    recommendation: "",
+    exit_date: "",
+    exit_price: "",
+    exit_reason: "",
     notes: "",
+    alpaca_order_id: "",
   });
-  const [tradeReasons, setTradeReasons] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [tradeResult, setTradeResult] = useState<string | null>(null);
 
@@ -219,53 +330,72 @@ export default function PerformancePage() {
       .finally(() => setLoadingShadow(false));
   }, [activeTab, shadowData]);
 
-  // Load trade reasons
   useEffect(() => {
-    fetch("/api/shadow/trade-reasons")
-      .then(r => r.json())
-      .then(d => setTradeReasons(d.reasons || []))
-      .catch(() => {});
+    if (activeTab !== "my_trades") return;
+    if (realTrades.length === 0) {
+      loadRealTrades();
+    }
+    if (!alpacaAccount) {
+      loadAlpaca();
+    }
+  }, [activeTab, realTrades.length, alpacaAccount]);
+
+  useEffect(() => {
+    if (activeTab !== "learning" || snapshots.length > 0) return;
+    loadSnapshots();
+  }, [activeTab, snapshots.length]);
+
+  const loadShadowPortfolio = useCallback(async () => {
+    setLoadingShadow(true);
+    try {
+      const data = await api.getShadowPortfolio();
+      setShadowData(data);
+    } catch (err) {
+      console.error("Shadow portfolio fetch error", err);
+    } finally {
+      setLoadingShadow(false);
+    }
   }, []);
 
-  // Submit handler
-  const submitTrade = async () => {
-    if (!tradeForm.ticker || !tradeForm.trade_reason) {
-      return;
-    }
-    setSubmitting(true);
+  const loadRealTrades = useCallback(async () => {
+    setLoadingRealTrades(true);
     try {
-      const resp = await fetch(
-        "/api/shadow/manual-trade",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ticker:         tradeForm.ticker.toUpperCase(),
-            direction:      tradeForm.direction,
-            trade_reason:   tradeForm.trade_reason,
-          }),
-        }
-      );
-      const data = await resp.json();
-      if (data.success) {
-        setTradeResult(
-          `✓ Trade eröffnet: ${tradeForm.ticker} ` 
-          + `${tradeForm.direction.toUpperCase()}` 
-        );
-        setShowTradeModal(false);
-        // Reload
-        loadPerformance(true);
-      } else {
-        setTradeResult(
-          `Fehler: ${data.reason || data.error || "?"}` 
-        );
-      }
-    } catch {
-      setTradeResult("Verbindungsfehler");
+      const data = await api.getRealTrades();
+      setRealTrades(data.entries || []);
+    } catch (err) {
+      console.error("Real trades fetch error", err);
     } finally {
-      setSubmitting(false);
+      setLoadingRealTrades(false);
     }
-  };
+  }, []);
+
+  const loadSnapshots = useCallback(async () => {
+    setLoadingSnapshots(true);
+    try {
+      const data = await api.getDecisionSnapshots();
+      setSnapshots(data.snapshots || []);
+    } catch (err) {
+      console.error("Decision snapshots fetch error", err);
+    } finally {
+      setLoadingSnapshots(false);
+    }
+  }, []);
+
+  const loadAlpaca = useCallback(async () => {
+    setLoadingAlpaca(true);
+    try {
+      const [account, positions] = await Promise.all([
+        api.getAlpacaAccount(),
+        api.getAlpacaPositions(),
+      ]);
+      setAlpacaAccount(account);
+      setAlpacaPositions(positions.positions || []);
+    } catch (err) {
+      console.error("Alpaca fetch error", err);
+    } finally {
+      setLoadingAlpaca(false);
+    }
+  }, []);
 
   const loadPerformance = useCallback(async (invalidate = false) => {
     setLoading(!invalidate && performance.length === 0);
@@ -282,6 +412,66 @@ export default function PerformancePage() {
       setRefreshing(false);
     }
   }, [performance.length]);
+
+  const submitRealTrade = async () => {
+    if (!realTradeForm.ticker || !realTradeForm.entry_price) {
+      setTradeResult("Ticker und Entry-Preis sind Pflichtfelder.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload = {
+        ticker: realTradeForm.ticker.trim().toUpperCase(),
+        direction: realTradeForm.direction,
+        entry_date: realTradeForm.entry_date || undefined,
+        entry_price: Number(realTradeForm.entry_price),
+        shares: realTradeForm.shares ? Number(realTradeForm.shares) : undefined,
+        stop_price: realTradeForm.stop_price ? Number(realTradeForm.stop_price) : undefined,
+        target_price: realTradeForm.target_price ? Number(realTradeForm.target_price) : undefined,
+        thesis: realTradeForm.thesis || undefined,
+        opportunity_score: realTradeForm.opportunity_score ? Number(realTradeForm.opportunity_score) : undefined,
+        torpedo_score: realTradeForm.torpedo_score ? Number(realTradeForm.torpedo_score) : undefined,
+        recommendation: realTradeForm.recommendation || undefined,
+        exit_date: realTradeForm.exit_date || undefined,
+        exit_price: realTradeForm.exit_price ? Number(realTradeForm.exit_price) : undefined,
+        exit_reason: realTradeForm.exit_reason || undefined,
+        notes: realTradeForm.notes || undefined,
+        alpaca_order_id: realTradeForm.alpaca_order_id || undefined,
+      };
+
+      const resp = await api.createRealTrade(payload);
+      if (resp?.success) {
+        setTradeResult(`✓ Trade gespeichert: ${realTradeForm.ticker.toUpperCase()}`);
+        setShowRealTradeModal(false);
+        setRealTradeForm({
+          ticker: "",
+          direction: "long",
+          entry_date: "",
+          entry_price: "",
+          shares: "",
+          stop_price: "",
+          target_price: "",
+          thesis: "",
+          opportunity_score: "",
+          torpedo_score: "",
+          recommendation: "",
+          exit_date: "",
+          exit_price: "",
+          exit_reason: "",
+          notes: "",
+          alpaca_order_id: "",
+        });
+        await loadRealTrades();
+      } else {
+        setTradeResult(`Fehler: ${resp?.error || resp?.detail || "Unbekannt"}`);
+      }
+    } catch (err) {
+      setTradeResult(`Fehler: ${err instanceof Error ? err.message : "Unbekannt"}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const latest = performance[0] || {};
   const totalReviews = latest.total_reviews || 0;
@@ -659,161 +849,539 @@ export default function PerformancePage() {
     );
   };
 
-  // Trade Modal Component
-  if (showTradeModal) {
+  const refreshCurrentTab = () => {
+    loadPerformance(true);
+    if (activeTab === "shadow") {
+      loadShadowPortfolio();
+    } else if (activeTab === "my_trades") {
+      loadRealTrades();
+      loadAlpaca();
+    } else if (activeTab === "learning") {
+      loadSnapshots();
+    }
+  };
+
+  const renderRealTrades = () => {
+    const openCount = realTrades.filter((trade) => !trade.exit_date).length;
+    const closedCount = realTrades.length - openCount;
+    const totalPnl = realTrades.reduce((sum, trade) => sum + (trade.pnl || 0), 0);
+
     return (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-        onClick={() => setShowTradeModal(false)}
-      >
-        <div
-          className="card p-6 w-full max-w-md mx-4"
-          onClick={e => e.stopPropagation()}
-        >
-          <h2 className="text-base font-bold text-[var(--text-primary)] mb-4">
-            Shadow-Trade eröffnen
-          </h2>
-
-          {/* Ticker */}
-          <div className="mb-3">
-            <label className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] block mb-1">
-              Ticker
-            </label>
-            <input
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm font-mono text-[var(--text-primary)] uppercase placeholder:normal-case placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent-blue)]"
-              placeholder="z.B. NVDA"
-              value={tradeForm.ticker}
-              onChange={e => setTradeForm(f => ({
-                ...f, ticker: e.target.value
-              }))}
-            />
+      <div className="space-y-6">
+        {tradeResult && (
+          <div className={`rounded-xl border px-4 py-3 text-sm ${
+            tradeResult.startsWith("✓")
+              ? "border-[var(--accent-green)]/30 bg-[var(--accent-green)]/10 text-[var(--accent-green)]"
+              : "border-[var(--accent-red)]/30 bg-[var(--accent-red)]/10 text-[var(--accent-red)]"
+          }`}>
+            {tradeResult}
           </div>
+        )}
 
-          {/* Richtung */}
-          <div className="mb-3">
-            <label className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] block mb-1">
-              Richtung
-            </label>
-            <div className="flex gap-2">
-              {(["long", "short"] as const).map(d => (
-                <button
-                  key={d}
-                  onClick={() => setTradeForm(f =>
-                    ({ ...f, direction: d })
-                  )}
-                  className={`flex-1 rounded-lg py-2 text-sm font-semibold border transition-colors ${
-                    tradeForm.direction === d
-                      ? d === "long"
-                        ? "border-[var(--accent-green)] bg-[var(--accent-green)]/10 text-[var(--accent-green)]"
-                        : "border-[var(--accent-red)] bg-[var(--accent-red)]/10 text-[var(--accent-red)]"
-                      : "border-[var(--border)] text-[var(--text-muted)]"
-                  }`}
-                >
-                  {d === "long" ? "Long ▲" : "Short ▼"}
-                </button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)]">Meine Trades</p>
+            <h2 className="text-2xl font-bold text-[var(--text-primary)]">Echte Positionen & Trade-Ideen</h2>
+            <p className="text-sm text-[var(--text-secondary)]">Verknüpft mit Alpaca Paper Trading, falls konfiguriert.</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setTradeResult(null); setShowRealTradeModal(true); }}
+              className="flex items-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-xs font-semibold text-white hover:opacity-90"
+            >
+              <Plus size={14} />
+              Trade erfassen
+            </button>
+            <button
+              onClick={refreshCurrentTab}
+              className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+            >
+              <RefreshCw size={14} />
+              Aktualisieren
+            </button>
+          </div>
+        </div>
+
+        {loadingAlpaca ? (
+          <div className="card p-6 text-sm text-[var(--text-muted)]">Alpaca-Daten werden geladen...</div>
+        ) : alpacaAccount?.configured ? (
+          <div className="card p-5 flex flex-wrap items-center gap-6">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Alpaca Paper Trading</p>
+              <p className="mt-1 text-3xl font-bold font-mono text-[var(--text-primary)]">
+                ${Number(alpacaAccount.equity || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Cash</p>
+              <p className="font-mono text-sm text-[var(--text-primary)]">
+                ${Number(alpacaAccount.cash || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">PnL heute</p>
+              <p className={`font-mono text-sm ${(alpacaAccount.pnl_today || 0) >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"}`}>
+                {(alpacaAccount.pnl_today || 0) >= 0 ? "+" : ""}${Number(alpacaAccount.pnl_today || 0).toFixed(0)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Status</p>
+              <p className="text-sm text-[var(--text-primary)]">{alpacaAccount.status || "—"}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="card p-6 text-sm text-[var(--text-muted)]">Alpaca nicht konfiguriert. Paper Trading bleibt optional.</div>
+        )}
+
+        {alpacaPositions.length > 0 && (
+          <div className="card p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[var(--text-primary)]">Offene Alpaca-Positionen</h3>
+              <span className="text-xs text-[var(--text-muted)]">{alpacaPositions.length} Positionen</span>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {alpacaPositions.map((position) => (
+                <div key={position.ticker} className="rounded-xl border border-[var(--border)] bg-[var(--bg-tertiary)] p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-[var(--text-primary)]">{position.ticker}</span>
+                    <span className="text-[10px] rounded px-2 py-0.5 bg-[var(--accent-blue)]/10 text-[var(--accent-blue)]">{position.side}</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--text-secondary)]">
+                    <span>Qty</span><span className="text-right font-mono">{position.qty}</span>
+                    <span>Entry</span><span className="text-right font-mono">${Number(position.entry_price || 0).toFixed(2)}</span>
+                    <span>Current</span><span className="text-right font-mono">${Number(position.current_price || 0).toFixed(2)}</span>
+                    <span>PnL%</span><span className={`text-right font-mono ${(position.unrealized_pct || 0) >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"}`}>{position.unrealized_pct >= 0 ? "+" : ""}{Number(position.unrealized_pct || 0).toFixed(1)}%</span>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
+        )}
 
-          {/* Trade-Grund */}
-          <div className="mb-4">
-            <label className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] block mb-1">
-              Hauptgrund *
-            </label>
-            <select
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
-              value={tradeForm.trade_reason}
-              onChange={e => setTradeForm(f => ({
-                ...f, trade_reason: e.target.value
-              }))}
-            >
-              <option value="">— Grund wählen —</option>
-              {tradeReasons.map(r => (
-                <option key={r} value={r}>{r}</option>
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            { label: "Echte Trades", value: realTrades.length },
+            { label: "Offen", value: openCount },
+            { label: "Geschlossen / PnL", value: `${closedCount} · ${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(0)}$` },
+          ].map((item) => (
+            <div key={item.label} className="card p-4">
+              <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{item.label}</p>
+              <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">{item.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {loadingRealTrades ? (
+          <div className="card p-8 text-sm text-[var(--text-muted)]">Trades werden geladen...</div>
+        ) : realTrades.length === 0 ? (
+          <div className="card p-12 text-center text-sm text-[var(--text-muted)]">Noch keine Trades erfasst.</div>
+        ) : (
+          <div className="space-y-2">
+            {realTrades.map((trade) => {
+              const isOpen = !trade.exit_date;
+              const pnlClass = trade.pnl == null ? "text-[var(--text-muted)]" : trade.pnl >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]";
+              return (
+                <div key={trade.id} className={`card p-4 border-l-4 ${isOpen ? "border-l-[var(--accent-blue)]" : trade.pnl && trade.pnl >= 0 ? "border-l-[var(--accent-green)]" : "border-l-[var(--accent-red)]"}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link href={`/research/${trade.ticker}`} className="font-mono font-bold text-[var(--accent-blue)]">{trade.ticker}</Link>
+                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${trade.direction === "long" ? "bg-[var(--accent-green)]/10 text-[var(--accent-green)]" : "bg-[var(--accent-red)]/10 text-[var(--accent-red)]"}`}>{trade.direction.toUpperCase()}</span>
+                      {isOpen && <span className="rounded px-2 py-0.5 text-[10px] bg-[var(--accent-blue)]/10 text-[var(--accent-blue)]">OFFEN</span>}
+                      {trade.active_signals?.map((sig, idx) => (
+                        <span key={idx} title={sig.headline} className={`rounded px-2 py-0.5 text-[10px] ${sig.priority === 1 ? "bg-[var(--accent-red)]/10 text-[var(--accent-red)]" : "bg-amber-500/10 text-amber-400"}`}>
+                          {sig.signal_type?.replace(/_/g, " ")}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {trade.pnl != null && (
+                        <span className={`font-mono text-sm font-bold ${pnlClass}`}>
+                          {trade.pnl >= 0 ? "+" : ""}${Math.abs(trade.pnl).toFixed(0)}
+                          {trade.pnl_pct != null && <span className="ml-1 text-xs">({trade.pnl_pct >= 0 ? "+" : ""}{trade.pnl_pct.toFixed(1)}%)</span>}
+                        </span>
+                      )}
+                      <button
+                        onClick={async () => {
+                          await api.deleteRealTrade(trade.id);
+                          await loadRealTrades();
+                        }}
+                        className="text-[var(--text-muted)] hover:text-[var(--accent-red)]"
+                        title="Trade löschen"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-[var(--text-secondary)]">
+                    <span>Entry: ${Number(trade.entry_price || 0).toFixed(2)}</span>
+                    {trade.exit_price != null && <span>Exit: ${Number(trade.exit_price || 0).toFixed(2)}</span>}
+                    {trade.stop_price != null && <span>Stop: ${Number(trade.stop_price || 0).toFixed(2)}</span>}
+                    {trade.target_price != null && <span>Target: ${Number(trade.target_price || 0).toFixed(2)}</span>}
+                    <span>Entry-Datum: {trade.entry_date}</span>
+                  </div>
+                  {trade.thesis && <p className="mt-2 text-xs leading-relaxed text-[var(--text-secondary)]">{trade.thesis}</p>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderLearning = () => {
+    const withT5 = snapshots.filter((snapshot) => snapshot.direction_correct_t5 !== null);
+    const correct = withT5.filter((snapshot) => snapshot.direction_correct_t5).length;
+    const t5Accuracy = withT5.length > 0 ? Math.round((correct / withT5.length) * 100) : null;
+    const dataIssues = snapshots.filter((snapshot) => snapshot.data_quality_flag && snapshot.data_quality_flag !== "good").length;
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)]">Lernkurve</p>
+          <h2 className="text-2xl font-bold text-[var(--text-primary)]">Decision Snapshots & Fehlermuster</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Snapshots werden später mit Outcomes aus Prompt 22 befüllt.</p>
+        </div>
+
+        {loadingSnapshots ? (
+          <div className="card p-8 text-sm text-[var(--text-muted)]">Snapshots werden geladen...</div>
+        ) : snapshots.length === 0 ? (
+          <div className="card p-12 text-center text-sm text-[var(--text-muted)]">Noch keine Snapshots vorhanden.</div>
+        ) : (
+          <>
+            <div className="grid gap-3 md:grid-cols-4">
+              {[
+                { label: "Snapshots gesamt", value: snapshots.length.toString() },
+                { label: "T+5 Trefferquote", value: t5Accuracy !== null ? `${t5Accuracy}%` : "—" },
+                { label: "Daten-Lücken", value: dataIssues.toString() },
+                { label: "Ausgewertet", value: `${withT5.length}/${snapshots.length}` },
+              ].map((item) => (
+                <div key={item.label} className="card p-4">
+                  <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{item.label}</p>
+                  <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">{item.value}</p>
+                </div>
               ))}
-            </select>
+            </div>
+
+            <div className="space-y-2">
+              {snapshots.slice(0, 20).map((snapshot) => (
+                <div key={snapshot.id} className="card p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Link href={`/research/${snapshot.ticker}`} className="font-mono font-bold text-[var(--accent-blue)]">{snapshot.ticker}</Link>
+                      <span className="text-xs text-[var(--text-muted)]">{new Date(snapshot.created_at).toLocaleDateString("de-DE")}</span>
+                      <span className="rounded border border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--text-muted)]">{snapshot.recommendation || "—"}</span>
+                      {snapshot.data_quality_flag && snapshot.data_quality_flag !== "good" && (
+                        <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-400">{snapshot.data_quality_flag.replace(/_/g, " ")}</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-3 font-mono text-xs">
+                      {[
+                        { label: "T+1", val: snapshot.return_t1_pct },
+                        { label: "T+5", val: snapshot.return_t5_pct },
+                        { label: "T+20", val: snapshot.return_t20_pct },
+                      ].map((metric) => (
+                        <span key={metric.label} className={metric.val == null ? "text-[var(--text-muted)]" : metric.val >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"}>
+                          {metric.label}: {metric.val == null ? "—" : `${metric.val >= 0 ? "+" : ""}${metric.val.toFixed(1)}%`}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {(snapshot.top_drivers?.length || snapshot.top_risks?.length) ? (
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      {snapshot.top_drivers?.slice(0, 3).map((driver, idx) => (
+                        <span key={`d-${idx}`} title={driver.reasoning} className="rounded bg-[var(--accent-green)]/10 px-2 py-0.5 text-[10px] text-[var(--accent-green)]">↑ {driver.factor}</span>
+                      ))}
+                      {snapshot.top_risks?.slice(0, 2).map((risk, idx) => (
+                        <span key={`r-${idx}`} title={risk.reasoning} className="rounded bg-[var(--accent-red)]/10 px-2 py-0.5 text-[10px] text-[var(--accent-red)]">↓ {risk.factor}</span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {snapshot.failure_hypothesis && (
+                    <p className="mt-2 text-xs italic text-amber-400">Hypothese: {snapshot.failure_hypothesis}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const renderRealTradeModal = () => {
+    if (!showRealTradeModal) return null;
+
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+        onClick={() => setShowRealTradeModal(false)}
+      >
+        <div
+          className="card mx-4 w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">Neuen realen Trade erfassen</h2>
+              <p className="text-xs text-[var(--text-secondary)]">Optionale Felder reichen, um Journal und Alpaca zu verbinden.</p>
+            </div>
+            <button onClick={() => setShowRealTradeModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">✕</button>
           </div>
 
-          {/* Buttons */}
-          <div className="flex gap-2">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Ticker *</span>
+              <input
+                type="text"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm font-mono uppercase text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.ticker}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, ticker: e.target.value.toUpperCase() }))}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Direction</span>
+              <select
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.direction}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, direction: e.target.value as "long" | "short" }))}
+              >
+                <option value="long">long</option>
+                <option value="short">short</option>
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Entry Date</span>
+              <input
+                type="date"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.entry_date}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, entry_date: e.target.value }))}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Entry Price *</span>
+              <input
+                type="number"
+                step="0.0001"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.entry_price}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, entry_price: e.target.value }))}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Shares</span>
+              <input
+                type="number"
+                step="0.0001"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.shares}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, shares: e.target.value }))}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Stop Price</span>
+              <input
+                type="number"
+                step="0.0001"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.stop_price}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, stop_price: e.target.value }))}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Target Price</span>
+              <input
+                type="number"
+                step="0.0001"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.target_price}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, target_price: e.target.value }))}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Opportunity Score</span>
+              <input
+                type="number"
+                step="0.1"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.opportunity_score}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, opportunity_score: e.target.value }))}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Torpedo Score</span>
+              <input
+                type="number"
+                step="0.1"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.torpedo_score}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, torpedo_score: e.target.value }))}
+              />
+            </label>
+
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Recommendation</span>
+              <input
+                type="text"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.recommendation}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, recommendation: e.target.value }))}
+              />
+            </label>
+
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Thesis</span>
+              <textarea
+                className="min-h-24 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.thesis}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, thesis: e.target.value }))}
+              />
+            </label>
+
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Notes</span>
+              <textarea
+                className="min-h-20 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.notes}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, notes: e.target.value }))}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Exit Date</span>
+              <input
+                type="date"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.exit_date}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, exit_date: e.target.value }))}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Exit Price</span>
+              <input
+                type="number"
+                step="0.0001"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.exit_price}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, exit_price: e.target.value }))}
+              />
+            </label>
+
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Exit Reason</span>
+              <input
+                type="text"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.exit_reason}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, exit_reason: e.target.value }))}
+              />
+            </label>
+
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Alpaca Order ID</span>
+              <input
+                type="text"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                value={realTradeForm.alpaca_order_id}
+                onChange={(e) => setRealTradeForm((prev) => ({ ...prev, alpaca_order_id: e.target.value }))}
+              />
+            </label>
+          </div>
+
+          <div className="mt-5 flex gap-2">
             <button
-              onClick={() => setShowTradeModal(false)}
+              onClick={() => setShowRealTradeModal(false)}
               className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]"
             >
               Abbrechen
             </button>
             <button
-              onClick={submitTrade}
-              disabled={
-                submitting
-                || !tradeForm.ticker
-                || !tradeForm.trade_reason
-              }
+              onClick={submitRealTrade}
+              disabled={submitting || !realTradeForm.ticker || !realTradeForm.entry_price}
               className="flex-1 rounded-lg bg-[var(--accent-blue)] py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
-              {submitting ? "Öffne…" : "Trade eröffnen"}
+              {submitting ? "Speichere…" : "Trade speichern"}
             </button>
           </div>
-
-          {tradeResult && (
-            <p className={`text-xs mt-3 text-center ${
-              tradeResult.startsWith("✓")
-                ? "text-[var(--accent-green)]"
-                : "text-[var(--accent-red)]"
-            }`}>
-              {tradeResult}
-            </p>
-          )}
         </div>
       </div>
     );
-  }
+  };
 
   return (
     <div className="space-y-8 p-8">
       <div>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-4xl font-bold text-[var(--text-primary)]">Performance</h1>
-            <p className="text-sm text-[var(--text-secondary)] mt-2">Track Record & Shadow Portfolio</p>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">KI-Trefferquote, Paper Trades, reale Trades und Lernkurve</p>
           </div>
-          <button
-            onClick={() => {
-              setTradeResult(null);
-              setShowTradeModal(true);
-            }}
-            className="flex items-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-xs font-semibold text-white hover:opacity-90"
-          >
-            + Trade eröffnen
-          </button>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/performance/lernpfade"
+              className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]
+                         hover:text-[var(--text-primary)] border border-[var(--border)]
+                         rounded-lg px-3 py-1.5 transition-colors"
+            >
+              <TrendingUp size={13} />
+              Lernpfade
+            </Link>
+            <button
+              onClick={refreshCurrentTab}
+              className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+            >
+              <RefreshCw size={14} />
+              Aktualisieren
+            </button>
+          </div>
         </div>
-        <div className="mt-2"><CacheStatus fromCache={fromCache} ageSeconds={dataAge} onRefresh={() => loadPerformance(true)} refreshing={refreshing || loading} /></div>
+        <div className="mt-2">
+          <CacheStatus fromCache={fromCache} ageSeconds={dataAge} onRefresh={() => loadPerformance(true)} refreshing={refreshing || loading} />
+        </div>
       </div>
 
       <div className="flex w-full items-center gap-2 rounded-xl bg-[var(--bg-tertiary)] p-1">
-        <button
-          className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition ${
-            activeTab === "track_record"
-              ? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow"
-              : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-          }`}
-          onClick={() => setActiveTab("track_record")}
-        >
-          Track Record
-        </button>
-        <button
-          className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition ${
-            activeTab === "shadow"
-              ? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow"
-              : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-          }`}
-          onClick={() => setActiveTab("shadow")}
-        >
-          Shadow Portfolio
-        </button>
+        {[
+          { id: "track_record", label: "KI-Trefferquote" },
+          { id: "shadow", label: "Paper Trades" },
+          { id: "my_trades", label: "Meine Trades" },
+          { id: "learning", label: "Lernkurve" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition ${
+              activeTab === tab.id
+                ? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow"
+                : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            }`}
+            onClick={() => setActiveTab(tab.id as typeof activeTab)}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {activeTab === "track_record" ? (loading ? renderLoading() : renderTrackRecord()) : renderShadowPortfolio()}
+      {activeTab === "track_record"
+        ? (loading ? renderLoading() : renderTrackRecord())
+        : activeTab === "shadow"
+          ? renderShadowPortfolio()
+          : activeTab === "my_trades"
+            ? renderRealTrades()
+            : renderLearning()}
+
+      {renderRealTradeModal()}
     </div>
   );
 }

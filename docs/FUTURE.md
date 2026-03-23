@@ -5,6 +5,102 @@
 
 ---
 
+## 🔮 FEATURE: Separate Scoring-Engines (Earnings vs. Momentum)
+
+**Status: VORBEREITET — Daten werden gesammelt**
+**Aktivierbar ab: 15+ ausgewerteten Outcomes pro Lernpfad**
+**Geschätzter Zeitpunkt: nach 2-3 Monaten aktivem Trading**
+
+### Warum zwei Engines?
+
+Kafin kennt heute einen universellen Opp-Score mit festen Gewichtungen.
+Dieser Score gilt gleich für Earnings-Trades (T–5 vor Meldung) und
+Momentum-Trades (zwischen Earnings). Das ist falsch — weil beide Märkte
+fundamental andere Signale dominieren.
+
+**Earnings Intelligence (Pfad A):**
+- Dominante Faktoren: Whisper-Delta (15%), Earnings-Momentum (15%),
+  Guidance-Trend (15%), Insider-Aktivität
+- Untergeordnet: RSI, SMA50-Cross, RVOL (fast irrelevant)
+- Weil: Earnings bewegen den Kurs unabhängig vom technischen Setup.
+  Ein überverkaufter RSI hilft nicht wenn die Guidance enttäuscht.
+
+**Momentum & Narrative (Pfad B):**
+- Dominante Faktoren: Relative Stärke vs. SPY, Narrative Shift,
+  RVOL-Spike, SMA50-Cross, Sektor-Kapitalfluss
+- Untergeordnet: Earnings-Beat-Serie, Guidance-Trend
+- Weil: Der Markt hat alte Earnings verdaut. Was zählt: läuft
+  Kapital in den Sektor? Dreht der Narrative?
+
+### Was bereits implementiert ist
+
+- `decision_snapshots.trade_type` Feld ("earnings" | "momentum")
+  wird automatisch bei jedem Audit-Report gesetzt
+- Getrennte Trefferquoten-Statistiken in Performance → Lernpfade
+- Outcomes (T+1, T+5, T+20, Stop-Hit, Target-Hit) pro Pfad separat
+
+### Implementierungsplan (wenn Daten vorliegen)
+
+**Phase 1 — Analyse (ab 15 Outcomes/Pfad):**
+Vergleiche für jeden Scoring-Faktor:
+- Korrelation Faktor-Score mit tatsächlichem T+5-Return pro Pfad
+- Wenn Faktor X bei Momentum-Trades keine Korrelation zeigt:
+  Gewichtung reduzieren (nicht auf 0, aber auf 0.03)
+
+**Phase 2 — Zwei Scoring-Configs (ab 25 Outcomes/Pfad):**
+```yaml
+# config/scoring_earnings.yaml
+opportunity_score:
+  earnings_momentum:    0.20  # erhöht von 0.15
+  whisper_delta:        0.20  # erhöht von 0.15
+  guidance_trend:       0.18  # erhöht von 0.15
+  insider_activity:     0.12  # erhöht von 0.05
+  valuation_regime:     0.12  # reduziert von 0.15
+  technical_setup:      0.08  # reduziert von 0.10
+  sector_regime:        0.05  # reduziert von 0.10
+  short_squeeze_potential: 0.03
+  options_flow:         0.02
+
+# config/scoring_momentum.yaml
+opportunity_score:
+  sector_regime:        0.20  # erhöht von 0.10
+  technical_setup:      0.20  # erhöht von 0.10
+  short_squeeze_potential: 0.15  # erhöht von 0.10
+  insider_activity:     0.12  # erhöht von 0.05
+  options_flow:         0.10  # erhöht von 0.05
+  valuation_regime:     0.10  # reduziert von 0.15
+  guidance_trend:       0.07  # reduziert von 0.15
+  earnings_momentum:    0.04  # reduziert von 0.15
+  whisper_delta:        0.02  # reduziert von 0.15
+```
+
+**Phase 3 — Engine-Selektion in generate_audit_report():**
+```python
+profile = "earnings" if earnings_countdown <= 7 else "momentum"
+scoring_config = load_scoring_config(profile)
+opp_score = await calculate_opportunity_score(ticker, data,
+                                               scoring_config=scoring_config)
+```
+
+**Phase 4 — Adaptive Gewichtung (ab 50+ Outcomes/Pfad):**
+Score-Gewichtungen passen sich automatisch an historische
+Trefferquoten an. Nur sinnvoll mit statistisch signifikanter
+Datenbasis und kontrollierter Validierung.
+
+### Warum jetzt noch nicht
+
+1. Zu wenig Daten: Ohne 15+ Outcomes pro Pfad ist jede
+   Gewichtungsanpassung Raten, kein Lernen.
+2. Overfitting-Risiko: Kleine Datenbasis → Zufallsmuster
+   werden als Signal interpretiert.
+3. Pragmatismus: Der universelle Score ist gut genug um zu starten.
+   Erst wenn er systematisch bei einem Pfad versagt lohnt die Trennung.
+
+**Trigger für Aktivierung:** Performance → Lernpfade zeigt
+"Kalibrierung verfügbar" für beide Pfade.
+
+---
+
 ## ✅ FEATURE: Modular Backend Architecture (v6.1.5)
 
 **Status: ✅ ERLEDIGT — v6.1.5 (22.03.2026)**

@@ -1,7 +1,7 @@
 version: '3.8'
 
-# Kafin v6.1.6 - Chart Analysis Complete Overhaul
-# Aktuelle Features: Immer sichtbare Begründungen, ETF/Index Research, vollständige Audit-Prompts
+# Kafin v7.3.0 - Lernpfade + Earnings Auto-Trigger
+# Aktuelle Features: Performance-Lernpfade, automatischer Earnings-Trigger, TypeScript-Optimierung
 
 services:
   postgres:

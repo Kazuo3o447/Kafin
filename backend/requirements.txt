@@ -1,5 +1,5 @@
-# Kafin v6.1.4 - Prompt Quality + Modell-Optimierung
-# Aktuelle Features: API Usage Tracking, Prompt Quality v0.4, DeepSeek Modell-Matrix
+# Kafin v7.3.0 - Lernpfade + Earnings Auto-Trigger
+# Aktuelle Features: Performance-Lernpfade, Earnings Auto-Trigger, TypeScript-Fixes
 
 fastapi>=0.110.0
 uvicorn>=0.29.0

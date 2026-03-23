@@ -4,7 +4,10 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 
 ## 🚀 Aktuelle Features (März 2026)
 
-### Core Funktionalität
+### v7.3.0 Highlights
+- **Performance-Lernpfade**: Earnings & Momentum Kalibrierungs-Tracking mit Accuracy-Statistiken
+- **Earnings Auto-Trigger**: Täglich 08:10 CET automatische Shadow Trades bei starken Signalen
+- **TypeScript-Optimierung**: Alle Settings-Fehler behoben, null-safe Rendering
 - **Watchlist Management**: Hinzufügen/Entfernen von Tickern mit automatischer Datenanreicherung
 - **Real-time News**: FinBERT-gestützte Sentiment-Analyse mit Material-Event-Detection
 - **Chart Intelligence v6.2.0**: Immer sichtbare Begründungen + ETF/Index-Unterstützung
@@ -109,15 +112,15 @@ docker-compose up -d kafin-frontend
 - **Web Dashboard**: http://localhost:3000
 - **Signal Feed**: http://localhost:3000/ (neues Dashboard)
 - **Markets Dashboard**: http://localhost:3000/markets
+- **Performance**: http://localhost:3000/performance (mit Lernpfade-Tab)
 - **Briefing**: http://localhost:3000/briefing (Pre/After-Market Briefings)
-- **Status Dashboard**: http://localhost:3000/status
-- **Hacker Terminal**: http://localhost:3000/terminal
-- **API Dokumentation**: http://localhost:8000/docs
+- **Settings**: http://localhost:3000/settings (System-Status & Konfiguration)
+- **API Dokumentation**: http://localhost:8002/docs
 - **n8n Workflows**: http://localhost:5678
 
 ### Frontend API-Hinweis
 - Browser-Requests laufen im Frontend primär über relative `/api/...`-Pfade und werden per Next-Rewrite an das Backend weitergereicht.
-- Lokale Default-API-Ziele sind auf `http://localhost:8000` ausgerichtet; `8001` ist nur für den Docker-Host-Port relevant.
+- Lokale Default-API-Ziele sind auf `http://localhost:8002` ausgerichtet (Docker-Host-Port).
 
 ## 📊 Plattform-Architektur
 

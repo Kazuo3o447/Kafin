@@ -701,6 +701,12 @@ Module für KI-Analyse, Scoring und Report-Generierung.
 | scoring.py | config/scoring.yaml, schemas/scores.py | Berechnet Opportunity + Torpedo Score |
 | report_generator.py | Alle obigen Module | Generiert den vollständigen Audit-Report |
 
+### `call_deepseek_chat()` (v6.4.0)
+Multi-Turn Variante von `call_deepseek()`. Nimmt `messages: list[dict]` 
+mit vollständiger Gesprächshistorie. System-Prompt wird vorangestellt.
+max_tokens bewusst auf 400 begrenzt — Chat ist kein Report-Generator.
+Retry-Logik identisch zur Single-Turn-Funktion.
+
 ## Datenfluss
 1. data/ Module liefern Rohdaten als Pydantic-Models
 2. finbert.py filtert News-Headlines
@@ -1060,6 +1066,42 @@ Erstelle `tests/test_[modul].py` mit Smoke-Test gegen Mock-Daten
 
 **Wenn fertig:**
 Update `STATUS.md` → Modul auf ✅ setzen
+```
+
+---
+
+# TEIL 9: FRONTEND-KOMPONENTEN
+
+## frontend/src/components/README.md
+```markdown
+# Wiederverwendbare React-Komponenten
+
+Komponenten, die auf mehreren Pages verwendet werden.
+
+## Komponenten
+
+### ChartAnalysisSection (v6.4.0 — verschoben)
+War: `frontend/src/app/watchlist/[ticker]/ChartAnalysisSection.tsx` 
+Jetzt: `frontend/src/components/ChartAnalysisSection.tsx` 
+Props: `ticker`, `expectedMovePct?`, `currentPrice?` 
+Timeframes: "3mo" | "6mo" | "1y" | "2y" (2y = Weekly-Kerzen)
+
+Features:
+- Kerzen-Chart mit TradingView Lightweight Charts
+- SMA50/200 Einzeichnung
+- AI-Levels (Entry/Stop/Support/Resistance)
+- Expected-Move-Lines (±IV%)
+- Timeframe-Toggle mit Weekly-Kennzeichnung
+- Responsive Design für Mobile
+
+Verwendung:
+```tsx
+<ChartAnalysisSection 
+  ticker="AAPL" 
+  expectedMovePct={data.expected_move_pct} 
+  currentPrice={data.price} 
+/>
+```
 ```
 
 ---

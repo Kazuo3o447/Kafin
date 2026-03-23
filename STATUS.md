@@ -8,6 +8,11 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 3. Skimme die historischen Meilensteine nur für Kontext oder Audit-Zwecke.
 
 ## 🟢 Aktueller Stand
+- **Trader-Entscheidungsqualität v6.4.0**: ChartAnalysisSection auf Research-Page,
+  Expected-Move-Lines, Weekly-Timeframe-Toggle (3M/6M/1J/2J-W), Position-Sizer mit
+  ATR-Stop + echtem R:R + Options-Sizing + localStorage-Persistenz,
+  Multi-Turn AI-Chat (TickerChatBlock), Peer-Comparison-Panel,
+  Korrelations-Heatmap (Watchlist), Trade-Journal (/journal)
 - **AI-Chat Interface v6.4.0**: Multi-Turn DeepSeek Chat pro Ticker mit kontext-basierten Antworten, Was-wenn-Szenarien und Options-Setup-Empfehlungen
 - **Position Sizer v2.0**: Vollständige localStorage Persistenz, ATR-Stop-Loss Vorschläge, echtes R:R mit target1, Options-Sizing mit IV-basierten Prämien
 - **Chart Analysis Integration**: Expected-Move-Lines, Shared Component von Watchlist zu Research-Page
@@ -50,6 +55,13 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 | Chart Analyst | `backend/app/analysis/chart_analyst.py` | Chart-Analyse mit DeepSeek, max_tokens 2048, vollständige Begründungen |
 | Report Generator | `backend/app/analysis/report_generator.py` | Audit/Morning/Weekly Report Generierung mit Prompts v0.4 |
 | Post Earnings | `backend/app/analysis/post_earnings_review.py` | Post-Earnings Reviews mit Fear & Greed Kontext |
+| Chart-Komponente   | `frontend/src/components/ChartAnalysisSection.tsx` | Kerzen + SMA + AI-Levels + Expected Move |
+| Peer-Vergleich     | `GET /api/data/peer-comparison/{ticker}`          | PE/PS/RVOL/5T für Hauptticker + Peers   |
+| Korrelation        | `GET /api/data/watchlist-correlation`             | 30T-Return-Matrix, 4h Cache             |
+| AI-Chat            | `POST /api/analysis/chat/{ticker}`                | Multi-Turn DeepSeek, Kontext-aware      |
+| Trade-Journal      | `backend/app/routers/journal.py`                  | CRUD für trade_journal-Tabelle          |
+| Journal-Page       | `frontend/src/app/journal/page.tsx`               | P&L-Tracking, Entry/Exit-Erfassung     |
+| DeepSeek Multi-Turn| `backend/app/analysis/deepseek.py`               | `call_deepseek_chat()` für Chat         |
 | Prompt Templates | `prompts/audit_report.md`, `prompts/post_earnings.md`, `prompts/morning_briefing.md` | KI-Prompts v0.4 mit vollständigen Platzhaltern |
 | API Usage Endpoint | `GET /api/admin/api-usage` | Aggregierte API Usage mit Echtzeit-Daten und Limits |
 | News Pipeline | `backend/app/data/news_processor.py` | News-Extraction mit Groq, Rate Limit 20/h |

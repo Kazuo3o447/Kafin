@@ -2,32 +2,48 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
-## [6.4.0] - 2026-03-23 - AI-Chat Interface & Position Sizer Enhancement
+## [6.4.0] - 2026-03-23 - Trader-Entscheidungsqualität
 
-### 🤖 Multi-Turn AI-Chat pro Ticker
-- **TickerChatBlock**: Vollwertiges Chat-Interface auf Research-Page
-- **DeepSeek Multi-Turn**: `call_deepseek_chat()` für Gesprächsverlauf
-- **Kontext-basierte Antworten**: Scores, Metriken, letzter Report als System-Prompt
-- **Was-wenn-Szenarien**: "Was wenn VIX auf 35 steigt?" etc.
-- **Options-Setup-Empfehlungen**: Basierend auf aktueller Empfehlung
-- **150-Wörter-Regel**: Kurze, prägnante Antworten (max_tokens=400)
-- **No-Index-Shorts Constraint**: Nur Sektor-ETFs, Einzeltitel oder Pair-Trades
+### 📊 Chart & Analyse
+- **ChartAnalysisSection verschoben**: Von `watchlist/[ticker]/` nach `src/components/` 
+  → wiederverwendbar auf Research- und Watchlist-Page
+- **Chart auf Research-Page**: `ChartAnalysisSection` mit Kerzen, SMA50/200,
+  AI-Levels (Entry/Stop/Support/Resistance) und Expected-Move-Lines (±IV%)
+- **Timeframe-Toggle erweitert**: 3M / 6M / 1J / 2J(W) — Weekly explizit gekennzeichnet
+- **Expected Move als Price-Lines**: ±IV-ATM-Kegel direkt im Kerzen-Chart eingezeichnet
 
-### 💰 Position Sizer v2.0
-- **Vollständige Persistenz**: riskPercent, stopLoss, accountSize in localStorage
-- **ATR-Stop-Loss Vorschlag**: Automatische Berechnung aus data.atr_14
-- **Echtes R:R Verhältnis**: target1 aus ChartAnalysis statt fester 5% Annahme
-- **Options-Sizing**: ATM-Prämie-Schätzung aus IV, Kontrakt-Berechnung
-- **Expected Move Anzeige**: ±XX% aus data.expected_move_pct
-- **Kapitaleinsatz**: totalCost statt nur Aktienpreis
+### 🧮 Position Sizing
+- **ATR-Stop-Vorschlag**: Stop-Loss-Feld wird beim ersten Öffnen automatisch
+  mit ATR(14)/Kurs% vorausgefüllt
+- **Echtes R:R**: Verhältnis nutzt `target_1` aus Chart-Analyse statt hardcoded 5%
+- **Options-Sizing**: Kontrakt-Anzahl basierend auf IV-ATM und Risiko-Betrag
+- **Vollständige Persistenz**: Kontostand, Risk% und Stop% in localStorage
 
-### 📊 ChartAnalysis Integration
-- **Expected-Move-Lines**: Visuelle Linien im Chart bei +EM/-EM
-- **Shared Component**: Von Watchlist zu Research-Page verschoben
-- **Props-Erweiterung**: expectedMovePct, currentPrice für Linien
+### 🤖 AI-Dialog
+- **TickerChatBlock**: Multi-Turn DeepSeek Chat auf der Research-Page
+- **`call_deepseek_chat()`**: Neue Multi-Turn-Funktion in `deepseek.py` 
+- **Kontext-aware**: System-Prompt enthält Scores, Metriken und Audit-Report-Auszug
+- **Suggestion-Chips**: Vorgefertigte Fragen für schnellen Einstieg
+- **No-Index-Short-Guardrail**: Im System-Prompt verankert
 
-### 🔧 Backend API Erweiterung
-- **/api/analysis/chat/{ticker}**: Neuer Multi-Turn Endpoint
+### 👥 Peer-Vergleich
+- **PeerComparisonBlock**: PE/PS/RVOL/MCap/5T-Performance side-by-side
+- **`/api/data/peer-comparison/{ticker}`**: Neuer Endpoint, parallel via asyncio.gather
+- **Hauptticker hervorgehoben**: Blauer Highlight + Pfeil-Marker
+
+### 🔗 Portfolio-Risiko
+- **Korrelations-Heatmap**: 30T-Return-Korrelation aller Watchlist-Ticker
+- **`/api/data/watchlist-correlation`**: Serverseitige pandas-Berechnung, 4h Cache
+- **Konzentrationswarnung**: Automatisch bei ≥3 Paaren mit Korrelation ≥0.75
+- **On-Demand**: Nicht beim Page-Load — nur wenn Trader explizit anfordert
+
+### 📓 Trade-Journal
+- **Neue Page `/journal`**: Offene + geschlossene Positionen, P&L-Tracking
+- **`trade_journal`-Tabelle**: Entry, Stop, Ziel, These, Scores, Exit + Grund
+- **P&L serverseitig**: Berechnung mit direction-Awareness (Long/Short)
+- **Sidebar-Link**: Navigation unter "Journal" ergänzt
+- **Neue API-Methoden**: getJournal, createJournalEntry, updateJournalEntry,
+  deleteJournalEntry in `api.ts`
 - **Pydantic-Modelle**: ChatMessage, TickerChatRequest für Type-Safety
 - **8-Nachrichten-Begrenzung**: Serverseitig für Performance
 - **Usage-Tracking**: Token-Verbrauch für DeepSeek Chat

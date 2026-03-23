@@ -104,3 +104,18 @@ backend/app/memory/     → Gedächtnis-System (Supabase CRUD)
 backend/app/alerts/     → Telegram + E-Mail
 database/       → SQL-Schema-Definitionen
 tests/          → Test-Dateien
+
+## Neue Routers (v6.4.0)
+- `routers/journal.py` — Trade-Journal CRUD
+
+## Neue API-Endpunkte (v6.4.0)
+- GET  /api/data/peer-comparison/{ticker}   — Peer-Metriken parallel
+- GET  /api/data/watchlist-correlation      — 30T Korrelationsmatrix
+- POST /api/analysis/chat/{ticker}          — Multi-Turn AI-Chat
+- GET  /api/journal                         — Trade-Journal lesen
+- POST /api/journal                         — Trade-Journal schreiben
+- PUT  /api/journal/{id}                    — Exit eintragen
+- DELETE /api/journal/{id}                  — Eintrag löschen
+
+## Neue DB-Tabelle (v6.4.0)
+- `trade_journal` — Echte Trades mit Entry/Exit/P&L/These

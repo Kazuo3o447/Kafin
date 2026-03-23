@@ -1071,7 +1071,7 @@ async def get_market_news_for_sentiment() -> dict:
     try:
         # Alle Headlines auf einmal (Batch ist effizienter)
         all_headlines = [h["headline"] for h in combined]
-        scores = analyze_sentiment_batch(all_headlines)
+        scores = await asyncio.to_thread(analyze_sentiment_batch, all_headlines)
 
         for i, item in enumerate(combined):
             score = scores[i] if i < len(scores) else 0.0

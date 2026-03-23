@@ -61,19 +61,15 @@ KNOWN_MAPPINGS = {
 }
 
 
-def _get_price_for_ticker(ticker_str: str) -> Optional[float]:
+async def _get_price_for_ticker(ticker_str: str) -> Optional[float]:
     """Synchron — prüft ob ein Ticker einen validen Preis liefert."""
     try:
         def _get_stock():
-
-        
-        return yf.Ticker(ticker)
+            return yf.Ticker(ticker_str)
 
         stock = await asyncio.to_thread(_get_stock)
         def _get_fast_info():
-
-        
-        return stock.fast_info
+            return stock.fast_info
 
         fi = await asyncio.to_thread(_get_fast_info)
         price = getattr(fi, "last_price", None)
@@ -81,9 +77,7 @@ def _get_price_for_ticker(ticker_str: str) -> Optional[float]:
             return float(price)
         # Fallback via history
         def _get_hist():
-
-        
-        return stock.history(period=f"{max(days, 2)}d")
+            return stock.history(period=f"{max(days, 2)}d")
 
         hist = await asyncio.to_thread(_get_hist)
         if not hist.empty:
@@ -93,13 +87,11 @@ def _get_price_for_ticker(ticker_str: str) -> Optional[float]:
         return None
 
 
-def _count_data_fields(ticker_str: str) -> int:
+async def _count_data_fields(ticker_str: str) -> int:
     """Zählt wie viele Kernfelder für diesen Ticker verfügbar sind."""
     try:
         def _get_stock():
-
-        
-        return yf.Ticker(ticker)
+            return yf.Ticker(ticker_str)
 
         stock = await asyncio.to_thread(_get_stock)
         info = stock.info
@@ -157,12 +149,12 @@ async def resolve_ticker(ticker: str) -> dict:
             }
 
     # 2. Originalticker prüfen
-    def _check_original():
-        p = _get_price_for_ticker(ticker)
-        fields = _count_data_fields(ticker) if p else 0
+    async def _check_original():
+        p = await _get_price_for_ticker(ticker)
+        fields = await _count_data_fields(ticker) if p else 0
         return p, fields
 
-    orig_price, orig_fields = await asyncio.to_thread(_check_original)
+    orig_price, orig_fields = await _check_original()
 
     # Originalticker hat gute Daten → nehmen
     if orig_price and orig_fields >= 5:
@@ -207,7 +199,13 @@ async def resolve_ticker(ticker: str) -> dict:
                 results.append((c, p, fields))
         return results
 
-    found = await asyncio.to_thread(_check_all_candidates)
+    # Da _get_price_for_ticker und _count_data_fields async sind, müssen wir einzeln awaiten
+    found = []
+    for c in candidates:
+        p = await _get_price_for_ticker(c)
+        if p:
+            fields = await _count_data_fields(c)
+            found.append((c, p, fields))
 
     # Besten Kandidaten nach Feldanzahl sortieren
     if found:

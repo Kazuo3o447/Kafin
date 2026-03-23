@@ -126,27 +126,34 @@ async def get_analyst_estimates(ticker: str) -> EarningsExpectation | None:
 
 @rate_limit("fmp")
 async def get_earnings_history(ticker: str, limit: int = 8) -> EarningsHistorySummary | None:
-    """Holt historische Earnings-Surprises."""
-    data = await _fmp_get("/stable/earnings-surprises", {"symbol": ticker})
-    if data is None:
-        data = await _fmp_get(f"/api/v3/earnings-surprises/{ticker}")
+    """Holt historische Earnings-Surprises aus dem Calendar (Legacy Endpoints sind deprecated)."""
+    # Verwende Calendar statt deprecated surprises endpoint
+    data = await _fmp_get("/stable/earnings-calendar")
     if not data:
-        logger.error(f"FMP Earnings History für {ticker} nicht verfügbar - API-Fehler oder Rate Limit.")
+        logger.error(f"FMP Earnings Calendar nicht verfügbar - API-Fehler oder Rate Limit.")
         return None
 
     if not isinstance(data, list):
         return None
 
-    data = data[:limit]
+    # Filtere nur den gewünschten Ticker
+    ticker_data = [item for item in data if item.get("symbol") == ticker]
+    if not ticker_data:
+        logger.warning(f"Keine Earnings-Daten für {ticker} im Calendar gefunden.")
+        return None
+
+    # Sortiere nach Datum absteigend (neueste zuerst)
+    ticker_data.sort(key=lambda x: x.get("date", ""), reverse=True)
+    ticker_data = ticker_data[:limit]
 
     beats = 0
     misses = 0
     surprises = []
     all_quarters = []
 
-    for q in data:
-        actual = q.get("actualEarningResult")
-        est = q.get("estimatedEarning")
+    for q in ticker_data:
+        actual = q.get("epsActual")
+        est = q.get("epsEstimated")
         q_date = q.get("date", "")
 
         if actual is not None and est is not None:
@@ -158,9 +165,17 @@ async def get_earnings_history(ticker: str, limit: int = 8) -> EarningsHistorySu
             surprise_pct = ((actual - est) / abs(est)) * 100 if est != 0 else 0
             surprises.append(surprise_pct)
 
+            # Erstelle Quartals-ID aus Datum (z.B. "2025-Q1")
+            try:
+                from datetime import datetime
+                dt = datetime.strptime(q_date, "%Y-%m-%d")
+                quarter = f"{dt.year}-Q{(dt.month - 1) // 3 + 1}"
+            except:
+                quarter = q_date
+
             all_quarters.append(EarningsHistory(
                 ticker=ticker,
-                quarter=q_date,
+                quarter=quarter,
                 eps_actual=actual,
                 eps_consensus=est,
                 eps_surprise_percent=round(surprise_pct, 2),

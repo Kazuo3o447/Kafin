@@ -28,6 +28,7 @@ from backend.app.data.reddit_monitor import get_reddit_sentiment
 from backend.app.data.fear_greed import get_fear_greed_score
 from backend.app.data.market_overview import get_market_overview, get_market_news_for_sentiment, get_market_breadth, get_intermarket_signals
 from backend.app.memory.long_term import get_insights
+from backend.app.analysis.groq import call_groq
 from backend.app.memory.short_term import get_bullet_points, _calc_sentiment_from_bullets, get_bullet_points_batch
 from backend.app.memory.watchlist import get_watchlist
 from backend.app.utils.timezone import now_mez
@@ -450,7 +451,7 @@ async def api_sparkline(ticker: str, days: int = 7):
         
         return stock.history(period=f"{max(days, 2)}d")
 
-        hist = await asyncio.to_thread(_get_hist)}d")
+        hist = await asyncio.to_thread(_get_hist)
         if hist.empty:
             return {"ticker": ticker, "data": []}
         data = []
@@ -1775,7 +1776,7 @@ async def api_sparkline(ticker: str, days: int = 7):
         
         return stock.history(period=f"{max(days, 2)}d")
 
-        hist = await asyncio.to_thread(_get_hist)}d")
+        hist = await asyncio.to_thread(_get_hist)
         if hist.empty:
             return {"ticker": ticker, "data": []}
         data = []
@@ -3006,3 +3007,465 @@ async def api_filing_diff(
         ticker.upper(),
         filing_type=filing_type.upper(),
     )
+
+
+# ─────────────────────────────────────────────────────────────────
+# Signal Feed Engine
+# ─────────────────────────────────────────────────────────────────
+
+async def _load_feed_config(db) -> dict:
+    """Lädt Signal-Feed-Konfiguration aus DB. Fallback auf Defaults."""
+    defaults = {
+        "torpedo_delta_min": 1.5, "material_event": 1, "earnings_urgent_days": 5,
+        "sma50_break_downtrend": 1, "narrative_shift": 1, "sentiment_break": 0.1,
+        "rvol_min": 2.0, "earnings_warning_days": 14, "opp_delta_min": 1.5,
+        "rsi_oversold": 30.0, "rsi_overbought": 70.0, "feed_max_signals": 10,
+        "dedup_hours": 24, "quiet_period_pre_earnings_days": 2,
+    }
+    try:
+        rows = (await db.table("signal_feed_config").select("key,value").execute_async()).data or []
+        for row in rows:
+            key = row.get("key")
+            val = row.get("value", {})
+            if key in defaults and isinstance(val, dict):
+                if val.get("enabled", True):
+                    defaults[key] = val.get("value", defaults[key])
+    except Exception as e:
+        logger.warning(f"feed_config load error: {e}")
+    return defaults
+
+
+def _is_market_hours() -> bool:
+    """True wenn US-Markt aktuell geöffnet ist (Mo–Fr 15:30–22:00 CET)."""
+    from datetime import datetime, timezone, timedelta
+    cet = timezone(timedelta(hours=1))  # CET ohne DST-Handling (Näherung)
+    now = datetime.now(cet)
+    if now.weekday() >= 5:  # Wochenende
+        return False
+    market_open  = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    market_close = now.replace(hour=22, minute=0,  second=0, microsecond=0)
+    return market_open <= now <= market_close
+
+
+async def _check_signal_dedup(ticker: str, signal_type: str, dedup_hours: int) -> bool:
+    """True wenn Signal in letzten N Stunden bereits gefeuert hat."""
+    key = f"signal_dedup:{ticker.upper()}:{signal_type}"
+    cached = await cache_get(key)
+    return cached is not None
+
+
+async def _mark_signal_sent(ticker: str, signal_type: str, dedup_hours: int):
+    """Markiert Signal als gesendet für Dedup-Fenster."""
+    key = f"signal_dedup:{ticker.upper()}:{signal_type}"
+    await cache_set(key, True, ttl_seconds=dedup_hours * 3600)
+
+
+async def _synthesize_bullets_groq(ticker: str, signal_type: str, item: dict,
+                                    extra_bullets: list[str]) -> list[str]:
+    """
+    Groq llama-3.1-8b-instant: 3 harte Fakten-Bullets für ein Signal.
+    Schnell (~50ms), günstig, kein Reasoning nötig.
+    """
+    price    = item.get("price", "N/A")
+    opp      = item.get("opportunity_score", "N/A")
+    torp     = item.get("torpedo_score", "N/A")
+    rsi      = item.get("rsi", "N/A")
+    trend    = item.get("trend", "N/A")
+    w_torp   = item.get("week_torp_delta", 0) or 0
+    w_opp    = item.get("week_opp_delta", 0) or 0
+    rvol     = item.get("rvol", "N/A")
+    earnings = item.get("earnings_countdown")
+    iv       = item.get("iv_atm", "N/A")
+    news_ctx = "\n".join(f"- {b}" for b in extra_bullets[:3]) if extra_bullets else "Keine aktuellen News."
+
+    system = (
+        "Du bist ein Senior-Trader-Analyst. Deine Aufgabe: exakt 3 Bullet-Points "
+        "für ein Trading-Signal generieren. Jeder Bullet ist ein harter Fakt oder "
+        "eine direkte Einordnung. Keine Füllsätze, keine Wiederholungen. "
+        "Antwort: exakt 3 Zeilen, jede beginnt mit '•', max 100 Zeichen pro Zeile. "
+        "Sprache: Deutsch."
+    )
+    prompt = (
+        f"TICKER: {ticker} | SIGNAL: {signal_type}\n"
+        f"Kurs: ${price} | Opp-Score: {opp}/10 | Torpedo-Score: {torp}/10\n"
+        f"RSI: {rsi} | Trend: {trend} | RVOL: {rvol}x\n"
+        f"Torpedo-Delta Woche: {w_torp:+.1f} | Opp-Delta Woche: {w_opp:+.1f}\n"
+        + (f"Earnings in {earnings} Tagen | IV ATM: {iv}%\n" if earnings else "")
+        + f"\nAktuelle News-Bullets:\n{news_ctx}\n\n"
+        "Generiere 3 Bullet-Points die dem Trader sofort klar machen warum dieses "
+        "Signal relevant ist und was er konkret wissen muss."
+    )
+    try:
+        result = await call_groq(system, prompt, max_tokens=200)
+        lines = [l.strip() for l in result.strip().split("\n") if l.strip().startswith("•")]
+        if len(lines) >= 3:
+            return lines[:3]
+    except Exception as e:
+        logger.warning(f"Groq bullets {ticker}/{signal_type}: {e}")
+
+    # Fallback: strukturierte Bullets aus vorhandenen Daten
+    fallback = [f"• Opp {opp}/10 | Torpedo {torp}/10 | RSI {rsi} | Trend: {trend}"]
+    if w_torp and abs(w_torp) >= 1.0:
+        fallback.append(f"• Torpedo-Delta diese Woche: {w_torp:+.1f}")
+    if extra_bullets:
+        fallback.append(f"• {extra_bullets[0][:97]}")
+    while len(fallback) < 3:
+        fallback.append(f"• Kurs: ${price} | RVOL: {rvol}x")
+    return fallback[:3]
+
+
+@router.get("/signals/feed")
+async def api_signals_feed(force_refresh: bool = False):
+    """
+    Haupt-Endpoint für den Signal Anomaly Feed.
+    Aggregiert Watchlist + DB-Daten, erkennt 10 Signal-Typen,
+    synthetisiert mit Groq (Bullets) + DeepSeek Reasoner (Action Brief).
+    Cache: Redis 300s TTL. force_refresh=true löscht Cache sofort.
+    """
+    cache_key = "signals:feed"
+
+    if force_refresh:
+        try:
+            from backend.app.cache import _get_redis
+            client = await _get_redis()
+            if client:
+                await client.delete(cache_key)
+        except Exception:
+            pass
+
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    db = get_supabase_client()
+    generated_at = datetime.utcnow().isoformat()
+
+    # ── Konfiguration laden ──────────────────────────────────────
+    cfg = await _load_feed_config(db) if db else {}
+    max_signals   = int(cfg.get("feed_max_signals", 10))
+    dedup_hours   = int(cfg.get("dedup_hours", 24))
+    quiet_days    = int(cfg.get("quiet_period_pre_earnings_days", 2))
+    in_market     = _is_market_hours()
+
+    # ── Daten laden: enriched watchlist ─────────────────────────
+    from backend.app.routers.watchlist import api_watchlist_enriched
+    wl_result     = await api_watchlist_enriched()
+    watchlist     = wl_result.get("watchlist", []) if isinstance(wl_result, dict) else []
+
+    # ── Daten laden: Narrative Shifts + Material Events aus DB ──
+    narrative_map: dict[str, list] = {}
+    material_map:  dict[str, list] = {}
+    if db:
+        try:
+            cutoff = (datetime.utcnow() - timedelta(hours=48)).isoformat()
+            rows = (await db.table("short_term_memory")
+                    .select("ticker,date,bullet_points,shift_type,shift_reasoning,is_material,is_narrative_shift,sentiment_score")
+                    .gte("date", cutoff)
+                    .execute_async()).data or []
+            for row in rows:
+                t = (row.get("ticker") or "").upper()
+                if row.get("is_narrative_shift"):
+                    narrative_map.setdefault(t, []).append(row)
+                if row.get("is_material"):
+                    material_map.setdefault(t, []).append(row)
+        except Exception as e:
+            logger.warning(f"signal feed DB query: {e}")
+
+    # ── Makro laden ──────────────────────────────────────────────
+    macro: dict = {}
+    try:
+        macro = (await get_macro_snapshot()) or {}
+        if hasattr(macro, "dict"):
+            macro = macro.dict()
+    except Exception:
+        pass
+
+    # ── Signal-Erkennung ─────────────────────────────────────────
+    raw_signals: list[dict] = []
+
+    for item in watchlist:
+        ticker          = (item.get("ticker") or "").upper()
+        if not ticker:
+            continue
+
+        earnings_cd     = item.get("earnings_countdown")
+        week_torp       = item.get("week_torp_delta") or 0
+        week_opp        = item.get("week_opp_delta") or 0
+        rvol            = item.get("rvol") or 0
+        above_sma50     = item.get("above_sma50")
+        trend           = item.get("trend") or ""
+        has_material    = item.get("has_material_news", False)
+        sent_trend      = item.get("sentiment_trend") or ""
+        sent_score      = item.get("finbert_sentiment") or 0
+        rsi             = item.get("rsi") or 50
+        iv              = item.get("iv_atm")
+
+        # Stille Periode: X Tage vor Earnings → technische Signale unterdrücken
+        in_quiet = (earnings_cd is not None and 0 <= earnings_cd <= quiet_days)
+
+        def add(signal_type: str, priority: int, headline: str,
+                value: float | None = None, threshold: float | None = None):
+            raw_signals.append({
+                "ticker":       ticker,
+                "signal_type":  signal_type,
+                "priority":     priority,
+                "headline":     headline,
+                "value":        value,
+                "threshold":    threshold,
+                "item":         item,   # für Bullet-Synthese
+                "generated_at": generated_at,
+            })
+
+        # ── 10 Signal-Typen ──────────────────────────────────────
+
+        # 1. Torpedo-Anstieg (immer, unabhängig von Marktzeiten)
+        if cfg.get("torpedo_delta_min"):
+            tmin = float(cfg["torpedo_delta_min"])
+            if week_torp >= tmin:
+                add("torpedo_rising", 1,
+                    f"Torpedo +{week_torp:.1f} diese Woche — Risiko steigt",
+                    week_torp, tmin)
+
+        # 2. Material Event / SEC Filing (immer)
+        if has_material or ticker in material_map:
+            mat_rows = material_map.get(ticker, [])
+            txt = "Material Event erkannt"
+            if mat_rows:
+                bp = mat_rows[0].get("bullet_points")
+                if isinstance(bp, list) and bp:
+                    txt = str(bp[0])[:60]
+            add("material_event", 1, f"⚡ {txt}", 1, 1)
+
+        # 3. Earnings ≤ urgent_days (immer)
+        urgent = int(cfg.get("earnings_urgent_days", 5))
+        if earnings_cd is not None and 0 <= earnings_cd <= urgent:
+            timing = item.get("report_timing", "")
+            timing_str = " · Pre-Market" if timing == "pre_market" else " · After-Hours" if timing == "after_market" else ""
+            em_str = f" · ±{(iv/10):.1f}% EM" if iv else ""
+            headline = (f"Earnings {'HEUTE' if earnings_cd == 0 else f'in {earnings_cd}T'}"
+                       f"{timing_str}{em_str}")
+            add("earnings_urgent", 1, headline, earnings_cd, urgent)
+
+        # 4. SMA50-Bruch (nur Marktzeiten, nicht in stiller Periode)
+        if in_market and not in_quiet:
+            if above_sma50 is False and trend == "downtrend":
+                add("sma50_break", 1, "Unter SMA50 gefallen — technischer Bruch", 0, 1)
+
+        # 5. Narrative Shift (immer)
+        if ticker in narrative_map:
+            row = narrative_map[ticker][0]
+            shift_type = row.get("shift_type", "Narrative Shift")
+            reasoning  = (row.get("shift_reasoning") or "")[:60]
+            add("narrative_shift", 2, f"{shift_type}: {reasoning}" if reasoning else shift_type, 1, 1)
+
+        # 6. Sentiment-Bruch (nur Marktzeiten)
+        if in_market and sent_trend == "deteriorating":
+            smin = float(cfg.get("sentiment_break", 0.1))
+            if sent_score > smin:
+                add("sentiment_break", 2,
+                    f"Sentiment dreht bearish bei positivem Niveau ({sent_score:.2f})",
+                    sent_score, smin)
+
+        # 7. RVOL-Spike (nur Marktzeiten, nicht in stiller Periode)
+        if in_market and not in_quiet:
+            rmin = float(cfg.get("rvol_min", 2.0))
+            if rvol >= rmin:
+                add("rvol_spike", 2,
+                    f"RVOL {rvol:.1f}x — erhöhte Aktivität",
+                    rvol, rmin)
+
+        # 8. Earnings ≤ warning_days (immer)
+        warn_days = int(cfg.get("earnings_warning_days", 14))
+        if earnings_cd is not None and urgent < earnings_cd <= warn_days:
+            add("earnings_warning", 2,
+                f"Earnings in {earnings_cd} Tagen — Vorbereitung starten",
+                earnings_cd, warn_days)
+
+        # 9. Setup verbessert (nur wenn kein Torpedo-Anstieg)
+        if week_torp <= 0:
+            omin = float(cfg.get("opp_delta_min", 1.5))
+            if week_opp >= omin:
+                add("setup_improving", 3,
+                    f"Opp-Score +{week_opp:.1f} diese Woche — Setup verbessert",
+                    week_opp, omin)
+
+        # 10. RSI-Extreme (nur Marktzeiten, nicht in stiller Periode)
+        if in_market and not in_quiet:
+            rsi_low  = float(cfg.get("rsi_oversold",  30.0))
+            rsi_high = float(cfg.get("rsi_overbought", 70.0))
+            if rsi <= rsi_low:
+                add("rsi_oversold", 3,
+                    f"RSI {rsi:.0f} — überverkauft",
+                    rsi, rsi_low)
+            elif rsi >= rsi_high:
+                add("rsi_overbought", 3,
+                    f"RSI {rsi:.0f} — überkauft",
+                    rsi, rsi_high)
+
+    # ── Deduplizierung (24h-Fenster) ────────────────────────────
+    deduped: list[dict] = []
+    for sig in raw_signals:
+        is_dup = await _check_signal_dedup(sig["ticker"], sig["signal_type"], dedup_hours)
+        sig["is_new"]     = not is_dup
+        sig["is_resolved"] = False   # aktiv zum Zeitpunkt der Erkennung
+        deduped.append(sig)
+
+    # ── Sortierung: Prio 1 zuerst, dann 2, dann 3 ──────────────
+    deduped.sort(key=lambda s: (s["priority"], -abs(s.get("value") or 0)))
+    final_signals = deduped[:max_signals]
+
+    # ── Telegram für neue Priority-1-Signale ────────────────────
+    from backend.app.alerts.telegram import send_telegram_alert
+    for sig in final_signals:
+        if sig["priority"] == 1 and sig["is_new"]:
+            try:
+                bullets = sig.get("bullets", [])
+                bullet_text = "\n".join(bullets[:2]) if bullets else ""
+                alert = (
+                    f"🚨 {sig['ticker']} — {sig['signal_type'].replace('_', ' ').title()}\n"
+                    f"{sig['headline']}\n"
+                    + (bullet_text + "\n" if bullet_text else "")
+                    + f"→ kafin.app/research/{sig['ticker']}"
+                )
+                await send_telegram_alert(alert)
+                await _mark_signal_sent(sig["ticker"], sig["signal_type"], dedup_hours)
+            except Exception as e:
+                logger.warning(f"Telegram send error for {sig['ticker']}: {e}")
+
+    # ── Groq: Bullets pro Signal (parallel) ─────────────────────
+    async def _enrich_signal(sig: dict) -> dict:
+        ticker = sig["ticker"]
+        stype  = sig["signal_type"]
+        item   = sig.pop("item", {})
+        # News-Bullets aus short_term_memory zusammenführen
+        all_bullets = []
+        for rows in [material_map.get(ticker, []), narrative_map.get(ticker, [])]:
+            for row in rows[:2]:
+                bp = row.get("bullet_points")
+                if isinstance(bp, list) and bp:
+                    all_bullets.append(str(bp[0])[:100])
+
+        sig["bullets"] = await _synthesize_bullets_groq(ticker, stype, item, all_bullets)
+        sig["data_age_minutes"] = 0   # enriched watchlist ist frisch
+        return sig
+
+    enriched_signals = await asyncio.gather(*[_enrich_signal(s) for s in final_signals])
+
+    # ── DeepSeek Chat: Heute-Synthese (Header) ──────────────────
+    async def _generate_today_synthesis(active_signals: list[dict], macro: dict) -> str:
+        """DeepSeek Chat: kurze Zusammenfassung aller aktiven Signale in 2–3 Sätzen."""
+        if not active_signals:
+            regime = macro.get("regime", "CAUTIOUS")
+            return f"Keine Anomalien aktiv. Markt-Regime: {regime}. Portfolio im passiven Monitoring."
+
+        sig_text = "\n".join(
+            f"- [{s.get('priority')}] {s.get('ticker')}: {s.get('headline')}"
+            for s in active_signals[:8]
+        )
+        system = (
+            "Du bist ein Marktanalyst. Fasse aktive Trading-Signale in maximal 3 Sätzen zusammen. "
+            "Was ist heute die übergeordnete Botschaft? Keine Aufzählung, kein Wiederholen der Liste. "
+            "Direkte Einordnung. Sprache: Deutsch. Max 80 Wörter."
+        )
+        prompt = f"Aktive Signale:\n{sig_text}\n\nMakro-Regime: {macro.get('regime','?')}\n\nZusammenfassung:"
+        try:
+            from backend.app.analysis.deepseek import call_deepseek
+            return await call_deepseek(
+                system_prompt=system,
+                user_prompt=prompt,
+                model="deepseek-chat",
+                max_tokens=200,
+            )
+        except Exception as e:
+            logger.warning(f"Today synthesis error: {e}")
+            return f"{len(active_signals)} aktive Signale. Priorität 1 zuerst prüfen."
+
+    today_synthesis = await _generate_today_synthesis(list(enriched_signals), macro)
+
+    # ── DeepSeek Reasoner: Action Brief (volle Watchlist) ───────
+    async def _generate_action_brief(enriched_watchlist: list[dict],
+                                      active_signals: list[dict],
+                                      macro: dict) -> str:
+        """DeepSeek Reasoner: vollständiger Watchlist-Kontext → eine klare Handlungsempfehlung."""
+        # Watchlist-Kontext aufbauen (alle Ticker, alle Scores, alle News)
+        ticker_lines = []
+        for item in enriched_watchlist[:15]:  # Max 15 für Token-Budget
+            t = item.get("ticker", "?")
+            o = item.get("opportunity_score") or "?"
+            tp = item.get("torpedo_score") or "?"
+            rsi = item.get("rsi") or "?"
+            trend = item.get("trend") or "?"
+            w_o = item.get("week_opp_delta") or 0
+            w_t = item.get("week_torp_delta") or 0
+            sent = item.get("sentiment_label") or "neutral"
+            ec = item.get("earnings_countdown")
+            ec_str = f"Earnings in {ec}T" if ec is not None and 0 <= ec <= 14 else ""
+            ticker_lines.append(
+                f"{t}: Opp={o} Torp={tp} RSI={rsi} {trend} Δ-Woche(Opp={w_o:+.1f}/Torp={w_t:+.1f}) "
+                f"Sentiment={sent} {ec_str}"
+            )
+
+        signal_lines = []
+        for s in active_signals:
+            signal_lines.append(
+                f"[{s.get('priority','?')}] {s.get('ticker','?')} — {s.get('signal_type','?')}: "
+                f"{s.get('headline','')}"
+            )
+
+        macro_str = (
+            f"Regime: {macro.get('regime','?')} | Fed: {macro.get('fed_rate','?')}% | "
+            f"VIX: {macro.get('vix','?')} | Credit Spread: {macro.get('credit_spread_bps','?')}bp | "
+            f"Yield Curve: {macro.get('yield_curve_10y_2y','?')}% | DXY: {macro.get('dxy','?')}"
+        )
+
+        system = """Du bist ein erfahrener Hedge-Fund-Analyst. Du erhältst den vollständigen
+Zustand einer Trading-Watchlist und aktive Signale. Deine Aufgabe:
+
+1. PRIORISIERE: Was ist heute die eine Handlung die den größten Unterschied macht?
+2. BEGRÜNDE: Warum genau dieses Setup über alle anderen?
+3. WARNUNG: Was ist das größte Risiko das du in den Daten siehst — auch wenn kein Signal gefeuert hat?
+4. IGNORIEREN: Was sieht dramatisch aus, ist es aber nicht?
+
+ABSOLUTE REGELN:
+- Niemals breite Index-Shorts empfehlen (kein SH, PSQ, SQQQ, SPY-Puts).
+- Bei bärischer Einschätzung: Sektor-ETF-Puts, Einzeltitel-Puts, Pair-Trades.
+- Maximal 180 Wörter. Jeder Satz muss Information enthalten.
+- Sprache: Deutsch. Ton: direkt, präzise, kein Hedging."""
+
+        prompt = (
+            f"MAKRO-REGIME:\n{macro_str}\n\n"
+            f"WATCHLIST-STATUS ({len(ticker_lines)} Ticker):\n"
+            + "\n".join(ticker_lines) + "\n\n"
+            f"AKTIVE SIGNALE ({len(signal_lines)}):\n"
+            + ("\n".join(signal_lines) if signal_lines else "Keine aktiven Signale — ruhiger Tag.")
+            + "\n\nGeneriere den Action Brief."
+        )
+        try:
+            from backend.app.analysis.deepseek import call_deepseek
+            return await call_deepseek(
+                system_prompt=system,
+                user_prompt=prompt,
+                model="deepseek-reasoner",
+                max_tokens=1200,
+            )
+        except Exception as e:
+            logger.error(f"Action Brief Reasoner Fehler: {e}")
+            return "Action Brief konnte nicht generiert werden."
+
+    action_brief = await _generate_action_brief(watchlist, list(enriched_signals), macro)
+
+    response = {
+        "signals":              list(enriched_signals),
+        "today_synthesis":      today_synthesis,
+        "action_brief":         action_brief,
+        "is_market_hours":      in_market,
+        "total_count":          len(enriched_signals),
+        "tickers_monitored":    len(watchlist),
+        "feed_generated_at":    generated_at,
+        "oldest_data_at":       generated_at,
+        "config_snapshot":      cfg,
+        "macro_regime":         macro.get("regime", "UNKNOWN"),
+    }
+
+    await cache_set(cache_key, response, ttl_seconds=300)
+    return response

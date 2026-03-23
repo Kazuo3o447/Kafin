@@ -185,8 +185,8 @@ async def process_news_for_ticker(ticker: str) -> dict:
                 f"Sentiment: {score:.2f}\n"
                 f"Quelle: {getattr(news_item, 'source', 'N/A')}"
             )
-            await send_telegram_alert(alert_text)
-            stats["alerts_sent"] += 1
+            # Entfernt → Signal Feed übernimmt
+            logger.info(f"[SIGNAL] {ticker}: {alert_text[:100]}")
         elif score > 0.5:
             alert_text = (
                 f"📈 Stark positive News: {ticker}\n\n"
@@ -194,8 +194,8 @@ async def process_news_for_ticker(ticker: str) -> dict:
                 f"Sentiment: {score:.2f}\n"
                 f"Quelle: {getattr(news_item, 'source', 'N/A')}"
             )
-            await send_telegram_alert(alert_text)
-            stats["alerts_sent"] += 1
+            # Entfernt → Signal Feed übernimmt
+            logger.info(f"[SIGNAL] {ticker}: {alert_text[:100]}")
 
     logger.info(f"News-Pipeline {ticker}: {stats['total_fetched']} geholt, {stats['passed_finbert']} relevant, {stats['bullets_saved']} gespeichert, {stats['alerts_sent']} Alerts")
     return stats

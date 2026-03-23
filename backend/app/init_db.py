@@ -114,6 +114,12 @@ ON trade_journal(ticker);
 
 CREATE INDEX IF NOT EXISTS idx_journal_entry_date
 ON trade_journal(entry_date DESC);
+
+CREATE TABLE IF NOT EXISTS signal_feed_config (
+    key         VARCHAR(80) PRIMARY KEY,
+    value       JSONB       NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 
@@ -223,3 +229,55 @@ async def ensure_daily_snapshots_table():
             """)
     except Exception as e:
         logger.error(f"daily_snapshots Check fehlgeschlagen: {e}")
+
+
+async def ensure_signal_feed_config():
+    """Erstellt signal_feed_config Tabelle und fügt Defaults ein."""
+    try:
+        db = get_supabase_client()
+        if db is None:
+            return
+
+        # Tabelle erstellen (wenn nicht vorhanden)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS signal_feed_config (
+                key         VARCHAR(80) PRIMARY KEY,
+                value       JSONB       NOT NULL,
+                updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+        """)
+
+        # Default-Werte einfügen (ON CONFLICT = nicht überschreiben wenn User geändert hat)
+        import json
+        defaults = [
+            ("torpedo_delta_min",       {"value": 1.5,  "enabled": True}),
+            ("material_event",          {"value": 1,    "enabled": True}),
+            ("earnings_urgent_days",    {"value": 5,    "enabled": True}),
+            ("sma50_break_downtrend",   {"value": 1,    "enabled": True}),
+            ("narrative_shift",         {"value": 1,    "enabled": True}),
+            ("sentiment_break",         {"value": 0.1,  "enabled": True}),
+            ("rvol_min",                {"value": 2.0,  "enabled": True}),
+            ("earnings_warning_days",   {"value": 14,   "enabled": True}),
+            ("opp_delta_min",           {"value": 1.5,  "enabled": True}),
+            ("rsi_oversold",            {"value": 30.0, "enabled": True}),
+            ("rsi_overbought",          {"value": 70.0, "enabled": True}),
+            ("feed_max_signals",        {"value": 10,   "enabled": True}),
+            ("dedup_hours",             {"value": 24,   "enabled": True}),
+            ("quiet_period_pre_earnings_days", {"value": 2, "enabled": True}),
+        ]
+        for key, val in defaults:
+            await db.execute("""
+                INSERT INTO signal_feed_config (key, value)
+                VALUES ($1, $2)
+                ON CONFLICT (key) DO NOTHING
+            """, key, json.dumps(val))
+        
+        logger.info("signal_feed_config Tabelle erstellt und Defaults eingefügt")
+    except Exception as e:
+        logger.error(f"signal_feed_config Setup fehlgeschlagen: {e}")
+
+
+async def init_db():
+    """Initialisiert die Datenbank mit allen Tabellen und Defaults."""
+    await ensure_daily_snapshots_table()
+    await ensure_signal_feed_config()

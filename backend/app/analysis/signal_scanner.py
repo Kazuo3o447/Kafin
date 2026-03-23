@@ -37,8 +37,7 @@ async def scan_all_signals() -> List[Dict]:
             ticker_signals = await _check_ticker_signals(ticker)
             if ticker_signals:
                 signals_found.extend(ticker_signals)
-                for signal in ticker_signals:
-                    await send_telegram_alert(signal["alert_text"])
+                # Telegram-Sends entfernt → Signal Feed übernimmt
         except Exception as exc:  # noqa: BLE001
             logger.debug(f"Signal-Scan für {ticker} fehlgeschlagen: {exc}")
 

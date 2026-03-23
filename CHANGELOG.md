@@ -22,6 +22,10 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 - **FUTURE.md**: Separate Scoring-Engines vollständig dokumentiert —
   Implementierungsplan für Phase 1-4, Gewichtungs-Beispiele, Trigger-Bedingung
 
+### 💬 UI/UX Verbesserungen
+- **Chat-Section neu positioniert**: AI Chat ist jetzt der erste Abschnitt in allen Aktien/ETF Dashboards (Research, Watchlist, Bitcoin)
+- **Bessere User Experience**: Direkter Zugriff auf KI-Analysen ohne Scrollen
+
 ## [7.2.0] - 2026-03-23 - Alpaca Integration + Learning Module
 
 ### 🔗 Alpaca Paper Trading

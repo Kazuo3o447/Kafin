@@ -1061,7 +1061,7 @@ function PositionSizerBlock({
   );
 }
 
-function TickerChatBlock({
+export function TickerChatBlock({
   ticker,
   contextSnapshot,
 }: {
@@ -2814,6 +2814,14 @@ export default function ResearchDashboard() {
         Stand: {fmt.date(data.fetched_at)} {new Date(data.fetched_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
       </p>
 
+      {/* ── AI Chat (immer zuerst) ──────────────────────────── */}
+      {data && (
+        <TickerChatBlock
+          ticker={tickerUpper}
+          contextSnapshot={contextSnapshot}
+        />
+      )}
+
       {/* Score-Block — immer zuerst sichtbar */}
       <ScoreBlock data={data} delta={scoreDelta} />
 
@@ -3454,13 +3462,6 @@ export default function ResearchDashboard() {
           </div>
         )}
       </div>
-
-      {data && (
-        <TickerChatBlock
-          ticker={tickerUpper}
-          contextSnapshot={contextSnapshot}
-        />
-      )}
 
     </div>
   );

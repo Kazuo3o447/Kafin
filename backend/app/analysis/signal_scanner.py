@@ -51,7 +51,7 @@ async def _check_ticker_signals(ticker: str) -> List[Dict]:
 
     try:
         cache_key = f"signals:{ticker.upper()}"
-        if cache_get(cache_key):
+        if await cache_get(cache_key):
             return []
 
         stock = yf.Ticker(ticker)

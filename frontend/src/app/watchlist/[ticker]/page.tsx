@@ -4,6 +4,7 @@ import { ChartAnalysisSection } from "@/components/ChartAnalysisSection";
 import { TrackRecordSection } from "./TrackRecordSection";
 import ChartWrapper from "@/components/ChartWrapper";
 import { ActionButtons } from "./ActionButtons";
+import { TickerChatBlock } from "@/app/research/[ticker]/page";
 
 type TickerDetailProps = {
   params: Promise<{ ticker: string }>;
@@ -219,6 +220,15 @@ export default async function TickerDetailPage({ params }: TickerDetailProps) {
       <ProfileCard profile={profile} ticker={ticker} />
 
       <ActionButtons ticker={ticker} />
+
+      {/* ── AI Chat (immer zuerst) ──────────────────────────── */}
+      <TickerChatBlock 
+        ticker={ticker} 
+        contextSnapshot={{ 
+          ticker, 
+          companyName: 'companyName' in profile ? profile.companyName : '' 
+        }} 
+      />
 
       {/* Kurs-Chart — lädt automatisch ohne Button */}
       <div className="rounded-xl border border-[var(--border)]

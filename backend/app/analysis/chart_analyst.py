@@ -32,7 +32,7 @@ async def analyze_chart(
     """Erstellt eine detaillierte technische Analyse für einen Ticker."""
     try:
         cache_key = f"chart_analysis:{ticker.upper()}"
-        cached = cache_get(cache_key)
+        cached = await cache_get(cache_key)
         if cached is not None:
             return cached
 
@@ -220,7 +220,7 @@ Alle Preise als Zahlen. Kein Markdown."""
                 "analysis": ai_data.get("analysis_text", ""),
                 "error": False,
             }
-            cache_set(cache_key, result, ttl_seconds=600)
+            await cache_set(cache_key, result, ttl_seconds=600)
             return result
 
         fallback_support_levels = [

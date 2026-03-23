@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { RefreshCw, TrendingUp, TrendingDown, Minus,
-         ArrowLeft, Brain, Activity } from "lucide-react";
+         ArrowLeft, Brain, Activity, MessageSquare } from "lucide-react";
 import { api } from "@/lib/api";
+import { TickerChatBlock } from "@/app/research/[ticker]/page";
 
 type BtcSnapshot = {
   price: {
@@ -102,6 +103,16 @@ export default function BtcPage() {
           </button>
         </div>
       </div>
+
+      {/* ── AI Chat (immer zuerst) ──────────────────────────── */}
+      <TickerChatBlock 
+        ticker="BTC" 
+        contextSnapshot={{ 
+          ticker: "BTC", 
+          companyName: "Bitcoin", 
+          assetType: "cryptocurrency" 
+        }} 
+      />
 
       {/* Metriken */}
       {snapshot && (

@@ -517,7 +517,7 @@ function ScoreBlock({ data, delta }: { data: ResearchData; delta?: ScoreDeltaDat
               Opportunity-Faktoren
             </p>
             <div className="space-y-1">
-              {Object.entries(data.score_breakdown.opportunity).map(
+              {Object.entries(data.score_breakdown.opportunity ?? {}).map(
                 ([key, val]) => (
                   <div key={key}
                        className="flex justify-between text-xs">
@@ -546,7 +546,7 @@ function ScoreBlock({ data, delta }: { data: ResearchData; delta?: ScoreDeltaDat
               Torpedo-Faktoren
             </p>
             <div className="space-y-1">
-              {Object.entries(data.score_breakdown.torpedo).map(
+              {Object.entries(data.score_breakdown.torpedo ?? {}).map(
                 ([key, val]) => (
                   <div key={key}
                        className="flex justify-between text-xs">
@@ -661,6 +661,20 @@ function TradeSetupBlock({
     );
   }
 
+  const entryZone = data.entry_zone ?? {
+    low: data.price,
+    high: data.price,
+  };
+  const supportLevels = Array.isArray(data.support_levels)
+    ? data.support_levels
+    : [];
+  const resistanceLevels = Array.isArray(data.resistance_levels)
+    ? data.resistance_levels
+    : [];
+  const stopLossValue = data.stop_loss ?? null;
+  const target1Value = data.target_1 ?? null;
+  const target2Value = data.target_2 ?? null;
+
   const biasColor = 
     data.bias === "bullish" ? "text-[var(--accent-green)]"
     : data.bias === "bearish" ? "text-[var(--accent-red)]"
@@ -711,7 +725,7 @@ function TradeSetupBlock({
           <div className="rounded-lg bg-[var(--bg-tertiary)] p-3">
             <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Entry Zone</p>
             <p className="text-lg font-mono font-bold text-[var(--accent-blue)]">
-              ${data.entry_zone.low.toFixed(2)} - ${data.entry_zone.high.toFixed(2)}
+              ${entryZone.low != null ? entryZone.low.toFixed(2) : "—"} - ${entryZone.high != null ? entryZone.high.toFixed(2) : "—"}
             </p>
           </div>
 
@@ -719,7 +733,7 @@ function TradeSetupBlock({
           <div className="rounded-lg bg-[var(--bg-tertiary)] p-3">
             <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Stop Loss</p>
             <p className="text-lg font-mono font-bold text-[var(--accent-red)]">
-              ${data.stop_loss.toFixed(2)}
+              ${stopLossValue != null ? stopLossValue.toFixed(2) : "—"}
             </p>
           </div>
 
@@ -728,10 +742,10 @@ function TradeSetupBlock({
             <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Targets</p>
             <div className="space-y-1">
               <p className="text-sm font-mono text-[var(--accent-green)]">
-                T1: ${data.target_1.toFixed(2)}
+                T1: ${target1Value != null ? target1Value.toFixed(2) : "—"}
               </p>
               <p className="text-sm font-mono text-[var(--accent-green)]">
-                T2: ${data.target_2.toFixed(2)}
+                T2: ${target2Value != null ? target2Value.toFixed(2) : "—"}
               </p>
             </div>
           </div>
@@ -743,11 +757,11 @@ function TradeSetupBlock({
           <div>
             <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Support</p>
             <div className="space-y-1">
-              {data.support_levels.map((level, idx) => (
+              {supportLevels.map((level, idx) => (
                 <div key={idx} className="flex justify-between items-center">
                   <span className="text-xs text-[var(--text-muted)]">{level.label}</span>
                   <span className={`text-sm font-mono ${getStrengthColor(level.strength)}`}>
-                    ${level.price.toFixed(2)}
+                    ${level.price != null ? level.price.toFixed(2) : "—"}
                   </span>
                 </div>
               ))}
@@ -758,11 +772,11 @@ function TradeSetupBlock({
           <div>
             <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Resistance</p>
             <div className="space-y-1">
-              {data.resistance_levels.map((level, idx) => (
+              {resistanceLevels.map((level, idx) => (
                 <div key={idx} className="flex justify-between items-center">
                   <span className="text-xs text-[var(--text-muted)]">{level.label}</span>
                   <span className={`text-sm font-mono ${getStrengthColor(level.strength)}`}>
-                    ${level.price.toFixed(2)}
+                    ${level.price != null ? level.price.toFixed(2) : "—"}
                   </span>
                 </div>
               ))}
@@ -1229,7 +1243,8 @@ function PeerComparisonBlock({
     );
   }
 
-  if (!data || data.peers.length <= 1) return null;
+  const peers = data?.peers ?? [];
+  if (!data || peers.length <= 1) return null;
 
   const cols: { key: keyof PeerItem; label: string; fmt: (v: unknown) => string }[] = [
     { key: "price",        label: "Kurs",   fmt: v => v != null ? `$${(v as number).toFixed(2)}` : "—" },
@@ -1257,7 +1272,7 @@ function PeerComparisonBlock({
           </tr>
         </thead>
         <tbody>
-          {data.peers.map((peer, i) => {
+          {peers.map((peer, i) => {
             const isMain = peer.ticker === mainTicker;
             return (
               <tr
@@ -3266,7 +3281,7 @@ export default function ResearchDashboard() {
           </div>
 
           {/* News-Stichpunkte */}
-          {data.news_bullets.length > 0 && (
+          {Array.isArray(data.news_bullets) && data.news_bullets.length > 0 && (
             <div className="mt-4">
               <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-2">
                 Aktuelle News

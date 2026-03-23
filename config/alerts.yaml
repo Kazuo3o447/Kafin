@@ -5,10 +5,11 @@ email:
   enabled: true
 
 schedules:
-  sunday_report: "0 20 * * 0"          # Sonntag 20:00 CET
-  morning_briefing: "0 8 * * 1-5"      # Montag-Freitag 08:00 CET
-  news_pipeline: "*/30 * * * *"        # Alle 30 Minuten
-  sec_scanner: "*/10 * * * *"          # Alle 10 Minuten
+  # sunday_report: "0 20 * * 0"     # ENTFERNT — ersetzt durch Pre/After-Market
+  pre_market_briefing:  "0 8 * * 1-5"   # Mo–Fr 08:00 CET
+  after_market_report:  "15 22 * * 1-5" # Mo–Fr 22:15 CET
+  news_pipeline:        "*/30 * * * *"
+  sec_scanner:          "*/10 * * * *"
 
 sentiment_monitor:
   enabled: true

@@ -620,7 +620,7 @@ async def get_market_breadth() -> dict:
     if cached:
         return cached
 
-    def _calc_breadth():
+    async def _calc_breadth():
         above_50 = above_200 = advancing = declining = total = 0
 
         # EIN Batch-Download statt 50 einzelne Calls
@@ -675,7 +675,7 @@ async def get_market_breadth() -> dict:
             "breadth_index": "S&P 500 Top 50 (Marktkapitalisierung)",
         }
 
-    result = await asyncio.to_thread(_calc_breadth)
+    result = await _calc_breadth()
 
     # Historische Werte aus daily_snapshots
     pct_5d_ago = None
@@ -759,7 +759,7 @@ async def get_intermarket_signals() -> dict:
     if cached:
         return cached
 
-    def _fetch():
+    async def _fetch():
         INTERMARKET = {
             "SPY":    "S&P 500",
             "TLT":    "20Y Treasuries",
@@ -819,7 +819,7 @@ async def get_intermarket_signals() -> dict:
 
         return results
 
-    data = await asyncio.to_thread(_fetch)
+    data = await _fetch()
 
     # Regime-Signale berechnen
     spy = data.get("SPY", {})

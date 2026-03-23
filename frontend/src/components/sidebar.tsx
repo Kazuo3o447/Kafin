@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
   ListChecks,
   FileText,
   Newspaper,
@@ -14,11 +13,13 @@ import {
   Search,
   BarChart2,
   BookOpen,
+  Zap,
 } from "lucide-react";
 import { useMemo } from "react";
 
 const navItems = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
+  { label: "Signal Feed", href: "/", icon: Zap },
+  { label: "Briefing", href: "/briefing", icon: FileText },
   { label: "Markets", href: "/markets", icon: BarChart2 },
   { label: "Watchlist", href: "/watchlist", icon: ListChecks },
   { label: "Research", href: "/research", icon: Search },

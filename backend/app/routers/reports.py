@@ -4,7 +4,7 @@ from typing import Optional
 
 from backend.app.logger import get_logger
 from backend.app.memory.watchlist import get_watchlist
-from backend.app.analysis.report_generator import generate_audit_report, generate_sunday_report, generate_morning_briefing
+from backend.app.analysis.report_generator import generate_audit_report, generate_sunday_report, generate_morning_briefing, generate_after_market_report
 from backend.app.analysis.post_earnings_review import run_post_earnings_review
 from backend.app.data.fmp import get_earnings_history
 
@@ -192,3 +192,44 @@ async def api_scan_earnings_results():
         "reviews_triggered": len(reviews_triggered),
         "details": reviews_triggered,
     }
+
+# ── After-Market Generate ──────────────────────────────────────
+@router.post("/generate-after-market")
+async def api_generate_after_market():
+    """Generiert After-Market Report (22:15 CET Trigger)."""
+    logger.info("[Report] After-Market Report generieren")
+    try:
+        report = await generate_after_market_report()
+        return {"status": "success", "report": report}
+    except Exception as e:
+        logger.error(f"After-Market Report Fehler: {e}")
+        return {"status": "error", "message": str(e), "report": ""}
+
+# ── Briefing Archive (Pre + After) ────────────────────────────
+@router.get("/briefing-archive")
+async def api_briefing_archive(days: int = 7):
+    """Letzte N Tage Pre-Market + After-Market Briefings."""
+    try:
+        from backend.app.database import get_pool
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT date, briefing_summary, after_market_summary
+                FROM daily_snapshots
+                WHERE briefing_summary IS NOT NULL
+                   OR after_market_summary IS NOT NULL
+                ORDER BY date DESC
+                LIMIT $1
+            """, days)
+        return {
+            "reports": [
+                {
+                    "date":          str(r["date"]),
+                    "pre_market":    r["briefing_summary"],
+                    "after_market":  r["after_market_summary"],
+                }
+                for r in rows
+            ]
+        }
+    except Exception as e:
+        return {"reports": [], "error": str(e)}

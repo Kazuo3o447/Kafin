@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API_BASE = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 async function proxyDiagnostics(path: string) {
   const controller = new AbortController();

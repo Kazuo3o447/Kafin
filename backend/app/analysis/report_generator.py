@@ -1287,12 +1287,12 @@ async def generate_sunday_report(tickers: list[str]) -> str:
         logger.debug(f"Performance Summary nicht verfügbar: {exc}")
 
     async def _safe_audit(t: str) -> str:
-    async with _DEEPSEEK_SEMAPHORE:
-        try:
-            return await generate_audit_report(t)
-        except Exception as e:
-            logger.error(f"Audit-Report für {t} fehlgeschlagen: {e}")
-            return f"## {t}\n\nReport-Generierung fehlgeschlagen: {str(e)}"
+        async with _DEEPSEEK_SEMAPHORE:
+            try:
+                return await generate_audit_report(t)
+            except Exception as e:
+                logger.error(f"Audit-Report für {t} fehlgeschlagen: {e}")
+                return f"## {t}\n\nReport-Generierung fehlgeschlagen: {str(e)}"
 
     reports = await asyncio.gather(*[_safe_audit(t) for t in tickers])
     reports = list(reports)
@@ -1663,5 +1663,212 @@ async def generate_morning_briefing() -> str:
         await save_daily_snapshot(market, macro, regime, breadth_data=breadth, briefing_summary=result)
     except Exception as e:
         logger.warning(f"Snapshot-Speicherung fehlgeschlagen: {e}")
+
+    return result
+
+
+async def generate_after_market_report() -> str:
+    """
+    After-Market Report — täglich 22:15 CET.
+    Vollständiges Tagesbild nach US-Markt-Schluss.
+    Nutzt DeepSeek Chat (nicht Reasoner — strukturierter Bericht,
+    kein offenes Reasoning nötig).
+    """
+    from backend.app.data.market_overview import get_market_overview, get_yesterday_snapshot, save_daily_snapshot
+    from backend.app.data.fred import get_macro_snapshot
+    from backend.app.memory.short_term import get_bullet_points
+    from backend.app.memory.watchlist import get_watchlist
+    from backend.app.database import get_pool
+    from datetime import timedelta
+
+    logger.info("Generiere After-Market Report…")
+
+    # 1. Marktdaten
+    market  = await get_market_overview()
+    macro   = await get_macro_snapshot()
+    wl      = await get_watchlist()
+    wl_tickers = [item["ticker"] for item in wl]
+
+    # 2. Earnings-Reaktionen heute aus earnings_reviews + score_history
+    earnings_today: list[str] = []
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            rows = await conn.fetch("""
+                SELECT ticker, actual_eps, consensus_eps, actual_surprise_percent,
+                       stock_reaction_1d_percent, recommendation
+                FROM earnings_reviews
+                WHERE DATE(created_at) = $1
+                ORDER BY created_at DESC
+                LIMIT 10
+            """, today_str)
+        for r in rows:
+            t = r["ticker"]
+            surprise = r.get("actual_surprise_percent")
+            reaction = r.get("stock_reaction_1d_percent")
+            surprise_str = f"Surprise {surprise:+.1f}%" if surprise is not None else "Surprise: N/A"
+            reaction_str = f"Reaktion {reaction:+.1f}%" if reaction is not None else "Reaktion: N/A"
+            earnings_today.append(f"[{t}] {surprise_str} | {reaction_str}")
+    except Exception as e:
+        logger.warning(f"After-market earnings query: {e}")
+
+    # 3. Score-Veränderungen heute (Ticker mit signifikanten Deltas)
+    score_changes: list[str] = []
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            yesterday_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+            rows = await conn.fetch("""
+                SELECT t.ticker,
+                       t.opportunity_score as opp_today,
+                       t.torpedo_score as torp_today,
+                       y.opportunity_score as opp_yest,
+                       y.torpedo_score as torp_yest
+                FROM score_history t
+                LEFT JOIN score_history y ON t.ticker = y.ticker
+                    AND DATE(y.date) = $2
+                WHERE DATE(t.date) = $1
+                  AND (
+                    ABS(COALESCE(t.opportunity_score,0) - COALESCE(y.opportunity_score,0)) >= 1.0
+                    OR
+                    ABS(COALESCE(t.torpedo_score,0) - COALESCE(y.torpedo_score,0)) >= 1.0
+                  )
+                ORDER BY ABS(COALESCE(t.torpedo_score,0) - COALESCE(y.torpedo_score,0)) DESC
+                LIMIT 8
+            """, today_str, yesterday_str)
+        for r in rows:
+            t = r["ticker"]
+            opp_d = (r["opp_today"] or 0) - (r["opp_yest"] or 0)
+            torp_d = (r["torp_today"] or 0) - (r["torp_yest"] or 0)
+            score_changes.append(
+                f"[{t}] Opp {opp_d:+.1f} | Torpedo {torp_d:+.1f}"
+            )
+    except Exception as e:
+        logger.warning(f"After-market score query: {e}")
+
+    # 4. Neue Material Events heute
+    material_today: list[str] = []
+    try:
+        cutoff = (datetime.now() - timedelta(hours=10)).isoformat()
+        bullets = await get_bullet_points("GENERAL_MACRO")
+        for b in bullets:
+            if b.get("date", "") >= cutoff and b.get("is_material"):
+                bp_text = " | ".join(b["bullet_points"]) if isinstance(b.get("bullet_points"), list) else str(b.get("bullet_points", ""))
+                material_today.append(bp_text[:120])
+    except Exception:
+        pass
+
+    # 5. Morgen im Fokus — Earnings der nächsten 2 Tage
+    upcoming: list[str] = []
+    try:
+        from backend.app.data.finnhub import get_earnings_calendar
+        tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        day_after = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
+        cal = await get_earnings_calendar(tomorrow, day_after)
+        for event in (cal or [])[:6]:
+            t_sym = getattr(event, "ticker", getattr(event, "symbol", "?"))
+            if t_sym.upper() in [x.upper() for x in wl_tickers]:
+                upcoming.append(f"[WATCHLIST] {t_sym}: {getattr(event, 'date', '?')}")
+            else:
+                upcoming.append(f"{t_sym}: {getattr(event, 'date', '?')}")
+    except Exception:
+        pass
+
+    # Markt-Zusammenfassung aufbauen
+    indices_str = ""
+    if market and hasattr(market, "get"):
+        idxs = market.get("indices", {})
+        for sym, data in list(idxs.items())[:4]:
+            p = data.get("price")
+            c = data.get("change_1d_pct")
+            indices_str += f"{sym}: ${p:.2f} ({c:+.2f}%)\n" if p and c else f"{sym}: N/A\n"
+
+    # Makro-String
+    if macro and hasattr(macro, "dict"):
+        macro = macro.dict()
+    macro_str = (
+        f"VIX: {macro.get('vix','?')} | "
+        f"Credit Spread: {macro.get('credit_spread_bps','?')}bp | "
+        f"Yield Curve: {macro.get('yield_curve_10y_2y','?')}% | "
+        f"DXY: {macro.get('dxy','?')} | "
+        f"Fed Rate: {macro.get('fed_rate','?')}%"
+    ) if macro else "Makro-Daten nicht verfügbar."
+
+    # ── Prompt ──────────────────────────────────────────────────
+    SYSTEM = """Du bist ein Senior-Marktanalyst bei einem Hedge Fund. Es ist 22:15 CET —
+der US-Markt hat soeben geschlossen. Du erstellst das tägliche After-Market Briefing
+auf Deutsch für den Portfolio Manager.
+
+STRUKTUR (exakt einhalten, 5 Blöcke):
+
+MARKTSCHLUSS: [Regime] — [1 Satz was heute dominiert hat]
+• [Index-Zusammenfassung: was war die Hauptbewegung, was war der Grund?]
+• [Divergenzen: Growth vs Value? Small vs Large Cap?]
+
+EARNINGS-REAKTIONEN:
+[Falls Watchlist-Titel gemeldet haben: Reaktion vs. Expected Move — war es besser/schlechter als erwartet?]
+[Falls keine: "Keine Watchlist-Earnings heute."]
+
+SCORE-VERÄNDERUNGEN:
+[Welche Ticker haben heute signifikante Opp/Torpedo-Shifts erlebt? Was treibt das?]
+[Falls keine: "Keine signifikanten Score-Veränderungen."]
+
+MORGEN IM FOKUS:
+[Welche Earnings/Events morgen? Welches Watchlist-Setup ist für morgen am attraktivsten?]
+[Konkrete Tickers nennen, nicht abstrakt.]
+
+HANDLUNGSEMPFEHLUNG:
+[Eine konkrete Empfehlung für morgen. Was vorbereiten? Was vermeiden?]
+[KEINE breiten Index-Shorts. Sektor-ETF-Puts, Einzeltitel, Pair-Trades wenn bärisch.]
+
+ABSOLUT REGELN:
+- Maximal 40 Zeilen. Kein Fülltext.
+- Jede Zeile: Information oder Einordnung.
+- Sprache: Deutsch. Ton: direkt, kein Hedging."""
+
+    USER = f"""DATUM: {datetime.now().strftime('%d.%m.%Y')}
+
+MARKTDATEN (US-Schluss):
+{indices_str}
+
+MAKRO:
+{macro_str}
+
+EARNINGS HEUTE (aus DB):
+{chr(10).join(earnings_today) if earnings_today else 'Keine Earnings-Daten heute.'}
+
+SCORE-VERÄNDERUNGEN HEUTE:
+{chr(10).join(score_changes) if score_changes else 'Keine signifikanten Veränderungen.'}
+
+MATERIAL EVENTS HEUTE:
+{chr(10).join(material_today) if material_today else 'Keine Material Events.'}
+
+EARNINGS MORGEN/ÜBERMORGEN:
+{chr(10).join(upcoming) if upcoming else 'Keine bekannten Earnings.'}
+
+Erstelle das After-Market Briefing."""
+
+    result = await call_deepseek(
+        system_prompt=SYSTEM,
+        user_prompt=USER,
+        model="deepseek-chat",
+        temperature=0.3,
+        max_tokens=1800,
+    )
+
+    # In DB speichern (neues Feld in daily_snapshots)
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            await conn.execute("""
+                UPDATE daily_snapshots
+                SET after_market_summary = $1
+                WHERE date = $2
+            """, result, today_str)
+    except Exception as e:
+        logger.warning(f"After-market save error: {e}")
 
     return result

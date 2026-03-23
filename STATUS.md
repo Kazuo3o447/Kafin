@@ -8,6 +8,10 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 3. Skimme die historischen Meilensteine nur für Kontext oder Audit-Zwecke.
 
 ## 🟢 Aktueller Stand
+- **Signal Feed v7.0**: Root-Dashboard zeigt jetzt den Anomaly Feed mit Preparation Setups, Signal-Config und Live-Action-Brief.
+- **Markets Dashboard v2**: Marktübersicht, Marktbreite, Intermarket, Fear & Greed und Market Audit sind wieder über die API erreichbar; Frontend-Requests laufen standardmäßig relativ über `/api`.
+- **Frontend Routing Fixes**: Harte `localhost:8001`-Defaults wurden durch relative API-Requests bzw. lokale `8000`-Fallbacks ersetzt, damit Daten im Dev-Modus und im Docker-Stack zuverlässig ankommen.
+- **Visualisierung Fixes**: `VolumeProfile`, Diagnostics-Proxy und Report-Route-Handler verwenden jetzt konsistente API-Ziele.
 - **Trader-Entscheidungsqualität v6.4.0**: ChartAnalysisSection auf Research-Page,
   Expected-Move-Lines, Weekly-Timeframe-Toggle (3M/6M/1J/2J-W), Position-Sizer mit
   ATR-Stop + echtem R:R + Options-Sizing + localStorage-Persistenz,
@@ -45,6 +49,8 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 | Frontend API | `frontend/src/lib/api.ts` | Zentrale API-Abstraktion für alle Frontend-Requests |
 | Diagnostics Routes | `frontend/src/app/api/diagnostics/full/route.ts`, `frontend/src/app/api/diagnostics/db/route.ts` | Frontend-seitige Proxy-/Fallback-Schicht für Systemchecks |
 | Report Routes | `frontend/src/app/api/reports/generate/[ticker]/route.ts`, `frontend/src/app/api/reports/generate-morning/route.ts`, `frontend/src/app/api/reports/generate-sunday/route.ts` | Timeouts und Fallbacks für Report-Generierung |
+| Market APIs | `GET /api/data/market-overview`, `GET /api/data/market-breadth`, `GET /api/data/intermarket`, `GET /api/data/market-news-sentiment`, `GET /api/data/economic-calendar`, `GET /api/data/fear-greed` | Marktübersicht, Breite, Cross-Asset, News-Sentiment, Kalender, Fear & Greed |
+| Signal Feed APIs | `GET /api/data/signals/feed`, `GET /api/data/signal-feed-config` | Signal Feed Dashboard und Konfiguration |
 | Log Viewer | `frontend/src/components/LogViewer.tsx` | Suche, Filter, Export und `Ignore`-Kategorie |
 | Backend Router | `backend/app/main.py` | Minimaler Entrypoint & Router-Registrierung |
 | Routers | `backend/app/routers/` | Fachliche Endpoints (data, news, reports, watchlist, analysis, shadow, logs, system) |
@@ -90,7 +96,37 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - **FRED 5xx** sind als Upstream-Fehler behandelt und werden retry-/fallback-sicher verarbeitet.
 - **Diagnostics-Probleme** deuten zuerst auf Backend-Erreichbarkeit oder falsche Routen hin; direkte Proxy-Fehler im Frontend sollten nach dem Fix nicht mehr auftreten.
 
-## 📌 Hinweis zur Struktur
+## �️ Debugging-Sitzungen & Fehlerbehebung
+
+### 2026-03-23 — Container Restart Issues (v6.4.0 Deployment)
+**Problem**: Beide Container (Frontend/Backend) restarteten ständig nach v6.4.0 Features Deployment
+
+**Frontend-Symptome**:
+- `sh: next: not found` - node_modules korrupt nach Code-Änderungen
+- Container restartete 127+ Male innerhalb weniger Stunden
+
+**Backend-Symptome**:
+- `SyntaxError: 'await' outside async function` in market_overview.py Zeile 627
+- `SyntaxError: unmatched '}'` in data.py Zeile 453 (`}d"`)
+- `IndentationError: expected an indented block` in sparkline Funktionen
+
+**Lösungs-Schritte**:
+1. **Container Rebuild**: `docker-compose down && docker-compose up --build -d`
+2. **Async/Await Fixes**: `_calc_breadth()` und `_fetch()` Funktionen zu async gemacht
+3. **Syntax-Fix**: PowerShell `(Get-Content) -replace '...}d"', '...' | Set-Content`
+4. **Indentation-Fix**: PowerShell Regex für korrekte Einrückung der Funktionen
+
+**Ergebnis**: 
+- ✅ Frontend erreichbar auf http://localhost:3000 (Status 200)
+- ✅ Backend erreichbar auf http://localhost:8000 (Status 200)
+- ✅ Alle v6.4.0 Features verfügbar (Chart-Analyse, Position-Sizing, AI-Chat, Peer-Vergleich, Korrelations-Heatmap, Trade-Journal)
+
+**Prävention für Zukunft**:
+- Nach großen Code-Changes immer `docker-compose up --build -d` durchführen
+- Async-Funktionen konsistent checken (await nur in async functions)
+- Syntax-Check mit IDE/Linter vor Commit
+
+## �📌 Hinweis zur Struktur
 - Oben stehen die wichtigsten Informationen für neue Agents; darunter folgt die thematische Historie.
 
 ## ✅ Abgeschlossene Meilensteine

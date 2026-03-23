@@ -2,14 +2,14 @@
 
 import { FileText, Calendar } from "lucide-react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 export function ActionButtons({ ticker }: { ticker: string }) {
   return (
     <div className="flex flex-wrap gap-3">
       <button
         onClick={() => {
-          fetch(`${API_BASE}/api/reports/generate/${ticker}`, { method: "POST" })
+          fetch(`${API_BASE ? API_BASE : ""}/api/reports/generate/${ticker}`, { method: "POST" })
             .then(() => alert("Audit-Report wird generiert..."))
             .catch(() => alert("Fehler beim Generieren"));
         }}
@@ -20,7 +20,7 @@ export function ActionButtons({ ticker }: { ticker: string }) {
       </button>
       <button
         onClick={() => {
-          fetch(`${API_BASE}/api/reports/post-earnings-review/${ticker}`, { method: "POST" })
+          fetch(`${API_BASE ? API_BASE : ""}/api/reports/post-earnings-review/${ticker}`, { method: "POST" })
             .then(() => alert("Post-Earnings-Review wird gestartet..."))
             .catch(() => alert("Fehler beim Starten"));
         }}

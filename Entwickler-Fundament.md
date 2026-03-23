@@ -12,7 +12,19 @@
 ## Was ist das?
 Eine KI-gestützte Earnings-Trading-Plattform. Sie sammelt Finanzdaten, analysiert sie
 mit einer KI-Kaskade und generiert wöchentliche Audit-Reports mit Handlungsempfehlungen
-für Aktien-Earnings und Bitcoin. Der Trader entscheidet — die Plattform empfiehlt.
+für Aktien-Earnings und Bitcoin. Aktuell enthält die Plattform außerdem ein Signal Feed
+Dashboard sowie Pre-/After-Market Briefings. Der Trader entscheidet — die Plattform empfiehlt.
+
+## Frontend API-Regel
+Frontend-Seiten sollen für Backend-Zugriffe bevorzugt relative `/api/...`-Routen nutzen.
+Das verhindert Port-Mismatches im lokalen Dev-Setup; direkte Backend-URLs sind nur für
+spezielle Server-Proxy-Routen vorgesehen.
+
+## Wiederhergestellte Kernrouten
+- Signal Feed über `/api/data/signals/feed` und `/api/data/signal-feed-config`
+- Marktübersicht über `/api/data/market-overview`, `/api/data/market-breadth`, `/api/data/intermarket`
+- Markt-Kontext über `/api/data/market-news-sentiment`, `/api/data/economic-calendar`, `/api/data/fear-greed`
+- Market Audit bleibt als `POST /api/market-audit` im Analysis-Router
 
 ## Architektur
 - Backend: Python FastAPI auf NUC (ZimaOS + Docker)

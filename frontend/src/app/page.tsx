@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { TrendingUp, TrendingDown, Activity, DollarSign, Percent, Circle, RefreshCw, ArrowDownRight, ArrowUpRight, Info, Calendar as CalendarIcon, Clock, AlertTriangle, Zap } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, DollarSign, Percent, Circle, RefreshCw, ArrowDownRight, ArrowUpRight, Info, Calendar as CalendarIcon, Clock, AlertTriangle, Zap, Brain, ChevronRight } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { api } from "@/lib/api";
 import { cachedFetch, cacheAge, cacheInvalidateAll } from "@/lib/clientCache";
@@ -66,17 +66,18 @@ type OpportunityItem = {
   analysis?: string;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 async function fetchJSON<T>(endpoint: string, revalidate = 60): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  const url = API_BASE ? `${API_BASE}${endpoint}` : endpoint;
+  const res = await fetch(url, {
     next: { revalidate },
   });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
 
-async function getDashboardData(invalidate = false) {
+async function getLegacyFeedData(invalidate = false) {
   if (invalidate) cacheInvalidateAll();
 
   try {
@@ -87,11 +88,11 @@ async function getDashboardData(invalidate = false) {
       { data: watchlistResp },
       { data: opportunitiesResp }
     ] = await Promise.all([
-      cachedFetch("dashboard:macro", () => fetchJSON<MacroSnapshot>("/api/data/macro"), 120),
-      cachedFetch("dashboard:overview", () => fetchJSON<{ indices: Record<string, IndexData>; sector_ranking_5d: SectorRank[]; macro: Record<string, IndexData> }>("/api/data/market-overview"), 120),
-      cachedFetch("dashboard:report", () => fetchJSON<{ report?: string }>("/api/reports/latest").catch(() => ({ report: "" })), 60),
-      cachedFetch("dashboard:watchlist", () => fetchJSON<WatchlistResponse>("/api/watchlist/enriched").catch(() => ({ watchlist: [], concentration_warning: null, sector_distribution: {} })), 60),
-      cachedFetch("dashboard:opportunities", () => fetchJSON<{ opportunities?: OpportunityItem[] }>("/api/opportunities").catch(() => ({ opportunities: [] })), 120),
+      cachedFetch("feed:macro", () => fetchJSON<MacroSnapshot>("/api/data/macro"), 120),
+      cachedFetch("feed:overview", () => fetchJSON<{ indices: Record<string, IndexData>; sector_rankings: SectorRank[]; macro: Record<string, IndexData> }>("/api/data/market-overview"), 120),
+      cachedFetch("feed:report", () => fetchJSON<{ report?: string }>("/api/reports/latest").catch(() => ({ report: "" })), 60),
+      cachedFetch("feed:watchlist", () => fetchJSON<WatchlistResponse>("/api/watchlist/enriched").catch(() => ({ watchlist: [], concentration_warning: null, sector_distribution: {} })), 60),
+      cachedFetch("feed:opportunities", () => fetchJSON<{ opportunities?: OpportunityItem[] }>("/api/opportunities").catch(() => ({ opportunities: [] })), 120),
     ]);
 
     return {
@@ -105,10 +106,10 @@ async function getDashboardData(invalidate = false) {
       macroFromCache,
     };
   } catch (error) {
-    console.error("Dashboard fetch error", error);
+    console.error("Feed fetch error", error);
     return {
       macro: {},
-      overview: { indices: {}, sector_ranking_5d: [], macro: {} },
+      overview: { indices: {}, sector_rankings: [], macro: {} },
       report: "API nicht erreichbar.",
       watchlist: [] as WatchlistItem[],
       concentrationWarning: null,
@@ -132,6 +133,294 @@ function formatPct(value?: number, fallback = "--") {
   if (value === undefined || value === null || Number.isNaN(value)) return fallback;
   const formatted = value.toFixed(2).replace("-0.00", "0.00");
   return `${formatted}%`;
+}
+
+type SignalFeedItem = {
+  ticker: string;
+  signal_type: string;
+  priority: number;
+  headline: string;
+  bullets?: string[];
+  is_new?: boolean;
+  is_resolved?: boolean;
+  value?: number | null;
+  threshold?: number | null;
+  generated_at?: string;
+};
+
+type SignalPreparation = {
+  ticker: string;
+  name?: string;
+  earnings_date?: string | null;
+  analysis?: string;
+  interest_score?: number | null;
+};
+
+type SignalFeedResponse = {
+  signals: SignalFeedItem[];
+  resolved_signals: SignalFeedItem[];
+  preparation_setups: SignalPreparation[];
+  today_synthesis: string;
+  action_brief: string;
+  is_market_hours: boolean;
+  total_count: number;
+  tickers_monitored: number;
+  feed_generated_at: string;
+  oldest_data_at?: string;
+  config_snapshot?: Record<string, unknown>;
+  macro_regime?: string;
+};
+
+function SignalFeedView() {
+  const [feed, setFeed] = useState<SignalFeedResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadFeed = useCallback(async (forceRefresh = false) => {
+    if (forceRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    setError(null);
+    try {
+      const result = await api.getSignalsFeed(forceRefresh);
+      setFeed(result);
+    } catch (e: any) {
+      setError(e?.message || "Signal Feed konnte nicht geladen werden.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFeed();
+  }, [loadFeed]);
+
+  const headlineSignals = feed?.signals ?? [];
+  const prepSetups = feed?.preparation_setups ?? [];
+  const resolvedSignals = feed?.resolved_signals ?? [];
+  const loadedAt = feed?.feed_generated_at ? new Date(feed.feed_generated_at) : null;
+
+  if (loading && !feed) {
+    return (
+      <div className="flex h-[70vh] items-center justify-center px-6">
+        <div className="flex items-center gap-3 text-[var(--text-secondary)]">
+          <RefreshCw size={18} className="animate-spin text-[var(--accent-blue)]" />
+          <span>Signal Feed wird geladen…</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 p-6 md:p-8">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-blue)]/10 text-[var(--accent-blue)]">
+              <Zap size={18} />
+            </div>
+            <div>
+              <h1 className="text-4xl font-bold text-[var(--text-primary)]">Signal Feed</h1>
+              <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                Aktive Anomalien, Preparation Setups und Handlungsempfehlung
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-2 text-xs text-[var(--text-secondary)]">
+            <div className="flex items-center gap-2">
+              <Activity size={14} className={feed?.is_market_hours ? "text-[var(--accent-green)]" : "text-[var(--accent-amber)]"} />
+              <span>{feed?.is_market_hours ? "Market Hours" : "Preparation Mode"}</span>
+            </div>
+          </div>
+          <button
+            onClick={() => loadFeed(true)}
+            disabled={refreshing}
+            className="flex items-center gap-2 rounded-xl bg-[var(--accent-blue)] px-4 py-2 text-sm font-medium text-white shadow-md hover:opacity-90 disabled:opacity-50"
+          >
+            <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+            {refreshing ? "Aktualisiere…" : "Refresh"}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-200">
+          <div className="flex items-center gap-2 font-semibold text-red-300">
+            <AlertTriangle size={16} />
+            Feed-Ladefehler
+          </div>
+          <p className="mt-1 text-red-200/80">{error}</p>
+        </div>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-4">
+        {[
+          { label: "Aktive Signale", value: feed?.total_count ?? headlineSignals.length, icon: Zap },
+          { label: "Ticker überwacht", value: feed?.tickers_monitored ?? 0, icon: Activity },
+          { label: "Regime", value: feed?.macro_regime || "UNKNOWN", icon: Brain },
+          { label: "Letztes Update", value: loadedAt ? loadedAt.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "—", icon: Clock },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <div key={item.label} className="card p-5">
+              <div className="mb-3 flex items-center gap-2 text-[var(--text-muted)]">
+                <Icon size={14} />
+                <span className="text-xs uppercase tracking-[0.24em]">{item.label}</span>
+              </div>
+              <div className="text-2xl font-bold text-[var(--text-primary)]">{item.value}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <section className="card p-6">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Today Synthesis</p>
+            <h2 className="mt-1 text-lg font-bold text-[var(--text-primary)]">Handlung in einem Satz</h2>
+          </div>
+          <Link href="/settings" className="text-xs text-[var(--accent-blue)] hover:opacity-80">
+            Feed Config →
+          </Link>
+        </div>
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-primary)]">{feed?.today_synthesis || "Keine aktiven Signale."}</p>
+        <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+          <div className="flex items-center gap-2 text-[var(--text-muted)]">
+            <Brain size={15} className="text-[var(--accent-blue)]" />
+            <span className="text-xs uppercase tracking-[0.24em]">Action Brief</span>
+          </div>
+          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-primary)]">
+            {feed?.action_brief || "Kein Action Brief verfügbar."}
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Active Signals</p>
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">Was gerade zählt</h2>
+          </div>
+          <span className="text-xs text-[var(--text-muted)]">
+            {headlineSignals.length} Ergebnisse
+          </span>
+        </div>
+
+        {headlineSignals.length ? (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {headlineSignals.map((signal) => (
+              <div key={`${signal.ticker}-${signal.signal_type}`} className="card p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <Link href={`/research/${signal.ticker}`} className="text-lg font-bold text-[var(--accent-blue)] hover:opacity-80">
+                      {signal.ticker}
+                    </Link>
+                    <p className="mt-1 text-xs uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                      {signal.signal_type.replaceAll("_", " ")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {signal.is_new && <span className="rounded-full bg-[var(--accent-green)]/10 px-2 py-1 text-[10px] font-semibold text-[var(--accent-green)]">NEW</span>}
+                    {signal.is_resolved && <span className="rounded-full bg-[var(--accent-amber)]/10 px-2 py-1 text-[10px] font-semibold text-[var(--accent-amber)]">RESOLVED</span>}
+                    <span className="rounded-full border border-[var(--border)] px-2 py-1 text-[10px] text-[var(--text-muted)]">
+                      P{signal.priority}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="mt-4 text-sm font-medium text-[var(--text-primary)]">{signal.headline}</p>
+
+                {signal.bullets?.length ? (
+                  <ul className="mt-4 space-y-2 text-sm text-[var(--text-secondary)]">
+                    {signal.bullets.map((bullet) => (
+                      <li key={bullet} className="flex gap-2">
+                        <ChevronRight size={14} className="mt-0.5 shrink-0 text-[var(--accent-blue)]" />
+                        <span>{bullet.replace(/^•\s*/, "")}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="card p-8 text-sm text-[var(--text-muted)]">
+            Keine aktiven Signale im Feed.
+          </div>
+        )}
+      </section>
+
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Preparation Setups</p>
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">Vorbereitung für die nächste Session</h2>
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          {prepSetups.length ? prepSetups.map((setup) => (
+            <Link
+              key={setup.ticker}
+              href={`/research/${setup.ticker}`}
+              className="card p-5 transition-transform hover:-translate-y-0.5 hover:border-[var(--accent-blue)]/40"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-lg font-bold text-[var(--text-primary)]">{setup.ticker}</p>
+                  <p className="text-xs text-[var(--text-muted)]">{setup.name || setup.ticker}</p>
+                </div>
+                <ChevronRight size={16} className="text-[var(--text-muted)]" />
+              </div>
+              <p className="mt-4 text-sm text-[var(--text-secondary)]">{setup.analysis || "Setup in Vorbereitung."}</p>
+              <div className="mt-4 flex items-center justify-between text-xs text-[var(--text-muted)]">
+                <span>{setup.earnings_date ? new Date(setup.earnings_date).toLocaleDateString("de-DE") : "—"}</span>
+                <span>{setup.interest_score != null ? `Score ${setup.interest_score.toFixed(1)}` : "Score —"}</span>
+              </div>
+            </Link>
+          )) : (
+            <div className="card p-6 text-sm text-[var(--text-muted)]">Keine Prep-Setups verfügbar.</div>
+          )}
+        </div>
+      </section>
+
+      <section className="card p-6">
+        <div className="mb-3 flex items-center gap-2 text-[var(--text-muted)]">
+          <AlertTriangle size={15} className="text-[var(--accent-amber)]" />
+          <p className="text-xs font-semibold uppercase tracking-[0.24em]">Resolved Signals</p>
+        </div>
+        {resolvedSignals.length ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {resolvedSignals.map((signal) => (
+              <div key={`${signal.ticker}-${signal.signal_type}`} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <Link href={`/research/${signal.ticker}`} className="font-semibold text-[var(--accent-blue)] hover:opacity-80">
+                    {signal.ticker}
+                  </Link>
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">resolved</span>
+                </div>
+                <p className="mt-2 text-sm text-[var(--text-primary)]">{signal.headline}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--text-muted)]">Noch keine gelösten Signale im 24h-Fenster.</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+export default function Home() {
+  return <SignalFeedView />;
 }
 
 function MacroBanner({ macro }: { macro: MacroSnapshot }) {
@@ -174,7 +463,7 @@ function MacroBanner({ macro }: { macro: MacroSnapshot }) {
   );
 }
 
-function IndexCards({ data }: { data: Record<string, IndexData> }) {
+function LegacyIndexGrid({ data }: { data: Record<string, IndexData> }) {
   const entries = Object.entries(data);
   if (!entries.length) return null;
   return (
@@ -207,7 +496,7 @@ function IndexCards({ data }: { data: Record<string, IndexData> }) {
   );
 }
 
-function SectorTable({ sectors }: { sectors: SectorRank[] }) {
+function LegacySectorGrid({ sectors }: { sectors: SectorRank[] }) {
   if (!sectors.length) return null;
   const top = sectors.slice(0, 5);
   const bottom = sectors.slice(-5).reverse();
@@ -288,7 +577,7 @@ function BriefingPreview({ report }: { report: string }) {
     <div className="card p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-lg font-bold text-[var(--text-primary)]">Morning Briefing</h3>
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">Legacy Briefing</h3>
           <p className="text-sm text-[var(--text-secondary)]">Letzter Run</p>
         </div>
         <button className="rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90 transition-all">
@@ -634,11 +923,11 @@ function TopSetups({ watchlist }: { watchlist: WatchlistItem[] }) {
   );
 }
 
-function buildDashboardAlerts(
+function buildLegacyAlerts(
   watchlist: WatchlistItem[]
 ): { ticker: string; message: string;
     color: "red"|"amber"|"green" }[] {
-  const alerts: ReturnType<typeof buildDashboardAlerts> = [];
+  const alerts: ReturnType<typeof buildLegacyAlerts> = [];
   for (const w of watchlist) {
     // Earnings ≤5T
     if (w.earnings_countdown != null
@@ -677,10 +966,10 @@ function buildDashboardAlerts(
   ).slice(0, 5);
 }
 
-export default function Home() {
+function LegacyFeedPage() {
   const [data, setData] = useState<{
     macro: MacroSnapshot;
-    overview: { indices: Record<string, IndexData>; sector_ranking_5d: SectorRank[]; macro: Record<string, IndexData> };
+    overview: { indices: Record<string, IndexData>; sector_rankings: SectorRank[]; macro: Record<string, IndexData> };
     report: string;
     watchlist: WatchlistItem[];
     concentrationWarning?: string | null;
@@ -695,7 +984,7 @@ export default function Home() {
 
   const loadData = useCallback(async () => {
     setRefreshing(true);
-    const result = await getDashboardData();
+    const result = await getLegacyFeedData();
     setData(result);
     setLoading(false);
     setRefreshing(false);
@@ -780,7 +1069,7 @@ export default function Home() {
       <div className="flex h-96 items-center justify-center">
         <div className="text-center">
           <RefreshCw size={32} className="mx-auto mb-4 animate-spin text-[var(--accent-blue)]" />
-          <p className="text-[var(--text-muted)]">Lade Dashboard-Daten...</p>
+          <p className="text-[var(--text-muted)]">Lade Daten...</p>
         </div>
       </div>
     );
@@ -792,8 +1081,8 @@ export default function Home() {
     <div className="space-y-4 p-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-[var(--text-primary)]">Dashboard</h1>
-          <p className="text-sm text-[var(--text-secondary)] mt-2">Morning Brief — Trading-Setup für heute</p>
+          <h1 className="text-4xl font-bold text-[var(--text-primary)]">Legacy View</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-2">Signal-Setup für heute</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-end text-xs text-[var(--text-secondary)]">
@@ -819,7 +1108,7 @@ export default function Home() {
         <RegimePulse macro={macro} />
 
         {/* 2. Alert-Streifen */}
-        <AlertStrip alerts={buildDashboardAlerts(watchlist)} />
+        <AlertStrip alerts={buildLegacyAlerts(watchlist)} />
 
         {/* 3. Beste Setups + Höchstes Risiko */}
         <TopSetups watchlist={watchlist} />
@@ -921,7 +1210,7 @@ export default function Home() {
             <summary className="cursor-pointer text-xs
                                  text-[var(--text-muted)]
                                  select-none hover:text-[var(--text-primary)]">
-              Morning Briefing ▸
+              Legacy Briefing ▸
             </summary>
             <p className="mt-3 text-xs text-[var(--text-secondary)]
                            leading-relaxed whitespace-pre-wrap

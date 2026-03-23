@@ -126,7 +126,7 @@ export const api = {
   getIntermarket: () => fetchAPI("/api/data/intermarket"),
   getMarketNewsSentiment: () => fetchAPI("/api/data/market-news-sentiment"),
   getEconomicCalendar: () => fetchAPI("/api/data/economic-calendar"),
-  generateMarketAudit: () => fetchAPI("/api/data/market-audit", {
+  generateMarketAudit: () => fetchAPI("/api/market-audit", {
     method: "POST",
   }),
 
@@ -140,4 +140,22 @@ export const api = {
 
   // Score Delta
   getScoreDelta: (ticker: string) => fetchAPI(`/api/data/score-delta/${ticker}`),
+
+  // Signal Feed
+  getSignalsFeed: (forceRefresh = false) =>
+    fetchAPI(`/api/data/signals/feed${forceRefresh ? "?force_refresh=true" : ""}`),
+
+  // Signal Feed Config (für Settings)
+  getSignalFeedConfig: () => fetchAPI("/api/data/signal-feed-config"),
+  saveSignalFeedConfig: (config: Record<string, unknown>) =>
+    fetchAPI("/api/data/signal-feed-config", {
+      method: "POST",
+      body: JSON.stringify(config),
+    }),
+
+  // Briefing
+  generateAfterMarketReport: () =>
+    fetchAPI("/api/reports/generate-after-market", { method: "POST" }),
+  getBriefingArchive: (days = 7) =>
+    fetchAPI(`/api/reports/briefing-archive?days=${days}`),
 };

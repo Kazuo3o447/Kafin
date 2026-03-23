@@ -12,7 +12,7 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **Modular Architecture v6.2.0**: Fachlich getrennte API-Router für bessere Wartbarkeit
 - **PostgreSQL 16 + pgvector**: Lokale Vektordatenbank für semantische Suche (RAG)
 - **API Usage Tracking**: Echtzeit-Token-Counter und Call-Limits für alle APIs
-- **Automatisierung**: n8n-Workflows für tägliche Briefings und wöchentliche Reports
+- **Pre/After-Market Briefing**: Tägliche Briefings 08:00 und 22:15 CET (ersetzt Sunday Report)
 - **System Monitoring**: Live Status Dashboard mit Service-Health und Latenz-Tracking
 - **Persistent Logging**: RotatingFileHandler mit Docker-Volume-Persistenz
 
@@ -62,6 +62,13 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **Regulatorisch**: SEC EDGAR (Form 8-K, 4) für Insider-Transaktionen
 - **Sentiment**: FinBERT für deutsche/englische News-Analyse
 
+### Letzte Fixes (23.03.2026)
+- **Signal Feed**: Root-Page zeigt jetzt den Signal Feed als neues Dashboard, inklusive Settings-Tab für die Feed-Konfiguration.
+- **Markets Dashboard**: Marktübersicht, Marktbreite, Intermarket, Fear & Greed, Economic Calendar und Market Audit sind wieder als API-Quellen erreichbar.
+- **Frontend-API**: Browser-Requests laufen standardmäßig über relative `/api/...`-Pfade, damit lokale Dev-Setups nicht an Port-Mismatches hängen.
+- **Chart/Visualisierung**: `VolumeProfile` und Ticker-Aktionsbuttons nutzen jetzt die robuste API-Routing-Schicht statt harter Host-URLs.
+- **Legacy Cleanup**: Veraltete Chart-Route unter `watchlist/[ticker]` wurde entfernt.
+
 ## 🛠️ Quick Start
 
 ### Voraussetzungen
@@ -94,10 +101,17 @@ docker-compose up -d kafin-frontend
 
 ### Zugriffe
 - **Web Dashboard**: http://localhost:3000
+- **Signal Feed**: http://localhost:3000/ (neues Dashboard)
+- **Markets Dashboard**: http://localhost:3000/markets
+- **Briefing**: http://localhost:3000/briefing (Pre/After-Market Briefings)
 - **Status Dashboard**: http://localhost:3000/status
 - **Hacker Terminal**: http://localhost:3000/terminal
 - **API Dokumentation**: http://localhost:8000/docs
 - **n8n Workflows**: http://localhost:5678
+
+### Frontend API-Hinweis
+- Browser-Requests laufen im Frontend primär über relative `/api/...`-Pfade und werden per Next-Rewrite an das Backend weitergereicht.
+- Lokale Default-API-Ziele sind auf `http://localhost:8000` ausgerichtet; `8001` ist nur für den Docker-Host-Port relevant.
 
 ## 📊 Plattform-Architektur
 
@@ -141,11 +155,19 @@ docker-compose up -d kafin-frontend
 ## � Automatisierung (n8n)
 
 ### Aktive Workflows
-- **Morning Briefing**: Mo-Fr 07:00 Uhr
+- **Pre-Market Briefing**: Mo-Fr 08:00 CET
+- **After-Market Briefing**: Mo-Fr 22:15 CET (US-Markt-Schluss)
 - **News-Pipeline**: Mo-Fr 13:00-22:30 (alle 30min)
 - **Wochenend-News**: Sa-So 10/14/18/22 Uhr
-- **Sonntags-Report**: Sonntag 19:00 Uhr
 - **Post-Earnings Review**: Mo-Fr 22:00 Uhr
+
+## 🐛 Letzte Fixes (23. März 2026)
+- **Pre/After-Market Briefing System**: Sunday Report ersetzt durch tägliche Briefings (08:00 + 22:15 CET)
+- **Signal Feed Dashboard**: Komplett neues Dashboard mit 3-Schichten UI und Action Brief
+- **Briefing Page**: Neue `/briefing` Seite mit Pre/After-Market Historie und manueller Generierung
+- **Backend API**: Neue Endpoints `/api/reports/generate-after-market` und `/api/reports/briefing-archive`
+- **Database Schema**: `after_market_summary` Spalte zu `daily_snapshots` hinzugefügt
+- **Navigation**: Sidebar um "Briefing" Link erweitert
 
 ## 🐛 Letzte Fixes (22. März 2026)
 - **Prompt Quality v6.1.4**: Alle TODO-Platzhalter implementiert (Max Pain, CEO, Mitarbeiter, Fear & Greed, etc.)
@@ -175,6 +197,6 @@ docker-compose up -d kafin-frontend
 
 ---
 
-**Version**: 6.1.5 - Modular Architecture & PostgreSQL Migration Complete
-**Letztes Update**: 2026-03-22
+**Version**: 6.2.0 - Pre/After-Market Briefing System & Signal Feed Dashboard
+**Letztes Update**: 2026-03-23
 **Status**: Production Ready

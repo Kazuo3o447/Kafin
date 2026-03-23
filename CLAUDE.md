@@ -107,15 +107,38 @@ tests/          → Test-Dateien
 
 ## Neue Routers (v6.4.0)
 - `routers/journal.py` — Trade-Journal CRUD
+- `routers/data.py` — Signal Feed (`/api/data/signals/feed`, `/api/data/signal-feed-config`)
+- `routers/reports.py` — Pre/After-Market Briefing (`/api/reports/generate-after-market`, `/api/reports/briefing-archive`)
 
 ## Neue API-Endpunkte (v6.4.0)
 - GET  /api/data/peer-comparison/{ticker}   — Peer-Metriken parallel
 - GET  /api/data/watchlist-correlation      — 30T Korrelationsmatrix
+- GET  /api/data/market-overview            — Marktübersicht für Dashboard
+- GET  /api/data/market-breadth             — Marktbreite / SMA50 / SMA200
+- GET  /api/data/intermarket                — Cross-Asset-Signale
+- GET  /api/data/market-news-sentiment      — Markt-News + Sentiment
+- GET  /api/data/economic-calendar          — Wirtschaftskalender
+- GET  /api/data/fear-greed                 — Fear & Greed Score
+- POST /api/market-audit                    — Gesamtmarkt-Analyse mit DeepSeek
+- GET  /api/data/signals/feed               — Signal Feed / Anomaly-Feed
+- GET  /api/data/signal-feed-config         — Signal-Feed-Konfiguration lesen
+- POST /api/data/signal-feed-config         — Signal-Feed-Konfiguration speichern
+- POST /api/reports/generate-after-market   — After-Market Briefing generieren
+- GET  /api/reports/briefing-archive        — Pre/After-Market Briefing-Archiv
 - POST /api/analysis/chat/{ticker}          — Multi-Turn AI-Chat
 - GET  /api/journal                         — Trade-Journal lesen
 - POST /api/journal                         — Trade-Journal schreiben
 - PUT  /api/journal/{id}                    — Exit eintragen
 - DELETE /api/journal/{id}                  — Eintrag löschen
+
+## Frontend API-Regeln
+- Browser-Requests nutzen relative `/api/...`-Pfade und laufen über die Next-Rewrites.
+- Wenn eine Datei lokal eine Backend-URL braucht, ist `http://localhost:8000` der Standard; `8001` ist nur der Docker-Host-Port.
+
+## Routing-Fixes (23.03.2026)
+- Die Market-Dashboard-Endpoints sind wieder über `backend/app/routers/data.py` verfügbar.
+- Der Market-Audit bleibt im `analysis`-Router unter `POST /api/market-audit`.
+- `VolumeProfile`, Diagnostik-Handler und Report-Handler sollen die API über relative Routen oder definierte Proxy-URLs ansprechen.
 
 ## Neue DB-Tabelle (v6.4.0)
 - `trade_journal` — Echte Trades mit Entry/Exit/P&L/These

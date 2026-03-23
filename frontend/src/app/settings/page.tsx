@@ -101,7 +101,7 @@ type NewsMemory = {
   latest_bullet?: string;
 };
 
-type TabId = "uebersicht" | "pipeline" | "apis" | "daten" | "konfiguration";
+type TabId = "uebersicht" | "pipeline" | "apis" | "daten" | "signal_feed" | "konfiguration";
 
 type ApiUsageModel = {
   calls:         number;
@@ -302,6 +302,9 @@ export default function SettingsPage() {
   const [selectedTicker, setSelectedTicker] = useState<string>("");
   const [newsMemory, setNewsMemory] = useState<NewsMemory | null>(null);
   const [scoringConfig, setScoringConfig] = useState<ScoringConfig | null>(null);
+  const [feedConfig, setFeedConfig] = useState<Record<string, { value: number | string; enabled: boolean }> | null>(null);
+  const [feedConfigLoading, setFeedConfigLoading] = useState(false);
+  const [feedConfigSaving, setFeedConfigSaving] = useState(false);
   
   // Existing state (preserve for compatibility)
   const [diagnostics, setDiagnostics] = useState<DiagnosticResult>({});
@@ -320,6 +323,7 @@ export default function SettingsPage() {
     { id: "pipeline" as TabId, label: "Pipeline", icon: Zap },
     { id: "apis" as TabId, label: "APIs", icon: Globe },
     { id: "daten" as TabId, label: "Daten", icon: Database },
+    { id: "signal_feed" as TabId, label: "Signal Feed", icon: Activity },
     { id: "konfiguration" as TabId, label: "Konfiguration", icon: Settings },
   ];
 
@@ -471,6 +475,39 @@ export default function SettingsPage() {
     }
   }
 
+  async function loadSignalFeedConfig() {
+    setFeedConfigLoading(true);
+    try {
+      const result = await api.getSignalFeedConfig();
+      const config = result?.config || {};
+      const normalized = Object.fromEntries(
+        Object.entries(config).map(([key, value]) => [
+          key,
+          typeof value === "object" && value !== null
+            ? value
+            : { value, enabled: true },
+        ])
+      );
+      setFeedConfig(normalized as Record<string, { value: number | string; enabled: boolean }>);
+    } catch (error) {
+      console.error("Signal feed config error", error);
+    } finally {
+      setFeedConfigLoading(false);
+    }
+  }
+
+  async function saveSignalFeedConfig() {
+    if (!feedConfig) return;
+    setFeedConfigSaving(true);
+    try {
+      await api.saveSignalFeedConfig(feedConfig);
+    } catch (error) {
+      console.error("Signal feed save error", error);
+    } finally {
+      setFeedConfigSaving(false);
+    }
+  }
+
   // Effects
   useEffect(() => {
     // Load last system check from localStorage
@@ -504,6 +541,12 @@ export default function SettingsPage() {
     if (activeTab === "daten") {
       loadWatchlist();
       loadScoringConfig();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "signal_feed") {
+      loadSignalFeedConfig();
     }
   }, [activeTab]);
 
@@ -1207,6 +1250,69 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {activeTab === "signal_feed" && (
+        <div className="space-y-6">
+          <div className="card p-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-[var(--text-primary)]">Signal Feed Konfiguration</h3>
+                <p className="text-sm text-[var(--text-secondary)]">
+                  Schwellwerte und Trigger für den Anomaly Feed anpassen.
+                </p>
+              </div>
+              <button
+                onClick={saveSignalFeedConfig}
+                disabled={feedConfigSaving || feedConfigLoading || !feedConfig}
+                className="flex items-center gap-2 rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+              >
+                <CheckCircle size={16} />
+                {feedConfigSaving ? "Speichere..." : "Speichern"}
+              </button>
+            </div>
+
+            {feedConfigLoading ? (
+              <p className="text-sm text-[var(--text-muted)]">Lade Feed-Konfiguration...</p>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {Object.entries(feedConfig || {}).map(([key, cfg]) => (
+                  <div key={key} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">{key}</p>
+                        <p className="text-[11px] text-[var(--text-muted)]">Signal Feed Threshold</p>
+                      </div>
+                      <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(cfg?.enabled)}
+                          onChange={(e) => setFeedConfig((prev) => prev ? ({
+                            ...prev,
+                            [key]: { ...(prev[key] || { value: "", enabled: true }), enabled: e.target.checked },
+                          }) : prev)}
+                          className="h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-tertiary)]"
+                        />
+                        Aktiv
+                      </label>
+                    </div>
+                    <input
+                      value={String(cfg?.value ?? "")}
+                      onChange={(e) => setFeedConfig((prev) => prev ? ({
+                        ...prev,
+                        [key]: {
+                          ...(prev[key] || { value: "", enabled: true }),
+                          value: e.target.value,
+                        },
+                      }) : prev)}
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {activeTab === "konfiguration" && (
         <div className="space-y-6">
           {/* Scoring Weights */}
@@ -1345,27 +1451,88 @@ export default function SettingsPage() {
 
           {/* Recent Features */}
           <div className="card p-6">
-            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Neue Features</h3>
+            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Neue Features v6.4.0</h3>
             <p className="text-sm text-[var(--text-secondary)] mb-4">
-              Die zuletzt dokumentierten Erweiterungen aus v6.1.5 und v6.1.4.
+              Trader-Entscheidungsqualität — Chart-Analyse, Position-Sizing, AI-Chat, Peer-Vergleich, Portfolio-Risiko und Trade-Journal.
             </p>
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               <div>
-                <h4 className="font-medium text-[var(--text-primary)] mb-2">v6.1.5 — Audit Report Persistenz</h4>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">📊 Chart & Analyse</h4>
                 <div className="text-sm text-[var(--text-secondary)] space-y-1">
-                  <div>• <strong className="text-[var(--text-primary)]">Audit Reports</strong> speichern jetzt den vollständigen <code>report_text</code></div>
-                  <div>• <strong className="text-[var(--text-primary)]">Research</strong> lädt den letzten Report aus der DB statt neu zu generieren</div>
-                  <div>• <strong className="text-[var(--text-primary)]">Cache</strong> wird nach neuem Audit für Research invalidiert</div>
-                  <div>• <strong className="text-[var(--text-primary)]">Freshness</strong> nur Reports der letzten 30 Tage werden wiederverwendet</div>
+                  <div>• <strong className="text-[var(--text-primary)]">ChartAnalysisSection</strong> wiederverwendbar in components/</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Expected Move Lines</strong> ±IV% direkt im Kerzen-Chart</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Weekly-Timeframe</strong> 2J mit expliziter "Wochen"-Kennzeichnung</div>
+                  <div>• <strong className="text-[var(--text-primary)]">AI-Levels</strong> Entry/Stop/Support/Resistance auf Research-Page</div>
                 </div>
               </div>
               <div>
-                <h4 className="font-medium text-[var(--text-primary)] mb-2">v6.1.4 — Earnings Radar + Performance</h4>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">🧮 Position Sizing</h4>
                 <div className="text-sm text-[var(--text-secondary)] space-y-1">
-                  <div>• <strong className="text-[var(--text-primary)]">Earnings Radar</strong> zeigt jetzt Firmenname unter dem Ticker</div>
-                  <div>• <strong className="text-[var(--text-primary)]">Timing</strong> liest Finnhub <code>hour</code> aus und zeigt <code>07:00 MEZ</code> / <code>22:00 MEZ</code></div>
-                  <div>• <strong className="text-[var(--text-primary)]">Tooltip</strong> weist auf die ungefähre Zeitangabe hin</div>
-                  <div>• <strong className="text-[var(--text-primary)]">Performance</strong> Watchlist-/Markets-Caches und Loading-States optimiert</div>
+                  <div>• <strong className="text-[var(--text-primary)]">ATR-Stop-Vorschlag</strong> automatische Berechnung aus ATR(14)</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Echtes R:R</strong> nutzt target_1 aus Chart-Analyse statt 5%</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Options-Sizing</strong> Kontrakt-Anzahl basierend auf IV-ATM</div>
+                  <div>• <strong className="text-[var(--text-primary)]">localStorage Persistenz</strong> Kontostand, Risk%, Stop%</div>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">🤖 AI-Dialog</h4>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• <strong className="text-[var(--text-primary)]">TickerChatBlock</strong> Multi-Turn DeepSeek Chat</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Kontext-aware</strong> Scores, Metriken, Audit-Report-Auszug</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Suggestion-Chips</strong> vorgefertigte Fragen für schnellen Einstieg</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Guardrail</strong> No-Index-Shorts im System-Prompt</div>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">👥 Peer-Vergleich</h4>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• <strong className="text-[var(--text-primary)]">PeerComparisonBlock</strong> PE/PS/RVOL/MCap/5T side-by-side</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Parallele API-Calls</strong> via asyncio.gather für Performance</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Hauptticker hervorgehoben</strong> blauer Highlight + Pfeil</div>
+                  <div>• <strong className="text-[var(--text-primary)]">2h Cache</strong> für schnelle wiederholte Abfragen</div>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">🔗 Portfolio-Risiko</h4>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• <strong className="text-[var(--text-primary)]">Korrelations-Heatmap</strong> 30T-Return-Korrelation aller Watchlist-Ticker</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Serverseitige Berechnung</strong> pandas corr() mit 4h Cache</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Konzentrationswarnung</strong> bei ≥3 Paaren mit Korrelation ≥0.75</div>
+                  <div>• <strong className="text-[var(--text-primary)]">On-Demand</strong> nicht beim Page-Load, nur auf Anforderung</div>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-medium text-[var(--text-primary)] mb-2">📓 Trade-Journal</h4>
+                <div className="text-sm text-[var(--text-secondary)] space-y-1">
+                  <div>• <strong className="text-[var(--text-primary)]">Neue Page /journal</strong> Offene + geschlossene Positionen</div>
+                  <div>• <strong className="text-[var(--text-primary)]">P&L serverseitig</strong> direction-aware (Long/Short)</div>
+                  <div>• <strong className="text-[var(--text-primary)]">Strukturierte Felder</strong> Entry, Stop, Ziel, These, Scores, Exit-Grund</div>
+                  <div>• <strong className="text-[var(--text-primary)]">CRUD-API</strong> GET/POST/PUT/DELETE mit Pydantic-Validierung</div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Legacy Features */}
+            <div className="mt-6 pt-6 border-t border-[var(--border)]">
+              <h4 className="font-medium text-[var(--text-primary)] mb-3 text-sm">Vorgängerversionen</h4>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <h5 className="font-medium text-[var(--text-primary)] mb-2 text-xs">v6.1.5 — Audit Report Persistenz</h5>
+                  <div className="text-xs text-[var(--text-secondary)] space-y-1">
+                    <div>• <strong className="text-[var(--text-primary)]">Audit Reports</strong> speichern jetzt den vollständigen <code>report_text</code></div>
+                    <div>• <strong className="text-[var(--text-primary)]">Research</strong> lädt den letzten Report aus der DB statt neu zu generieren</div>
+                    <div>• <strong className="text-[var(--text-primary)]">Cache</strong> wird nach neuem Audit für Research invalidiert</div>
+                    <div>• <strong className="text-[var(--text-primary)]">Freshness</strong> nur Reports der letzten 30 Tage werden wiederverwendet</div>
+                  </div>
+                </div>
+                <div>
+                  <h5 className="font-medium text-[var(--text-primary)] mb-2 text-xs">v6.1.4 — Earnings Radar + Performance</h5>
+                  <div className="text-xs text-[var(--text-secondary)] space-y-1">
+                    <div>• <strong className="text-[var(--text-primary)]">Earnings Radar</strong> zeigt jetzt Firmenname unter dem Ticker</div>
+                    <div>• <strong className="text-[var(--text-primary)]">Timing</strong> liest Finnhub <code>hour</code> aus und zeigt <code>07:00 MEZ</code> / <code>22:00 MEZ</code></div>
+                    <div>• <strong className="text-[var(--text-primary)]">Tooltip</strong> weist auf die ungefähre Zeitangabe hin</div>
+                    <div>• <strong className="text-[var(--text-primary)]">Performance</strong> Watchlist-/Markets-Caches und Loading-States optimiert</div>
+                  </div>
                 </div>
               </div>
             </div>

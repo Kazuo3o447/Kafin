@@ -277,7 +277,26 @@ async def ensure_signal_feed_config():
         logger.error(f"signal_feed_config Setup fehlgeschlagen: {e}")
 
 
+async def add_after_market_summary_column():
+    """Fügt after_market_summary Spalte zu daily_snapshots hinzu falls nicht vorhanden."""
+    try:
+        db = get_supabase_client()
+        if db is None:
+            return
+
+        # After-Market Spalte zu daily_snapshots (falls noch nicht vorhanden)
+        await db.execute("""
+            ALTER TABLE daily_snapshots
+            ADD COLUMN IF NOT EXISTS after_market_summary TEXT;
+        """)
+        
+        logger.info("after_market_summary Spalte zu daily_snapshots hinzugefügt (falls nicht vorhanden)")
+    except Exception as e:
+        logger.error(f"After-Market Summary Spalte hinzufügen fehlgeschlagen: {e}")
+
+
 async def init_db():
     """Initialisiert die Datenbank mit allen Tabellen und Defaults."""
     await ensure_daily_snapshots_table()
     await ensure_signal_feed_config()
+    await add_after_market_summary_column()

@@ -230,6 +230,23 @@ type ChatMsg = {
   content: string;
 };
 
+type PeerItem = {
+  ticker: string;
+  name: string;
+  price: number | null;
+  change_5d_pct: number | null;
+  pe_ratio: number | null;
+  forward_pe: number | null;
+  ps_ratio: number | null;
+  market_cap_b: number | null;
+  rvol: number | null;
+};
+
+type PeerComparisonData = {
+  main: string;
+  peers: PeerItem[];
+};
+
 type ChartAnalysisData = {
   ticker: string;
   price: number;
@@ -1185,6 +1202,102 @@ function TickerChatBlock({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function PeerComparisonBlock({
+  mainTicker,
+  data,
+  loading,
+}: {
+  mainTicker: string;
+  data: PeerComparisonData | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="card p-4">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-2">
+          Peer-Vergleich
+        </p>
+        <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+          <RefreshCw size={12} className="animate-spin" />
+          Lade Peer-Daten…
+        </div>
+      </div>
+    );
+  }
+
+  if (!data || data.peers.length <= 1) return null;
+
+  const cols: { key: keyof PeerItem; label: string; fmt: (v: unknown) => string }[] = [
+    { key: "price",        label: "Kurs",   fmt: v => v != null ? `$${(v as number).toFixed(2)}` : "—" },
+    { key: "change_5d_pct",label: "5T%",    fmt: v => v != null ? `${(v as number) >= 0 ? "+" : ""}${(v as number).toFixed(1)}%` : "—" },
+    { key: "pe_ratio",     label: "P/E",    fmt: v => v != null ? (v as number).toFixed(1) : "—" },
+    { key: "ps_ratio",     label: "P/S",    fmt: v => v != null ? (v as number).toFixed(1) : "—" },
+    { key: "market_cap_b", label: "MCap B", fmt: v => v != null ? `$${(v as number).toFixed(0)}B` : "—" },
+    { key: "rvol",         label: "RVOL",   fmt: v => v != null ? `${(v as number).toFixed(1)}×` : "—" },
+  ];
+
+  return (
+    <div className="card p-4 overflow-x-auto">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-3">
+        Peer-Vergleich
+      </p>
+      <table className="w-full text-xs min-w-[420px]">
+        <thead>
+          <tr>
+            <th className="text-left pb-2 text-[var(--text-muted)] font-medium w-24">Ticker</th>
+            {cols.map(c => (
+              <th key={c.key} className="text-right pb-2 text-[var(--text-muted)] font-medium px-2">
+                {c.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.peers.map((peer, i) => {
+            const isMain = peer.ticker === mainTicker;
+            return (
+              <tr
+                key={peer.ticker}
+                className={`border-t border-[var(--border)] ${
+                  isMain ? "bg-[var(--accent-blue)]/5" : i % 2 === 0 ? "" : "bg-[var(--bg-tertiary)]/40"
+                }`}
+              >
+                <td className="py-2 pr-2">
+                  <span className={`font-mono font-semibold ${isMain ? "text-[var(--accent-blue)]" : "text-[var(--text-primary)]"}`}>
+                    {peer.ticker}
+                  </span>
+                  {isMain && (
+                    <span className="ml-1 text-[9px] text-[var(--accent-blue)]">▶</span>
+                  )}
+                  <br />
+                  <span className="text-[var(--text-muted)] text-[10px] truncate block max-w-[88px]">
+                    {peer.name}
+                  </span>
+                </td>
+                {cols.map(c => {
+                  const raw = peer[c.key];
+                  const str = c.fmt(raw);
+                  const isChange = c.key === "change_5d_pct";
+                  const color = isChange && raw != null
+                    ? (raw as number) >= 0
+                      ? "text-[var(--accent-green)]"
+                      : "text-[var(--accent-red)]"
+                    : "text-[var(--text-primary)]";
+                  return (
+                    <td key={c.key} className={`py-2 px-2 text-right font-mono ${color}`}>
+                      {str}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -2202,6 +2315,10 @@ export default function ResearchDashboard() {
   const [chartLoading, setChartLoading] = useState(false);
   const chartLoadingRef = useRef(false);
 
+  // Feature 3: Peer Comparison
+  const [peerData, setPeerData] = useState<PeerComparisonData | null>(null);
+  const [peerLoading, setPeerLoading] = useState(false);
+
   // Feature 4: VWAP Intraday
   const [vwapData, setVwapData] = useState<{
     vwap: number | null;
@@ -2398,6 +2515,19 @@ export default function ResearchDashboard() {
     }
   }, [tickerUpper, chartLoading]);
 
+  const loadPeerData = useCallback(async () => {
+    if (!data?.company_profile?.peers?.length) return;
+    setPeerLoading(true);
+    try {
+      const result = await api.getPeerComparison(tickerUpper);
+      setPeerData(result);
+    } catch (e: any) {
+      console.warn("Peer-Daten nicht geladen:", e?.message);
+    } finally {
+      setPeerLoading(false);
+    }
+  }, [tickerUpper, data?.company_profile?.peers]);
+
   // VWAP nur laden wenn Markt offen könnte sein
   useEffect(() => {
     if (!tickerUpper) return;
@@ -2417,6 +2547,7 @@ export default function ResearchDashboard() {
 
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { loadScoreDelta(); }, [loadScoreDelta]);
+  useEffect(() => { loadPeerData(); }, [loadPeerData]);
 
   async function handleAuditReport() {
     setAiLoading(true);
@@ -2719,6 +2850,13 @@ export default function ResearchDashboard() {
 
       {/* Relative Stärke */}
       <RelativeStrengthBlock data={data} />
+
+      {/* Peer-Vergleich */}
+      <PeerComparisonBlock
+        mainTicker={tickerUpper}
+        data={peerData}
+        loading={peerLoading}
+      />
 
       {/* Block 2: Bewertung */}
       <div className="card p-4">

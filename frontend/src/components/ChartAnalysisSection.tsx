@@ -194,7 +194,7 @@ export function ChartAnalysisSection({
   const [ohlcvData, setOhlcvData] = useState<OhlcvData | null>(null);
   const [overlayData, setOverlayData] = useState<OverlayData | null>(null);
   const [aiLevels, setAiLevels] = useState<AiLevels | null>(null);
-  const [activeTimeframe, setActiveTimeframe] = useState<"6mo" | "2y">("6mo");
+  const [activeTimeframe, setActiveTimeframe] = useState<"3mo" | "6mo" | "1y" | "2y">("6mo");
   const [loadingOhlcv, setLoadingOhlcv] = useState(true);
   const [loadingAi, setLoadingAi] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -471,20 +471,33 @@ export function ChartAnalysisSection({
         </div>
         <div className="flex items-center gap-3">
           <div className="flex overflow-hidden rounded-lg border border-[var(--border)]">
-            {(["6mo", "2y"] as const).map((tf) => (
+            {(
+              [
+                { value: "3mo", label: "3M" },
+                { value: "6mo", label: "6M" },
+                { value: "1y",  label: "1J" },
+                { value: "2y",  label: "2J" },
+              ] as const
+            ).map(({ value, label }) => (
               <button
-                key={tf}
-                onClick={() => setActiveTimeframe(tf)}
+                key={value}
+                onClick={() => setActiveTimeframe(value)}
                 className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                  activeTimeframe === tf
+                  activeTimeframe === value
                     ? "bg-[var(--accent-blue)] text-white"
                     : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
                 }`}
               >
-                {tf === "6mo" ? "6M" : "2J"}
+                {label}
+                {value === "2y" && (
+                  <span className="ml-1 text-[9px] opacity-70">W</span>
+                )}
               </button>
             ))}
           </div>
+          <span className="text-[10px] text-[var(--text-muted)] self-center">
+            {activeTimeframe === "2y" ? "Wochenkerzen" : "Tageskerzen"}
+          </span>
           <button
             onClick={runAiAnalysis}
             disabled={loadingAi || loadingOhlcv}

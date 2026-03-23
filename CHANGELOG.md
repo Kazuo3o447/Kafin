@@ -2,6 +2,83 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [6.2.2] - 2026-03-23 - 10-Q Tonalitäts-Diff (DeepSeek, kein Gemini)
+
+### 🧠 Institutioneller Edge (Architektur-Entscheidung)
+- **Kein Gemini**: TPM-Limit 250K < zwei vollständige 10-Qs (bis 800K Tokens)
+- **Smarte Sektion-Extraktion**: MD&A + Risk Factors + Outlook = 40-80K Tokens
+- **DeepSeek Chat (128K)**: Standard-Modell, reicht problemlos für die relevanten Abschnitte
+- **Kimi K2.5 (256K)**: Automatischer Fallback wenn Text >80K Zeichen
+- **Kosten**: ~$0.003 pro Analyse statt API-Key-Abhängigkeit
+
+### 🔧 Technical Changes
+- **sec_edgar.py**: `get_10q_sections()` via EDGAR Full-Text Search → Dokument-Index → HTML
+- **_extract_10q_sections()**: Pattern-basierter Parser für MD&A, Risk Factors, Outlook
+- **filing_rag.py**: Komplett neu mit smarter Modell-Auswahl und automatischen Fallbacks
+- **kimi.py**: Vollständige Implementierung mit moonshot-v1-128k und DeepSeek Fallback
+- **Frontend**: FilingDiffBlock zeigt dynamisches Modell (DeepSeek/Kimi)
+
+### 🎯 Use Cases & Performance
+- **Sektion-fokussiert**: Nur relevante 30K Zeichen pro Abschnitt (statt 400K voller Text)
+- **Modell-Automatik**: DeepSeek (<80K) → Kimi (<200K) → DeepSeek Fallback
+- **Cache-Optimierung**: 24h Cache, paralleles Laden der Quartale
+- **Error Handling**: Graceful Degradation bei SEC EDGAR Ausfällen
+
+### 📊 Architektur-Vorteile
+- **Kein neuer API-Key**: Nutzt existierende DeepSeek/Kimi Integrationen
+- **Bessere Qualität**: Modell fokussiert auf relevante Management-Abschnitte
+- **Stabile Performance**: TPM-Limits nicht mehr ein Problem
+- **Kosteneffizient**: DeepSeek Chat deutlich günstiger als Gemini Pro
+
+## [6.2.1] - 2026-03-23 - Log-Rotation + Automatische Backups
+
+### 🛡️ SSD-Schonung + Datensicherheit
+- **Log-Rotation** (alle 5 Container): max-size: 10m, max-file: 3 - Max. 30MB Logs pro Container mit automatischer Rotation
+- **PostgreSQL Backup**: POST /api/admin/backup-database → pg_dump | gzip → /app/backups/kafin_*.sql.gz
+- **Automatische Bereinigung**: Backups älter als 7 Tage werden automatisch gelöscht
+- **n8n Workflow**: Täglich 03:00 Uhr automatischer Backup-Trigger
+- **Manueller Backup**: docker-compose run kafin-backup als Alternative
+- **Volume Mount**: ./backups/ für persistente Speicherung auf Host-System
+
+### 🔧 Technical Changes
+- **docker-compose.yml**: logging limits für postgres, kafin-backend, redis, n8n, kafin-frontend
+- **kafin-backup Service**: dedizierter PostgreSQL Backup Container mit gzip Kompression
+- **Backend Endpoint**: /api/admin/backup-database mit subprocess pg_dump und Fehlerbehandlung
+- **n8n_setup.py**: Nightly Backup Workflow integriert
+
+## [6.2.0] - 2026-03-23 - FinBERT Optimierung + Standalone Build
+
+### 🧠 FinBERT NUC-Optimierung
+- **Thread-Limit**: `torch.set_num_threads(2)` - 2 Kerne für FinBERT, 2 Kerne bleiben für FastAPI + PostgreSQL
+- **max_length**: 512 → 64 (Headlines brauchen nicht mehr) - Speedup: 4-8× bei kurzen Texten
+- **Chunk-Verarbeitung**: max. 16 Headlines pro Batch - Verhindert RAM-Overflow bei großen News-Mengen
+- **Async Wrapper**: `asyncio.to_thread` - Event Loop blockiert nicht mehr
+- **Model Cache Volume**: `/app/model_cache` - kein Re-Download nach Rebuild
+- **Latenz-Logging**: ms/Text im Debug-Log sichtbar für Performance-Monitoring
+
+### 🏗️ Frontend Standalone Build
+- **output: "standalone"** in next.config.ts - Reduziert Image-Größe drastisch
+- **Multi-Stage Dockerfile**: Builder + Runner Stages
+- **Image-Größe**: ~800MB → ~200MB
+- **Kaltstart NUC**: ~8s → ~2s
+
+### ⚡ FastAPI Lifespan
+- **@app.on_event deprecated** → `asynccontextmanager`
+- **Usage-Flush**: Integriert in lifespan mit periodischem Task
+- **Sauberer Shutdown**: Letzter Flush vor Pool-Close
+
+### 🔧 Technical Changes
+- **news_processor.py**: Async FinBERT Wrapper für non-blocking Verarbeitung
+- **docker-compose.yml**: finbert-cache Volume für Modell-Persistenz
+- **Backend**: Vollständige Migration zu modernem FastAPI Pattern
+
+## [6.1.7] - 2026-03-23 - Menü-Struktur Optimierung
+
+### 🎨 UI/UX: Menü-Reihenfolge angepasst
+- **Dashboard** jetzt an erster Position in der Navigation
+- **Markets** auf zweite Position verschoben
+- Bessere User Experience mit Dashboard als Haupteinstieg
+
 ## [6.1.6] - 2026-03-22 - Chart Analysis Complete Overhaul
 
 ### 🚀 Feature: Begründung immer sichtbar

@@ -194,6 +194,23 @@ type ResearchData = {
     exchange?: string | null;
     peers?: string[];
   } | null;
+  exchange?: string | null;
+  peers?: string[];
+};
+
+type FilingDiffData = {
+  ticker: string;
+  available: boolean;
+  filing_type?: string;
+  overall_signal?: "BULLISH" | "BEARISH"
+                  | "GEMISCHT" | "NEUTRAL";
+  diff_text?: string;
+  model?: string;
+  model_used?: string;
+  current_period?: string;
+  prev_period?: string;
+  chars_analyzed?: number;
+  error?: string;
 };
 
 type ScoreDeltaData = {
@@ -1830,6 +1847,115 @@ function OptionsOiBlock({
   );
 }
 
+// ── 10-Q Filing Diff Block ───────────────────────────────────────
+function FilingDiffBlock({
+  data,
+  loading,
+  onLoad,
+}: {
+  data: FilingDiffData | null;
+  loading: boolean;
+  onLoad: () => void;
+}) {
+  if (!data && !loading) {
+    return (
+      <div className="card p-5">
+        <div className="flex items-center
+                         justify-between mb-2">
+          <div>
+            <h3 className="text-sm font-semibold
+                             text-[var(--text-primary)]">
+              10-Q Tonalitäts-Analyse
+            </h3>
+            <p className="text-[10px]
+                            text-[var(--text-muted)] mt-0.5">
+              Vergleicht Management-Sprache
+              zwischen zwei Quartalsberichten
+            </p>
+          </div>
+          <button
+            onClick={onLoad}
+            className="text-xs rounded-lg
+                        bg-[var(--accent-blue)]
+                        text-white px-4 py-2
+                        hover:opacity-90"
+          >
+            ⚡ 10-Q analysieren
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="card p-5">
+        <p className="text-xs text-[var(--text-muted)]
+                        animate-pulse">
+          Lade 10-Q Berichte von SEC EDGAR
+          und analysiere mit Gemini Flash…
+          (kann 30-60s dauern)
+        </p>
+      </div>
+    );
+  }
+
+  if (!data?.available) {
+    return (
+      <div className="card p-5">
+        <h3 className="text-sm font-semibold
+                         text-[var(--text-primary)] mb-2">
+          10-Q Analyse
+        </h3>
+        <p className="text-xs text-[var(--text-muted)]">
+          {data?.error || "Nicht verfügbar"}
+        </p>
+      </div>
+    );
+  }
+
+  const signalColor =
+    data.overall_signal === "BULLISH"
+      ? "text-[var(--accent-green)]"
+    : data.overall_signal === "BEARISH"
+      ? "text-[var(--accent-red)]"
+    : data.overall_signal === "GEMISCHT"
+      ? "text-amber-400"
+    : "text-[var(--text-muted)]";
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-center
+                       justify-between mb-4">
+        <div>
+          <h3 className="text-sm font-semibold
+                           text-[var(--text-primary)]">
+            10-Q Tonalitäts-Diff
+          </h3>
+          <p className="text-[10px]
+                          text-[var(--text-muted)] mt-0.5">
+            via {data.model_used || 'DeepSeek'} · Cache 24h
+          </p>
+        </div>
+        {data.overall_signal && (
+          <span className={`text-sm font-bold
+                             ${signalColor}`}>
+            {data.overall_signal}
+          </span>
+        )}
+      </div>
+      <div className="text-xs
+                       text-[var(--text-secondary)]
+                       leading-relaxed
+                       whitespace-pre-wrap
+                       max-h-[600px]
+                       overflow-y-auto">
+        {data.diff_text}
+      </div>
+    </div>
+  );
+}
+
 // ── Hauptkomponente ───────────────────────────────────────────
 export default function ResearchDashboard() {
   const { ticker } = useParams() as { ticker: string };
@@ -1843,6 +1969,10 @@ export default function ResearchDashboard() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [aiDate, setAiDate] = useState<string | null>(null);
+
+  // Feature 6: 10-Q Filing Diff
+  const [filingDiff, setFilingDiff] = useState<FilingDiffData | null>(null);
+  const [filingDiffLoading, setFilingDiffLoading] = useState(false);
 
   const [onWatchlist, setOnWatchlist] = useState(false);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
@@ -1884,6 +2014,19 @@ export default function ResearchDashboard() {
   useEffect(() => {
     setOiData(null);
   }, [tickerUpper]);
+
+  // Feature 6: 10-Q Filing Diff
+  const loadFilingDiff = useCallback(async () => {
+    if (filingDiffLoading) return;
+    setFilingDiffLoading(true);
+    try {
+      const d = await fetch(
+        `/api/data/filing-diff/${ticker}` 
+      ).then(r => r.json());
+      setFilingDiff(d);
+    } catch {}
+    finally { setFilingDiffLoading(false); }
+  }, [ticker]);
 
   // Feature 3: Position Sizer
   const [accountSize, setAccountSize] = useState<number>(10000);
@@ -2773,6 +2916,13 @@ export default function ResearchDashboard() {
       <CompanyProfileBlock
         profile={data.company_profile}
         ticker={tickerUpper}
+      />
+
+      {/* 10-Q Filing Diff Block */}
+      <FilingDiffBlock
+        data={filingDiff}
+        loading={filingDiffLoading}
+        onLoad={loadFilingDiff}
       />
 
       {/* ══════════════════════════════════════════════════════

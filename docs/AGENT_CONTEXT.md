@@ -417,3 +417,52 @@ Sympathy-Check für jeden gemeldeten Ticker triggern.
 1. Finnhub API-Key prüfen
 2. Rate-Limit: 60 Calls/Minute (Free Tier)
 3. Alternative: Watchlist-Ticker über FinBERT-Pipeline
+
+---
+
+## Backup-Strategie
+
+### Automatische Backups
+- **Zeitpunkt**: Täglich 03:00 Uhr via n8n Workflow
+- **Methode**: POST /api/admin/backup-database
+- **Speicherort**: ./backups/ (Host-Volume)
+- **Retention**: 7 Tage (automatische Bereinigung)
+- **Format**: gzip-komprimierte SQL-Dumps
+
+### Manuelle Backups
+```bash
+# Methode 1: Backend Endpoint
+curl -X POST http://localhost:8001/api/admin/backup-database
+
+# Methode 2: Docker Compose
+docker-compose run kafin-backup
+```
+
+### Log-Rotation
+Alle Container verwenden Log-Limits:
+- **max-size**: 10MB pro Log-Datei
+- **max-file**: 3 Dateien (30MB pro Container)
+- **Rotation**: Automatisch, keine manuelle Pflege nötig
+
+---
+
+## 10-Q Filing Tonalitäts-Diff
+
+### Architektur-Entscheidung
+- **Kein Gemini**: TPM-Limit 250K < zwei vollständige 10-Qs (bis 800K Tokens)
+- **Smarte Lösung**: Nur relevante Abschnitte extrahieren (MD&A, Risk Factors, Outlook)
+- **DeepSeek Chat (128K)**: Standard-Modell, reicht für 40-80K Tokens
+- **Kimi K2.5 (256K)**: Automatischer Fallback wenn Text >80K Zeichen
+
+### Implementierung
+- **SEC EDGAR**: `get_10q_sections()` lädt 10-Q Dokumente und extrahiert relevante Abschnitte
+- **Pattern-Parsing**: `_extract_10q_sections()` identifiziert MD&A, Risk Factors, Outlook
+- **Modell-Automatik**: DeepSeek (<80K) → Kimi (<200K) → DeepSeek Fallback
+- **Endpoint**: `GET /api/data/filing-diff/{ticker}` mit 24h Cache
+- **Frontend**: FilingDiffBlock im Research Dashboard mit on-demand Analyse
+
+### Use Cases
+- **Earnings Vorbereitung**: Tonalitätswechsel vor Quartalsberichten erkennen
+- **Margin Pressure**: Kosten/Margen Sprachänderung identifizieren  
+- **Guidance Changes**: Umsatz- und Wachstumserwartungen vergleichen
+- **Risk Assessment**: Neue Risikofaktoren in Management-Sprache erkennen

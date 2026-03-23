@@ -95,6 +95,23 @@ export const api = {
     return fetchAPI(qs ? `${url}?${qs}` : url);
   },
 
+  // Peer Comparison
+  getPeerComparison: (ticker: string) =>
+    fetchAPI(`/api/data/peer-comparison/${ticker.toUpperCase()}`),
+
+  // Watchlist Correlation
+  getWatchlistCorrelation: () => fetchAPI("/api/data/watchlist-correlation"),
+
+  // Journal
+  getJournal: (ticker?: string) =>
+    fetchAPI(`/api/journal${ticker ? `?ticker=${ticker}` : ""}`),
+  createJournalEntry: (data: Record<string, unknown>) =>
+    fetchAPI("/api/journal", { method: "POST", body: JSON.stringify(data) }),
+  updateJournalEntry: (id: number, data: Record<string, unknown>) =>
+    fetchAPI(`/api/journal/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteJournalEntry: (id: number) =>
+    fetchAPI(`/api/journal/${id}`, { method: "DELETE" }),
+
   // Google News Search Terms
   getSearchTerms: () => fetchAPI("/api/google-news/search-terms"),
   addSearchTerm: (term: string, category = "custom") =>

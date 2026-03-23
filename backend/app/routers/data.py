@@ -634,6 +634,135 @@ async def api_quick_snapshot(ticker: str):
     except Exception as e:
         return {"ticker": ticker, "error": str(e), "price": None}
 
+@router.get("/peer-comparison/{ticker}")
+async def api_peer_comparison(ticker: str):
+    """
+    Liefert Bewertungs- und Momentum-Kennzahlen für den Hauptticker
+    und seine Peers (max 5). Nutzt yfinance + bestehende Hilfsfunktionen.
+    Cache: 2h TTL.
+    """
+    ticker = ticker.upper().strip()
+    cache_key = f"peer_comparison:{ticker}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    # Peer-Liste aus FMP/yfinance profile
+    try:
+        from backend.app.data.fmp import get_company_profile
+        profile = await get_company_profile(ticker)
+        raw_peers = getattr(profile, "peers", None) or []
+        peers = [str(p).upper() for p in raw_peers[:5]]
+    except Exception:
+        peers = []
+
+    all_tickers = [ticker] + peers
+
+    async def _fetch_one(t: str) -> dict:
+        try:
+            stock = yf.Ticker(t)
+            info = stock.info or {}
+            hist = stock.history(period="5d")
+            change_5d = None
+            if len(hist) >= 2:
+                change_5d = round(
+                    (float(hist["Close"].iloc[-1]) - float(hist["Close"].iloc[0]))
+                    / float(hist["Close"].iloc[0]) * 100, 2
+                )
+            avg_vol = float(hist["Volume"].mean()) if not hist.empty else None
+            last_vol = float(hist["Volume"].iloc[-1]) if not hist.empty else None
+            rvol = round(last_vol / avg_vol, 2) if avg_vol and avg_vol > 0 else None
+
+            return {
+                "ticker": t,
+                "name": (info.get("shortName") or info.get("longName") or t)[:22],
+                "price": round(float(info.get("currentPrice") or info.get("regularMarketPrice") or 0), 2),
+                "change_5d_pct": change_5d,
+                "pe_ratio": round(float(info["trailingPE"]), 1) if info.get("trailingPE") else None,
+                "forward_pe": round(float(info["forwardPE"]), 1) if info.get("forwardPE") else None,
+                "ps_ratio": round(float(info["priceToSalesTrailing12Months"]), 1) if info.get("priceToSalesTrailing12Months") else None,
+                "market_cap_b": round(float(info["marketCap"]) / 1e9, 1) if info.get("marketCap") else None,
+                "rvol": rvol,
+            }
+        except Exception as e:
+            logger.warning(f"peer_comparison fetch failed for {t}: {e}")
+            return {"ticker": t, "name": t, "price": None, "change_5d_pct": None,
+                    "pe_ratio": None, "forward_pe": None, "ps_ratio": None,
+                    "market_cap_b": None, "rvol": None}
+
+    results = await asyncio.gather(*[_fetch_one(t) for t in all_tickers])
+    response = {"main": ticker, "peers": list(results)}
+    await cache_set(cache_key, response, ttl_seconds=7200)
+    return response
+
+@router.get("/watchlist-correlation")
+async def api_watchlist_correlation():
+    """
+    Berechnet die 30T-Return-Korrelation aller Watchlist-Ticker.
+    Gibt Ticker-Liste + quadratische Korrelationsmatrix zurück.
+    Cache: 4h TTL (Tageskorrelationen ändern sich langsam).
+    """
+    cache_key = "watchlist_correlation"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    watchlist = await get_watchlist()
+    tickers = [w["ticker"].upper() for w in watchlist if w.get("ticker")]
+    
+    if len(tickers) < 2:
+        return {"tickers": tickers, "matrix": [], "error": "Zu wenige Ticker"}
+
+    # Max 20 Ticker — mehr wird unlesbar und langsam
+    tickers = tickers[:20]
+
+    try:
+        import pandas as pd
+
+        def _fetch_returns(t: str):
+            try:
+                hist = yf.Ticker(t).history(period="30d")
+                if hist.empty or len(hist) < 5:
+                    return t, None
+                returns = hist["Close"].pct_change().dropna()
+                return t, returns
+            except Exception:
+                return t, None
+
+        results = await asyncio.gather(
+            *[asyncio.to_thread(_fetch_returns, t) for t in tickers]
+        )
+
+        series_map = {t: s for t, s in results if s is not None}
+        valid_tickers = [t for t in tickers if t in series_map]
+
+        if len(valid_tickers) < 2:
+            return {"tickers": valid_tickers, "matrix": [], "error": "Zu wenige Datenpunkte"}
+
+        df = pd.DataFrame({t: series_map[t] for t in valid_tickers})
+        corr = df.corr().round(2)
+
+        matrix = []
+        for t in valid_tickers:
+            row = []
+            for t2 in valid_tickers:
+                v = corr.loc[t, t2] if t in corr.index and t2 in corr.columns else None
+                row.append(float(v) if v is not None and not pd.isna(v) else None)
+            matrix.append(row)
+
+        response = {
+            "tickers": valid_tickers,
+            "matrix": matrix,
+            "days": 30,
+            "calculated_at": datetime.utcnow().isoformat(),
+        }
+        await cache_set(cache_key, response, ttl_seconds=14400)
+        return response
+
+    except Exception as e:
+        logger.error(f"Korrelations-Berechnung fehlgeschlagen: {e}")
+        return {"tickers": tickers, "matrix": [], "error": str(e)}
+
 @router.get("/volume-profile/{ticker}")
 async def api_volume_profile(ticker: str):
     """Holt 20-Tage Volumen-Profil für Visualisierung."""
@@ -1833,6 +1962,135 @@ async def api_quick_snapshot(ticker: str):
         return snapshot
     except Exception as e:
         return {"ticker": ticker, "error": str(e), "price": None}
+
+@router.get("/peer-comparison/{ticker}")
+async def api_peer_comparison(ticker: str):
+    """
+    Liefert Bewertungs- und Momentum-Kennzahlen für den Hauptticker
+    und seine Peers (max 5). Nutzt yfinance + bestehende Hilfsfunktionen.
+    Cache: 2h TTL.
+    """
+    ticker = ticker.upper().strip()
+    cache_key = f"peer_comparison:{ticker}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    # Peer-Liste aus FMP/yfinance profile
+    try:
+        from backend.app.data.fmp import get_company_profile
+        profile = await get_company_profile(ticker)
+        raw_peers = getattr(profile, "peers", None) or []
+        peers = [str(p).upper() for p in raw_peers[:5]]
+    except Exception:
+        peers = []
+
+    all_tickers = [ticker] + peers
+
+    async def _fetch_one(t: str) -> dict:
+        try:
+            stock = yf.Ticker(t)
+            info = stock.info or {}
+            hist = stock.history(period="5d")
+            change_5d = None
+            if len(hist) >= 2:
+                change_5d = round(
+                    (float(hist["Close"].iloc[-1]) - float(hist["Close"].iloc[0]))
+                    / float(hist["Close"].iloc[0]) * 100, 2
+                )
+            avg_vol = float(hist["Volume"].mean()) if not hist.empty else None
+            last_vol = float(hist["Volume"].iloc[-1]) if not hist.empty else None
+            rvol = round(last_vol / avg_vol, 2) if avg_vol and avg_vol > 0 else None
+
+            return {
+                "ticker": t,
+                "name": (info.get("shortName") or info.get("longName") or t)[:22],
+                "price": round(float(info.get("currentPrice") or info.get("regularMarketPrice") or 0), 2),
+                "change_5d_pct": change_5d,
+                "pe_ratio": round(float(info["trailingPE"]), 1) if info.get("trailingPE") else None,
+                "forward_pe": round(float(info["forwardPE"]), 1) if info.get("forwardPE") else None,
+                "ps_ratio": round(float(info["priceToSalesTrailing12Months"]), 1) if info.get("priceToSalesTrailing12Months") else None,
+                "market_cap_b": round(float(info["marketCap"]) / 1e9, 1) if info.get("marketCap") else None,
+                "rvol": rvol,
+            }
+        except Exception as e:
+            logger.warning(f"peer_comparison fetch failed for {t}: {e}")
+            return {"ticker": t, "name": t, "price": None, "change_5d_pct": None,
+                    "pe_ratio": None, "forward_pe": None, "ps_ratio": None,
+                    "market_cap_b": None, "rvol": None}
+
+    results = await asyncio.gather(*[_fetch_one(t) for t in all_tickers])
+    response = {"main": ticker, "peers": list(results)}
+    await cache_set(cache_key, response, ttl_seconds=7200)
+    return response
+
+@router.get("/watchlist-correlation")
+async def api_watchlist_correlation():
+    """
+    Berechnet die 30T-Return-Korrelation aller Watchlist-Ticker.
+    Gibt Ticker-Liste + quadratische Korrelationsmatrix zurück.
+    Cache: 4h TTL (Tageskorrelationen ändern sich langsam).
+    """
+    cache_key = "watchlist_correlation"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    watchlist = await get_watchlist()
+    tickers = [w["ticker"].upper() for w in watchlist if w.get("ticker")]
+    
+    if len(tickers) < 2:
+        return {"tickers": tickers, "matrix": [], "error": "Zu wenige Ticker"}
+
+    # Max 20 Ticker — mehr wird unlesbar und langsam
+    tickers = tickers[:20]
+
+    try:
+        import pandas as pd
+
+        def _fetch_returns(t: str):
+            try:
+                hist = yf.Ticker(t).history(period="30d")
+                if hist.empty or len(hist) < 5:
+                    return t, None
+                returns = hist["Close"].pct_change().dropna()
+                return t, returns
+            except Exception:
+                return t, None
+
+        results = await asyncio.gather(
+            *[asyncio.to_thread(_fetch_returns, t) for t in tickers]
+        )
+
+        series_map = {t: s for t, s in results if s is not None}
+        valid_tickers = [t for t in tickers if t in series_map]
+
+        if len(valid_tickers) < 2:
+            return {"tickers": valid_tickers, "matrix": [], "error": "Zu wenige Datenpunkte"}
+
+        df = pd.DataFrame({t: series_map[t] for t in valid_tickers})
+        corr = df.corr().round(2)
+
+        matrix = []
+        for t in valid_tickers:
+            row = []
+            for t2 in valid_tickers:
+                v = corr.loc[t, t2] if t in corr.index and t2 in corr.columns else None
+                row.append(float(v) if v is not None and not pd.isna(v) else None)
+            matrix.append(row)
+
+        response = {
+            "tickers": valid_tickers,
+            "matrix": matrix,
+            "days": 30,
+            "calculated_at": datetime.utcnow().isoformat(),
+        }
+        await cache_set(cache_key, response, ttl_seconds=14400)
+        return response
+
+    except Exception as e:
+        logger.error(f"Korrelations-Berechnung fehlgeschlagen: {e}")
+        return {"tickers": tickers, "matrix": [], "error": str(e)}
 
 @router.get("/volume-profile/{ticker}")
 async def api_volume_profile(ticker: str):

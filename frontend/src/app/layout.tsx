@@ -5,7 +5,13 @@ import { Sidebar } from "@/components/sidebar";
 import { CommandPaletteWrapper } from "@/components/CommandPaletteWrapper";
 import { LogViewer } from "@/components/LogViewer";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const inter = Inter({ 
+  subsets: ["latin"],
+  variable: "--font-sans",
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+  fallback: ["system-ui", "sans-serif"]
+});
 
 export const metadata: Metadata = {
   title: "Kafin Command Center",

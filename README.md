@@ -67,6 +67,7 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **Research Page Crash**: Guard für `quarterly_history` hinzugefügt um NU Research Dashboard Abstürze bei fehlenden Daten zu verhindern.
 - **Backend Coroutine Warnings**: Alle `coroutine was never awaited` Warnungen in FMP, Finnhub und Ticker Resolver gefixt.
 - **DateTime UTC Normalization**: FinBERT Pipeline Logging Errors mit offset-naive/aware datetime subtraction behoben.
+- **Font Rendering Issues**: Inter Font-Konfiguration verbessert mit expliziten weights, display:swap und system-ui fallbacks um `glyf: empty gid` Warnungen zu beheben.
 - **Signal Feed**: Root-Page zeigt jetzt den Signal Feed als neues Dashboard, inklusive Settings-Tab für die Feed-Konfiguration.
 - **Markets Dashboard**: Marktübersicht, Marktbreite, Intermarket, Fear & Greed, Economic Calendar und Market Audit sind wieder als API-Quellen erreichbar.
 - **Frontend-API**: Browser-Requests laufen standardmäßig über relative `/api/...`-Pfade, damit lokale Dev-Setups nicht an Port-Mismatches hängen.

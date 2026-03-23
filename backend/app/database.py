@@ -474,6 +474,15 @@ class DatabaseClient:
 
     def table(self, table_name: str) -> QueryBuilder:
         return QueryBuilder(table_name)
+    
+    async def execute(self, query: str, *args):
+        """Führt eine rohe SQL-Query aus (für init_db.py)."""
+        pool = await _get_pool()
+        async with pool.acquire() as conn:
+            if args:
+                return await conn.execute(query, *args)
+            else:
+                return await conn.execute(query)
 
 
 # Singleton

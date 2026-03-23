@@ -41,6 +41,14 @@ type WatchlistItem = {
   sentiment_trend?: string | null;
   has_material_news?: boolean | null;
   sentiment_count?: number | null;
+  correlation_data?: CorrelationData; // NEW
+};
+
+type CorrelationData = {
+  tickers: string[];
+  matrix: (number | null)[][];
+  days?: number;
+  error?: string;
 };
 
 // Sorting and filtering types
@@ -505,11 +513,110 @@ function SectorHeatmap({
   );
 }
 
+function CorrelationHeatmap({ data }: { data: CorrelationData }) {
+  if (data.error || !data.matrix.length) {
+    return (
+      <p className="text-xs text-[var(--text-muted)] py-2">
+        {data.error ?? "Keine Daten"}
+      </p>
+    );
+  }
+
+  // Farb-Mapping: -1 → rot, 0 → neutral, +1 → grün
+  function cellColor(v: number | null): string {
+    if (v === null) return "bg-[var(--bg-tertiary)]";
+    if (v >= 0.8)  return "bg-[#166534] text-white";   // dunkelgrün: hohe Korrelation = Risiko
+    if (v >= 0.6)  return "bg-[#15803d] text-white";
+    if (v >= 0.4)  return "bg-[#4ade80] text-[#14532d]";
+    if (v >= 0.0)  return "bg-[#bbf7d0] text-[#14532d]";
+    if (v >= -0.4) return "bg-[#fef08a] text-[#713f12]";
+    return "bg-[#fca5a5] text-[#7f1d1d]";
+  }
+
+  // Warnung wenn ≥3 Paare über 0.75
+  const highCorrPairs: string[] = [];
+  for (let i = 0; i < data.tickers.length; i++) {
+    for (let j = i + 1; j < data.tickers.length; j++) {
+      const v = data.matrix[i]?.[j];
+      if (v !== null && v !== undefined && v >= 0.75) {
+        highCorrPairs.push(`${data.tickers[i]}/${data.tickers[j]}`);
+      }
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {highCorrPairs.length >= 3 && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+          <p className="text-xs text-amber-400 font-semibold">
+            Konzentrationswarnung
+          </p>
+          <p className="text-[11px] text-amber-300/80 mt-0.5">
+            {highCorrPairs.length} Paare mit Korrelation ≥0.75:&nbsp;
+            {highCorrPairs.slice(0, 5).join(", ")}
+            {highCorrPairs.length > 5 ? " …" : ""}
+          </p>
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
+        <table className="border-collapse text-[10px]">
+          <thead>
+            <tr>
+              <th className="w-12" />
+              {data.tickers.map(t => (
+                <th
+                  key={t}
+                  className="px-1 pb-1 font-mono text-[var(--text-muted)] font-medium text-center"
+                  style={{ minWidth: 36 }}
+                >
+                  {t.length > 5 ? t.slice(0, 5) : t}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.tickers.map((rowTicker, i) => (
+              <tr key={rowTicker}>
+                <td className="pr-2 font-mono text-[var(--text-muted)] font-medium text-right">
+                  {rowTicker.length > 5 ? rowTicker.slice(0, 5) : rowTicker}
+                </td>
+                {data.tickers.map((_, j) => {
+                  const v = data.matrix[i]?.[j];
+                  const isDiag = i === j;
+                  return (
+                    <td
+                      key={j}
+                      title={`${data.tickers[i]} / ${data.tickers[j]}: ${v?.toFixed(2) ?? "—"}`}
+                      className={`text-center font-mono rounded-sm m-px
+                        ${isDiag ? "bg-[var(--bg-tertiary)] text-[var(--text-muted)]" : cellColor(v)}`}
+                      style={{ width: 36, height: 28, lineHeight: "28px" }}
+                    >
+                      {isDiag ? "—" : v?.toFixed(2) ?? "—"}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-[10px] text-[var(--text-muted)]">
+        30T Daily Returns · Dunkelgrün = hohe Korrelation (Klumpenrisiko)
+      </p>
+    </div>
+  );
+}
+
 export default function WatchlistPage() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [corrData, setCorrData] = useState<CorrelationData | null>(null);
+  const [corrLoading, setCorrLoading] = useState(false);
+  const [corrVisible, setCorrVisible] = useState(false);
   const [newTicker, setNewTicker] = useState({ ticker: "", company_name: "", sector: "", notes: "" });
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
@@ -622,6 +729,20 @@ export default function WatchlistPage() {
       </th>
     );
   }
+
+  const loadCorrelation = useCallback(async () => {
+    if (corrLoading) return;
+    setCorrLoading(true);
+    try {
+      const result = await api.getWatchlistCorrelation();
+      setCorrData(result);
+      setCorrVisible(true);
+    } catch (e: any) {
+      console.warn("Korrelation nicht geladen:", e?.message);
+    } finally {
+      setCorrLoading(false);
+    }
+  }, [corrLoading]);
 
   const alerts = useMemo(
     () => buildAlerts(watchlist),
@@ -884,6 +1005,32 @@ export default function WatchlistPage() {
 
       {/* 1. Alert-Streifen */}
       <AlertStrip alerts={alerts} />
+
+      {/* Korrelations-Heatmap */}
+      <div className="card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)]">
+            Portfolio-Korrelation
+          </p>
+          <button
+            onClick={corrVisible ? () => setCorrVisible(false) : loadCorrelation}
+            disabled={corrLoading}
+            className="text-xs text-[var(--accent-blue)] hover:opacity-80 disabled:opacity-40"
+          >
+            {corrLoading
+              ? "Berechne…"
+              : corrVisible
+                ? "Ausblenden"
+                : "Berechnen"}
+          </button>
+        </div>
+        {corrVisible && corrData && <CorrelationHeatmap data={corrData} />}
+        {!corrVisible && !corrLoading && (
+          <p className="text-xs text-[var(--text-muted)]">
+            Zeigt wie stark deine Positionen miteinander korrelieren.
+          </p>
+        )}
+      </div>
 
       {/* 2. Überblick-Kacheln */}
       <WatchlistOverview watchlist={watchlist} />

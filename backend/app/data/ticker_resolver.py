@@ -64,13 +64,28 @@ KNOWN_MAPPINGS = {
 def _get_price_for_ticker(ticker_str: str) -> Optional[float]:
     """Synchron — prüft ob ein Ticker einen validen Preis liefert."""
     try:
-        stock = yf.Ticker(ticker_str)
-        fi = stock.fast_info
+        def _get_stock():
+
+        
+        return yf.Ticker(ticker)
+
+        stock = await asyncio.to_thread(_get_stock)
+        def _get_fast_info():
+
+        
+        return stock.fast_info
+
+        fi = await asyncio.to_thread(_get_fast_info)
         price = getattr(fi, "last_price", None)
         if price and float(price) > 0:
             return float(price)
         # Fallback via history
-        hist = stock.history(period="2d")
+        def _get_hist():
+
+        
+        return stock.history(period=f"{max(days, 2)}d")
+
+        hist = await asyncio.to_thread(_get_hist)
         if not hist.empty:
             return float(hist["Close"].iloc[-1])
         return None
@@ -81,7 +96,12 @@ def _get_price_for_ticker(ticker_str: str) -> Optional[float]:
 def _count_data_fields(ticker_str: str) -> int:
     """Zählt wie viele Kernfelder für diesen Ticker verfügbar sind."""
     try:
-        stock = yf.Ticker(ticker_str)
+        def _get_stock():
+
+        
+        return yf.Ticker(ticker)
+
+        stock = await asyncio.to_thread(_get_stock)
         info = stock.info
         core_fields = [
             "trailingPE", "forwardPE", "marketCap",

@@ -2,6 +2,48 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [6.4.0] - 2026-03-23 - AI-Chat Interface & Position Sizer Enhancement
+
+### 🤖 Multi-Turn AI-Chat pro Ticker
+- **TickerChatBlock**: Vollwertiges Chat-Interface auf Research-Page
+- **DeepSeek Multi-Turn**: `call_deepseek_chat()` für Gesprächsverlauf
+- **Kontext-basierte Antworten**: Scores, Metriken, letzter Report als System-Prompt
+- **Was-wenn-Szenarien**: "Was wenn VIX auf 35 steigt?" etc.
+- **Options-Setup-Empfehlungen**: Basierend auf aktueller Empfehlung
+- **150-Wörter-Regel**: Kurze, prägnante Antworten (max_tokens=400)
+- **No-Index-Shorts Constraint**: Nur Sektor-ETFs, Einzeltitel oder Pair-Trades
+
+### 💰 Position Sizer v2.0
+- **Vollständige Persistenz**: riskPercent, stopLoss, accountSize in localStorage
+- **ATR-Stop-Loss Vorschlag**: Automatische Berechnung aus data.atr_14
+- **Echtes R:R Verhältnis**: target1 aus ChartAnalysis statt fester 5% Annahme
+- **Options-Sizing**: ATM-Prämie-Schätzung aus IV, Kontrakt-Berechnung
+- **Expected Move Anzeige**: ±XX% aus data.expected_move_pct
+- **Kapitaleinsatz**: totalCost statt nur Aktienpreis
+
+### 📊 ChartAnalysis Integration
+- **Expected-Move-Lines**: Visuelle Linien im Chart bei +EM/-EM
+- **Shared Component**: Von Watchlist zu Research-Page verschoben
+- **Props-Erweiterung**: expectedMovePct, currentPrice für Linien
+
+### 🔧 Backend API Erweiterung
+- **/api/analysis/chat/{ticker}**: Neuer Multi-Turn Endpoint
+- **Pydantic-Modelle**: ChatMessage, TickerChatRequest für Type-Safety
+- **8-Nachrichten-Begrenzung**: Serverseitig für Performance
+- **Usage-Tracking**: Token-Verbrauch für DeepSeek Chat
+
+### 🎨 Frontend UX Verbesserungen
+- **Suggestion-Buttons**: 3 vordefinierte Fragen für schnellen Einstieg
+- **Auto-Scroll**: Neue Nachrichten automatisch sichtbar
+- **Loading States**: Spinner während API-Calls
+- **Reset-Funktion**: Chat-Verlauf leeren mit Button
+- **Enter-Key Support**: Schnelles Senden ohne Button-Klick
+
+### 📝 Dokumentation
+- **AI-Dialog**: STATUS.md als ✅ markiert
+- **Position Sizing**: Vollständige Feature-Dokumentation
+- **Backend Routes**: analysis.py mit neuem Chat-Endpoint kommentiert
+
 ## [6.3.0] - 2026-03-23 - Data Sources & Scoring Overhaul
 
 ### 🔄 Komplette Datenquellen-Integration

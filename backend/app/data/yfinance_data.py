@@ -7,6 +7,7 @@ Deps:   config.py
 Config: config/settings.yaml → use_mock_data
 API:    Yahoo Finance (via yfinance Bibliothek)
 """
+import asyncio
 import yfinance as yf
 import json
 import os
@@ -43,153 +44,158 @@ async def get_technical_setup(ticker: str) -> TechnicalSetup:
         logger.debug(f"yfinance Cache-Hit für {ticker}")
         return TechnicalSetup(**cached)
 
-    try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="1y")
+    def _fetch() -> TechnicalSetup:
+        try:
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period="1y")
 
-        if hist.empty:
-            logger.warning(f"Keine yfinance-Daten für {ticker}")
+            if hist.empty:
+                logger.warning(f"Keine yfinance-Daten für {ticker}")
+                return TechnicalSetup(ticker=ticker, current_price=0.0)
+
+            current_price = float(hist["Close"].iloc[-1])
+            sma_50 = float(hist["Close"].tail(50).mean()) if len(hist) >= 50 else None
+            sma_200 = float(hist["Close"].tail(200).mean()) if len(hist) >= 200 else None
+            high_52w = float(hist["High"].max())
+            low_52w = float(hist["Low"].min())
+
+            # RSI berechnen (14 Tage)
+            delta = hist["Close"].diff()
+            gain = delta.where(delta > 0, 0).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            rsi_series = 100 - (100 / (1 + rs))
+            rsi_14 = float(rsi_series.iloc[-1]) if not rsi_series.empty else None
+
+            # Trend bestimmen
+            trend = "sideways"
+            if sma_50 and sma_200:
+                if current_price > sma_50 > sma_200:
+                    trend = "uptrend"
+                elif current_price < sma_50 < sma_200:
+                    trend = "downtrend"
+
+            distance_to_52w_high = ((current_price - high_52w) / high_52w) * 100 if high_52w else None
+
+            # ── Performance-Werte für Research Dashboard ─────────────────
+            close = hist["Close"]
+            prev_close = float(close.iloc[-2]) if len(close) > 1 else current_price
+            
+            # 1-Tage Performance
+            change_1d_pct = ((current_price - prev_close) / prev_close) * 100 if len(close) > 1 else None
+            
+            # 5-Tage Performance
+            change_5d_pct = (
+                ((current_price - float(close.iloc[-5]))
+                 / float(close.iloc[-5])) * 100
+                if len(close) >= 5 else None
+            )
+            
+            # 1-Monat Performance
+            change_1m_pct = (
+                ((current_price - float(close.iloc[-21]))
+                 / float(close.iloc[-21])) * 100
+                if len(close) >= 21 else None
+            )
+
+            # ── SMA 20 ──────────────────────────────────────────────
+            sma_20 = float(hist["Close"].tail(20).mean()) if len(hist) >= 20 else None
+
+            # ── ATR (14 Tage) ────────────────────────────────────────
+            # Average True Range = Maß für tägliche Kursschwankung
+            high_low   = hist["High"] - hist["Low"]
+            high_close = (hist["High"] - hist["Close"].shift()).abs()
+            low_close  = (hist["Low"] - hist["Close"].shift()).abs()
+            tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+            atr_14 = float(tr.rolling(14).mean().iloc[-1]) if len(hist) >= 15 else None
+
+            # ── MACD ─────────────────────────────────────────────────
+            # Signal: MACD-Linie über/unter Signal-Linie
+            # Mindestens 26 Tage für EMA-26 nötig
+            if len(hist) >= 26:
+                ema_12 = hist["Close"].ewm(span=12, adjust=False).mean()
+                ema_26 = hist["Close"].ewm(span=26, adjust=False).mean()
+                macd_line    = ema_12 - ema_26
+                signal_line  = macd_line.ewm(span=9, adjust=False).mean()
+                macd_val     = float(macd_line.iloc[-1])  if not macd_line.empty  else None
+                macd_signal  = float(signal_line.iloc[-1]) if not signal_line.empty else None
+                macd_hist_val = round(macd_val - macd_signal, 4) if macd_val and macd_signal else None
+                macd_bullish  = (macd_val > macd_signal) if macd_val and macd_signal else None
+            else:
+                macd_val = macd_signal = macd_hist_val = macd_bullish = None
+
+            # ── OBV (On-Balance Volume) ───────────────────────────────
+            # Steigendes OBV = Käuferdruck
+            close_diff = hist["Close"].diff()
+            obv_direction = pd.Series(0, index=hist.index)
+            obv_direction[close_diff > 0] = 1   # Steigend: +Volume
+            obv_direction[close_diff < 0] = -1  # Fallend: -Volume
+            # close_diff == 0: bleibt 0 (kein Volumen addiert)
+            obv = (hist["Volume"] * obv_direction).cumsum()
+            obv_val      = float(obv.iloc[-1])           if not obv.empty else None
+            obv_5d_ago   = float(obv.iloc[-5])           if len(obv) >= 5 else None
+            obv_trend    = (
+                "steigend" if obv_val and obv_5d_ago and obv_val > obv_5d_ago
+                else "fallend" if obv_val and obv_5d_ago
+                else None
+            )
+
+            # ── RVOL (Relative Volume) ───────────────────────────────
+            # Aktuelles Volumen vs. 20-Tage-Durchschnitt
+            avg_vol_20 = float(hist["Volume"].tail(20).mean()) if len(hist) >= 20 else None
+            last_vol   = float(hist["Volume"].iloc[-1])
+            rvol       = round(last_vol / avg_vol_20, 2) if avg_vol_20 and avg_vol_20 > 0 else None
+
+            # ── Free Float & Avg Volume (aus yfinance info) ──────────
+            try:
+                info         = stock.info
+                float_shares = info.get("floatShares")
+                avg_volume   = info.get("averageVolume") or info.get("averageDailyVolume10Day")
+                shares_out   = info.get("sharesOutstanding")
+                bid          = info.get("bid")
+                ask          = info.get("ask")
+                bid_ask_spread = round(ask - bid, 4) if bid and ask and ask > 0 else None
+            except Exception:
+                float_shares = avg_volume = shares_out = bid = ask = bid_ask_spread = None
+
+            result = TechnicalSetup(
+                ticker=ticker,
+                current_price=current_price,
+                sma_50=round(sma_50, 2) if sma_50 is not None else None,
+                sma_200=round(sma_200, 2) if sma_200 is not None else None,
+                rsi_14=round(rsi_14, 2) if rsi_14 is not None else None,
+                high_52w=round(high_52w, 2),
+                low_52w=round(low_52w, 2),
+                distance_to_52w_high_percent=round(distance_to_52w_high, 2) if distance_to_52w_high is not None else None,
+                trend=trend,
+                above_sma50=current_price > sma_50 if sma_50 is not None else False,
+                above_sma200=current_price > sma_200 if sma_200 is not None else False,
+                sma_20=round(sma_20, 2) if sma_20 is not None else None,
+                atr_14=round(atr_14, 2) if atr_14 is not None else None,
+                macd=round(macd_val, 4) if macd_val is not None else None,
+                macd_signal=round(macd_signal, 4) if macd_signal is not None else None,
+                macd_histogram=macd_hist_val,
+                macd_bullish=macd_bullish,
+                obv=round(obv_val, 0) if obv_val is not None else None,
+                obv_trend=obv_trend,
+                rvol=rvol if rvol is not None else None,
+                float_shares=float_shares,
+                avg_volume=avg_volume,
+                shares_outstanding=shares_out,
+                bid_ask_spread=bid_ask_spread,
+                change_1d_pct=round(change_1d_pct, 2) if change_1d_pct is not None else None,
+                change_5d_pct=round(change_5d_pct, 2) if change_5d_pct is not None else None,
+                change_1m_pct=round(change_1m_pct, 2) if change_1m_pct is not None else None,
+            )
+            return result
+        except Exception as e:
+            logger.error(f"yfinance Fehler für {ticker}: {e}")
             return TechnicalSetup(ticker=ticker, current_price=0.0)
 
-        current_price = float(hist["Close"].iloc[-1])
-        sma_50 = float(hist["Close"].tail(50).mean()) if len(hist) >= 50 else None
-        sma_200 = float(hist["Close"].tail(200).mean()) if len(hist) >= 200 else None
-        high_52w = float(hist["High"].max())
-        low_52w = float(hist["Low"].min())
-
-        # RSI berechnen (14 Tage)
-        delta = hist["Close"].diff()
-        gain = delta.where(delta > 0, 0).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        rsi_series = 100 - (100 / (1 + rs))
-        rsi_14 = float(rsi_series.iloc[-1]) if not rsi_series.empty else None
-
-        # Trend bestimmen
-        trend = "sideways"
-        if sma_50 and sma_200:
-            if current_price > sma_50 > sma_200:
-                trend = "uptrend"
-            elif current_price < sma_50 < sma_200:
-                trend = "downtrend"
-
-        distance_to_52w_high = ((current_price - high_52w) / high_52w) * 100 if high_52w else None
-
-        # ── Performance-Werte für Research Dashboard ─────────────────
-        close = hist["Close"]
-        prev_close = float(close.iloc[-2]) if len(close) > 1 else current_price
-        
-        # 1-Tage Performance
-        change_1d_pct = ((current_price - prev_close) / prev_close) * 100 if len(close) > 1 else None
-        
-        # 5-Tage Performance
-        change_5d_pct = (
-            ((current_price - float(close.iloc[-5]))
-             / float(close.iloc[-5])) * 100
-            if len(close) >= 5 else None
-        )
-        
-        # 1-Monat Performance
-        change_1m_pct = (
-            ((current_price - float(close.iloc[-21]))
-             / float(close.iloc[-21])) * 100
-            if len(close) >= 21 else None
-        )
-
-        # ── SMA 20 ──────────────────────────────────────────────
-        sma_20 = float(hist["Close"].tail(20).mean()) if len(hist) >= 20 else None
-
-        # ── ATR (14 Tage) ────────────────────────────────────────
-        # Average True Range = Maß für tägliche Kursschwankung
-        high_low   = hist["High"] - hist["Low"]
-        high_close = (hist["High"] - hist["Close"].shift()).abs()
-        low_close  = (hist["Low"] - hist["Close"].shift()).abs()
-        tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-        atr_14 = float(tr.rolling(14).mean().iloc[-1]) if len(hist) >= 15 else None
-
-        # ── MACD ─────────────────────────────────────────────────
-        # Signal: MACD-Linie über/unter Signal-Linie
-        # Mindestens 26 Tage für EMA-26 nötig
-        if len(hist) >= 26:
-            ema_12 = hist["Close"].ewm(span=12, adjust=False).mean()
-            ema_26 = hist["Close"].ewm(span=26, adjust=False).mean()
-            macd_line    = ema_12 - ema_26
-            signal_line  = macd_line.ewm(span=9, adjust=False).mean()
-            macd_val     = float(macd_line.iloc[-1])  if not macd_line.empty  else None
-            macd_signal  = float(signal_line.iloc[-1]) if not signal_line.empty else None
-            macd_hist_val = round(macd_val - macd_signal, 4) if macd_val and macd_signal else None
-            macd_bullish  = (macd_val > macd_signal) if macd_val and macd_signal else None
-        else:
-            macd_val = macd_signal = macd_hist_val = macd_bullish = None
-
-        # ── OBV (On-Balance Volume) ───────────────────────────────
-        # Steigendes OBV = Käuferdruck
-        close_diff = hist["Close"].diff()
-        obv_direction = pd.Series(0, index=hist.index)
-        obv_direction[close_diff > 0] = 1   # Steigend: +Volume
-        obv_direction[close_diff < 0] = -1  # Fallend: -Volume
-        # close_diff == 0: bleibt 0 (kein Volumen addiert)
-        obv = (hist["Volume"] * obv_direction).cumsum()
-        obv_val      = float(obv.iloc[-1])           if not obv.empty else None
-        obv_5d_ago   = float(obv.iloc[-5])           if len(obv) >= 5 else None
-        obv_trend    = (
-            "steigend" if obv_val and obv_5d_ago and obv_val > obv_5d_ago
-            else "fallend" if obv_val and obv_5d_ago
-            else None
-        )
-
-        # ── RVOL (Relative Volume) ───────────────────────────────
-        # Aktuelles Volumen vs. 20-Tage-Durchschnitt
-        avg_vol_20 = float(hist["Volume"].tail(20).mean()) if len(hist) >= 20 else None
-        last_vol   = float(hist["Volume"].iloc[-1])
-        rvol       = round(last_vol / avg_vol_20, 2) if avg_vol_20 and avg_vol_20 > 0 else None
-
-        # ── Free Float & Avg Volume (aus yfinance info) ──────────
-        try:
-            info         = stock.info
-            float_shares = info.get("floatShares")
-            avg_volume   = info.get("averageVolume") or info.get("averageDailyVolume10Day")
-            shares_out   = info.get("sharesOutstanding")
-            bid          = info.get("bid")
-            ask          = info.get("ask")
-            bid_ask_spread = round(ask - bid, 4) if bid and ask and ask > 0 else None
-        except Exception:
-            float_shares = avg_volume = shares_out = bid = ask = bid_ask_spread = None
-
-        result = TechnicalSetup(
-            ticker=ticker,
-            current_price=current_price,
-            sma_50=round(sma_50, 2) if sma_50 is not None else None,
-            sma_200=round(sma_200, 2) if sma_200 is not None else None,
-            rsi_14=round(rsi_14, 2) if rsi_14 is not None else None,
-            high_52w=round(high_52w, 2),
-            low_52w=round(low_52w, 2),
-            distance_to_52w_high_percent=round(distance_to_52w_high, 2) if distance_to_52w_high is not None else None,
-            trend=trend,
-            above_sma50=current_price > sma_50 if sma_50 is not None else False,
-            above_sma200=current_price > sma_200 if sma_200 is not None else False,
-            sma_20=round(sma_20, 2) if sma_20 is not None else None,
-            atr_14=round(atr_14, 2) if atr_14 is not None else None,
-            macd=round(macd_val, 4) if macd_val is not None else None,
-            macd_signal=round(macd_signal, 4) if macd_signal is not None else None,
-            macd_histogram=macd_hist_val,
-            macd_bullish=macd_bullish,
-            obv=round(obv_val, 0) if obv_val is not None else None,
-            obv_trend=obv_trend,
-            rvol=rvol if rvol is not None else None,
-            float_shares=float_shares,
-            avg_volume=avg_volume,
-            shares_outstanding=shares_out,
-            bid_ask_spread=bid_ask_spread,
-            change_1d_pct=round(change_1d_pct, 2) if change_1d_pct is not None else None,
-            change_5d_pct=round(change_5d_pct, 2) if change_5d_pct is not None else None,
-            change_1m_pct=round(change_1m_pct, 2) if change_1m_pct is not None else None,
-        )
+    result = await asyncio.to_thread(_fetch)
+    if result and result.current_price > 0:
         await cache_set(cache_key, result.dict(), ttl_seconds=300)
-        return result
-    except Exception as e:
-        logger.error(f"yfinance Fehler für {ticker}: {e}")
-        return TechnicalSetup(ticker=ticker, current_price=0.0)
+    return result
 
 
 async def get_risk_metrics(ticker: str) -> dict:

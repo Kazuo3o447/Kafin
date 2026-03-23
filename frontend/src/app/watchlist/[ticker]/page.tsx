@@ -1,6 +1,6 @@
 import { ArrowLeft, TrendingUp, Activity, FileText, Calendar } from "lucide-react";
 import Link from "next/link";
-import { ChartAnalysisSection } from "./ChartAnalysisSection";
+import { ChartAnalysisSection } from "@/components/ChartAnalysisSection";
 import { TrackRecordSection } from "./TrackRecordSection";
 import ChartWrapper from "@/components/ChartWrapper";
 import { ActionButtons } from "./ActionButtons";

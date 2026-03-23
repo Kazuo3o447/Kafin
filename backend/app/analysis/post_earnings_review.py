@@ -118,9 +118,13 @@ async def run_post_earnings_review(ticker: str, quarter: Optional[str] = None) -
 
     try:
         import yfinance as yf
-
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="1mo")
+        import asyncio
+        
+        def _fetch_stock():
+            stock = yf.Ticker(ticker)
+            return stock.history(period="1mo")
+        
+        hist = await asyncio.to_thread(_fetch_stock)
         if len(hist) >= 7:
             stock_price_pre = float(hist["Close"].iloc[-7])
             price_1d_after = float(hist["Close"].iloc[-6])
@@ -311,9 +315,9 @@ async def run_post_earnings_review(ticker: str, quarter: Optional[str] = None) -
 
                 # Cache invalidieren
                 from backend.app.cache import cache_invalidate
-                cache_invalidate("watchlist:enriched:v2")
-                cache_invalidate(f"research_dashboard_{ticker.upper()}")
-                cache_invalidate_prefix("earnings_radar_")
+                await cache_invalidate("watchlist:enriched:v2")
+                await cache_invalidate(f"research_dashboard_{ticker.upper()}")
+                await cache_invalidate_prefix("earnings_radar_")
 
     except Exception as e:
         logger.warning(

@@ -192,7 +192,7 @@ async def scan_google_news(watchlist_items: Optional[List[Dict]] = None) -> List
         watchlist_scope = ",".join(sorted({str(item.get("ticker", "")).upper() for item in watchlist_items if item.get("ticker")})) or "market"
 
     cache_key = f"gnews:scan:{watchlist_scope}"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         logger.debug("Google News aus Cache")
         return cached
@@ -231,5 +231,5 @@ async def scan_google_news(watchlist_items: Optional[List[Dict]] = None) -> List
     logger.info(
         f"Google News Scan ({settings.environment}): {len(all_news)} Artikel von vertrauenswürdigen Quellen"
     )
-    cache_set(cache_key, all_news, ttl_seconds=600)
+    await cache_set(cache_key, all_news, ttl_seconds=600)
     return all_news

@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 FIXTURES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "fixtures")
 
 
-def _batch_download(
+async def _batch_download(
     symbols: list[str],
     period: str = "6mo",
 ) -> dict[str, object]:
@@ -53,9 +53,16 @@ def _batch_download(
         }
 
         try:
-            raw = yf.download(**download_kwargs, multi_level_index=True)
-        except TypeError:
-            raw = yf.download(**download_kwargs)
+            def _download():
+                try:
+                    return yf.download(**download_kwargs, multi_level_index=True)
+                except TypeError:
+                    return yf.download(**download_kwargs)
+            
+            raw = await asyncio.to_thread(_download)
+        except Exception as e:
+            logger.error(f"Batch download Fehler: {e}")
+            return {}
 
         result = {}
 
@@ -246,8 +253,12 @@ def _calc_rsi(prices, period=14):
 def _analyze_ticker(ticker_symbol: str) -> dict:
     """Technische Analyse für einen einzelnen Ticker."""
     try:
-        stock = yf.Ticker(ticker_symbol)
-        hist = stock.history(period="6mo")
+        def _fetch():
+            stock = yf.Ticker(ticker_symbol)
+            return stock.history(period="6mo")
+        
+        loop = asyncio.get_event_loop()
+        hist = loop.run_until_complete(asyncio.to_thread(_fetch))
 
         if hist.empty or len(hist) < 20:
             return {"error": f"Keine Daten für {ticker_symbol}"}
@@ -613,7 +624,7 @@ async def get_market_breadth() -> dict:
         above_50 = above_200 = advancing = declining = total = 0
 
         # EIN Batch-Download statt 50 einzelne Calls
-        hist_data = _batch_download(SP500_TOP50, period="1y")
+        hist_data = await asyncio.to_thread(_batch_download, SP500_TOP50, period="1y")
 
         for ticker in SP500_TOP50:
             try:
@@ -763,7 +774,7 @@ async def get_intermarket_signals() -> dict:
         symbols = list(INTERMARKET.keys())
 
         # EIN Batch-Download statt 9 einzelne Calls
-        hist_data = _batch_download(symbols, period="3mo")
+        hist_data = await asyncio.to_thread(_batch_download, symbols, period="3mo")
 
         results = {}
         for symbol, name in INTERMARKET.items():

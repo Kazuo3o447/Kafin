@@ -55,7 +55,7 @@ async def get_fear_greed_score() -> dict:
       5. Momentum SPY 5T (10%)
     """
     cache_key = "fear_greed:v1"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
 
@@ -173,5 +173,5 @@ async def get_fear_greed_score() -> dict:
         "components": components,
         "coverage":   round(total_weight, 2),
     }
-    cache_set(cache_key, result, ttl_seconds=1800)
+    await cache_set(cache_key, result, ttl_seconds=1800)
     return result

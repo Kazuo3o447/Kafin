@@ -1,5 +1,5 @@
 """
-cache â€” Async Redis Cache fÃ¼r API-Daten
+cache — Async Redis Cache für API-Daten
 """
 from __future__ import annotations
 import json
@@ -21,7 +21,7 @@ async def _get_redis() -> redis.Redis | None:
             await _redis_client.ping()
             logger.info("Redis Cache verbunden.")
         except Exception as exc:
-            logger.warning(f"Redis nicht verfÃ¼gbar: {exc}")
+            logger.warning(f"Redis nicht verfügbar: {exc}")
             _redis_client = None
     return _redis_client
 
@@ -35,7 +35,7 @@ async def cache_get(key: str) -> Any:
         if raw is not None:
             return json.loads(raw)
     except Exception as exc:
-        logger.debug(f"Cache get Fehler fÃ¼r {key}: {exc}")
+        logger.debug(f"Cache get Fehler für {key}: {exc}")
     return None
 
 
@@ -46,7 +46,7 @@ async def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> None:
     try:
         await client.setex(key, ttl_seconds, json.dumps(value, default=str))
     except Exception as exc:
-        logger.debug(f"Cache set Fehler fÃ¼r {key}: {exc}")
+        logger.debug(f"Cache set Fehler für {key}: {exc}")
 
 
 async def cache_invalidate(key: str) -> bool:
@@ -57,7 +57,7 @@ async def cache_invalidate(key: str) -> bool:
         await client.delete(key)
         return True
     except Exception as exc:
-        logger.debug(f"Cache invalidate Fehler fÃ¼r {key}: {exc}")
+        logger.debug(f"Cache invalidate Fehler für {key}: {exc}")
         return False
 
 
@@ -71,5 +71,5 @@ async def cache_invalidate_prefix(prefix: str) -> int:
             deleted += await client.delete(key)
         return deleted
     except Exception as exc:
-        logger.debug(f"Cache invalidate prefix Fehler fÃ¼r {prefix}: {exc}")
+        logger.debug(f"Cache invalidate prefix Fehler für {prefix}: {exc}")
         return deleted

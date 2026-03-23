@@ -439,8 +439,18 @@ async def api_sparkline(ticker: str, days: int = 7):
     if cached:
         return cached
     try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period=f"{max(days, 2)}d")
+        def _get_stock():
+
+        
+        return yf.Ticker(ticker)
+
+        stock = await asyncio.to_thread(_get_stock)
+        def _get_hist():
+
+        
+        return stock.history(period=f"{max(days, 2)}d")
+
+        hist = await asyncio.to_thread(_get_hist)}d")
         if hist.empty:
             return {"ticker": ticker, "data": []}
         data = []
@@ -504,7 +514,12 @@ async def api_quick_snapshot(ticker: str):
 
         iv_rank = None
         try:
-            stock = yf.Ticker(ticker)
+            def _get_stock():
+
+            
+            return yf.Ticker(ticker)
+
+            stock = await asyncio.to_thread(_get_stock)
             opts = stock.options
             if opts:
                 nearest_exp = opts[0]
@@ -625,8 +640,18 @@ async def api_volume_profile(ticker: str):
     ticker = ticker.upper().strip()
     try:
         def _fetch_volume_data():
-            stock = yf.Ticker(ticker)
-            hist = stock.history(period="25d")
+            def _get_stock():
+
+            
+            return yf.Ticker(ticker)
+
+            stock = await asyncio.to_thread(_get_stock)
+            def _get_hist():
+
+            
+            return stock.history(period=f"{max(days, 2)}d")
+
+            hist = await asyncio.to_thread(_get_hist)
             if hist.empty or len(hist) < 2:
                 return []
             hist["change_pct"] = hist["Close"].pct_change() * 100
@@ -1003,7 +1028,12 @@ async def api_earnings_radar(days: int = 14):
         """Holt Firmennamen via yfinance."""
         try:
             import yfinance as yf
-            stock = yf.Ticker(ticker)
+            def _get_stock():
+
+            
+            return yf.Ticker(ticker)
+
+            stock = await asyncio.to_thread(_get_stock)
             info = stock.info
             return info.get("shortName") or info.get("longName") or info.get("companyName")
         except Exception:
@@ -1082,8 +1112,18 @@ async def api_ohlcv(ticker: str, period: str = "6mo", interval: str = "1d"):
     interval = interval if interval in allowed_intervals else "1d"
     if period in {"1mo", "3mo"} and interval == "1wk": interval = "1d"
     try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period=period, interval=interval)
+        def _get_stock():
+
+        
+        return yf.Ticker(ticker)
+
+        stock = await asyncio.to_thread(_get_stock)
+        def _get_hist():
+
+        
+        return stock.history(period=f"{max(days, 2)}d")
+
+        hist = await asyncio.to_thread(_get_hist)
         if hist.empty: return {"ticker": ticker, "period": period, "interval": interval, "candles": [], "sma_50": [], "sma_200": [], "error": "Keine Daten"}
         candles = []
         for ts, row in hist.iterrows(): candles.append({"time": ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts)[:10], "open": round(float(row["Open"]), 4), "high": round(float(row["High"]), 4), "low": round(float(row["Low"]), 4), "close": round(float(row["Close"]), 4), "volume": int(row["Volume"])})
@@ -1595,8 +1635,18 @@ async def api_sparkline(ticker: str, days: int = 7):
     if cached:
         return cached
     try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period=f"{max(days, 2)}d")
+        def _get_stock():
+
+        
+        return yf.Ticker(ticker)
+
+        stock = await asyncio.to_thread(_get_stock)
+        def _get_hist():
+
+        
+        return stock.history(period=f"{max(days, 2)}d")
+
+        hist = await asyncio.to_thread(_get_hist)}d")
         if hist.empty:
             return {"ticker": ticker, "data": []}
         data = []
@@ -1661,7 +1711,12 @@ async def api_quick_snapshot(ticker: str):
         iv_rank = None
         try:
             import yfinance as yf
-            stock = yf.Ticker(ticker)
+            def _get_stock():
+
+            
+            return yf.Ticker(ticker)
+
+            stock = await asyncio.to_thread(_get_stock)
             opts = stock.options
             if opts:
                 nearest_exp = opts[0]
@@ -1789,8 +1844,18 @@ async def api_volume_profile(ticker: str):
     
     try:
         def _fetch_volume_data():
-            stock = yf.Ticker(ticker)
-            hist = stock.history(period="25d")
+            def _get_stock():
+
+            
+            return yf.Ticker(ticker)
+
+            stock = await asyncio.to_thread(_get_stock)
+            def _get_hist():
+
+            
+            return stock.history(period=f"{max(days, 2)}d")
+
+            hist = await asyncio.to_thread(_get_hist)
             
             if hist.empty or len(hist) < 2:
                 return []

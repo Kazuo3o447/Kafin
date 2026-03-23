@@ -78,9 +78,9 @@ async def api_news_scan():
     wl = await get_watchlist()
     tickers = [item["ticker"] for item in wl]
     results = await run_news_pipeline(tickers)
-    cache_invalidate("watchlist:enriched:v2")
-    cache_invalidate_prefix("research_dashboard_")
-    cache_invalidate_prefix("earnings_radar_")
+    await cache_invalidate("watchlist:enriched:v2")
+    await cache_invalidate_prefix("research_dashboard_")
+    await cache_invalidate_prefix("earnings_radar_")
     return {"status": "success", "results": results}
 
 @router.post("/api/news/scan/{ticker}")
@@ -88,9 +88,9 @@ async def api_news_scan_ticker(ticker: str):
     """Führt die News-Pipeline für einen einzelnen Ticker aus."""
     logger.info(f"API Call: news-scan for {ticker}")
     result = await process_news_for_ticker(ticker)
-    cache_invalidate("watchlist:enriched:v2")
-    cache_invalidate(f"research_dashboard_{ticker.upper()}")
-    cache_invalidate_prefix("earnings_radar_")
+    await cache_invalidate("watchlist:enriched:v2")
+    await cache_invalidate(f"research_dashboard_{ticker.upper()}")
+    await cache_invalidate_prefix("earnings_radar_")
     return {"status": "success", "result": result}
 
 @router.get("/api/news/memory/{ticker}")

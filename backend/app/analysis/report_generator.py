@@ -1129,8 +1129,8 @@ async def generate_audit_report(ticker: str) -> str:
             # Redis Cache für Research invalidieren
             try:
                 from backend.app.cache import cache_invalidate
-                cache_invalidate(f"research:{ticker.upper()}")
-                cache_invalidate(f"research:{ticker.upper()}:v2")
+                await cache_invalidate(f"research:{ticker.upper()}")
+                await cache_invalidate(f"research:{ticker.upper()}:v2")
                 logger.info(f"Research Cache für {ticker} invalidiert")
             except Exception:
                 pass

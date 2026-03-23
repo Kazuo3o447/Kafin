@@ -121,3 +121,69 @@ async def call_deepseek(
             
     logger.error("DeepSeek call failed after 3 attempts.")
     return ""
+
+async def call_deepseek_chat(
+    system_prompt: str,
+    messages: list[dict],
+    model: str = "deepseek-chat",
+    temperature: float = 0.4,
+    max_tokens: int = 1024,
+) -> str:
+    """
+    Multi-Turn Variante. messages = [{"role": "user"|"assistant", "content": str}, ...]
+    system_prompt wird als {"role": "system"} vorangestellt.
+    max_tokens bewusst niedrig (1024) — Chat-Antworten sollen knapp sein.
+    """
+    if settings.use_mock_data:
+        return "MOCK: Chat-Antwort nicht verfügbar im Mock-Modus."
+
+    configs = _load_deepseek_config()
+    api_key = settings.deepseek_api_key
+    if not api_key:
+        return "ERROR: DEEPSEEK_API_KEY fehlt."
+
+    base_url = configs.get("base_url", "https://api.deepseek.com/1")
+
+    full_messages = [{"role": "system", "content": system_prompt}] + messages
+
+    payload = {
+        "model": model,
+        "messages": full_messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    for attempt in range(3):
+        try:
+            client = _get_http_client()
+            response = await client.post(
+                f"{base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            usage = data.get("usage", {})
+            try:
+                from backend.app.analysis.usage_tracker import track_call
+                await track_call(
+                    api_name="deepseek",
+                    model=model,
+                    input_tokens=usage.get("prompt_tokens", 0),
+                    output_tokens=usage.get("completion_tokens", 0),
+                )
+            except Exception:
+                pass
+
+            return data["choices"][0]["message"].get("content", "")
+        except Exception as e:
+            logger.warning(f"call_deepseek_chat attempt {attempt+1} failed: {e}")
+            await asyncio.sleep(2 ** attempt)
+
+    return "Fehler: DeepSeek nicht erreichbar."

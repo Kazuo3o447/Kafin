@@ -107,7 +107,7 @@ async def flush_to_db() -> None:
         keys = client.keys(f"usage:{today}:*")
 
         for key in keys:
-            data = cache_get(key)
+            data = await cache_get(key)
             if not data:
                 continue
 
@@ -190,7 +190,7 @@ async def get_today_summary() -> dict:
 
     result: dict[str, dict] = {}
     for key in keys:
-        data = cache_get(key)
+        data = await cache_get(key)
         if not data:
             continue
         api = data["api_name"]

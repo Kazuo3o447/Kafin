@@ -696,7 +696,7 @@ Module für KI-Analyse, Scoring und Report-Generierung.
 | Datei | Abhängigkeit | Beschreibung |
 |-------|-------------|-------------|
 | finbert.py | Lokales Modell | Sentiment-Score für Headlines (-1 bis +1) |
-| deepseek.py | DeepSeek API | News-Zusammenfassung, Stichpunkt-Extraktion, Report-Generierung |
+| deepseek.py | DeepSeek API | News-Zusammenfassung, Stichpunkt-Extraktion, Report-Generierung, Multi-Turn Chat (call_deepseek_chat) |
 | groq.py | Groq API | Schnelle News-Extraktion (llama-3.1-8b-instant) |
 | scoring.py | config/scoring.yaml, schemas/scores.py | Berechnet Opportunity + Torpedo Score |
 | report_generator.py | Alle obigen Module | Generiert den vollständigen Audit-Report |

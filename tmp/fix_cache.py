@@ -1,4 +1,9 @@
-"""
+import shutil, os
+
+src = "backend/app/cache.py"
+shutil.copy(src, src + ".bak")
+
+new_content = '''"""
 cache — Async Redis Cache für API-Daten
 """
 from __future__ import annotations
@@ -73,3 +78,9 @@ async def cache_invalidate_prefix(prefix: str) -> int:
     except Exception as exc:
         logger.debug(f"Cache invalidate prefix Fehler für {prefix}: {exc}")
         return deleted
+'''
+
+with open(src, "w") as f:
+    f.write(new_content)
+
+print(f"✅ cache.py ersetzt ({len(new_content)} Zeichen)")

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -14,6 +14,7 @@ import { cacheGet, cacheSet, cacheInvalidate } from "@/lib/clientCache";
 import { PriceRangeBar } from "@/components/visualizations/PriceRangeBar";
 import { VolumeProfile } from "@/components/visualizations/VolumeProfile";
 import { PEGGauge } from "@/components/visualizations/PEGGauge";
+import { ChartAnalysisSection } from "@/components/ChartAnalysisSection";
 
 // ── Typen ────────────────────────────────────────────────────
 type ResearchData = {
@@ -222,6 +223,11 @@ type ScoreDeltaData = {
     opportunity_score: number | null;
     torpedo_score: number | null;
   } | null;
+};
+
+type ChatMsg = {
+  role: "user" | "assistant";
+  content: string;
 };
 
 type ChartAnalysisData = {
@@ -869,6 +875,10 @@ function PositionSizerBlock({
   accountSize,
   riskPercent,
   stopLoss,
+  atr,
+  target1,
+  ivAtm,
+  expectedMovePct,
   onAccountSizeChange,
   onRiskPercentChange,
   onStopLossChange,
@@ -877,6 +887,10 @@ function PositionSizerBlock({
   accountSize: number;
   riskPercent: number;
   stopLoss: number;
+  atr?: number;
+  target1?: number;
+  ivAtm?: number;
+  expectedMovePct?: number;
   onAccountSizeChange: (value: number) => void;
   onRiskPercentChange: (value: number) => void;
   onStopLossChange: (value: number) => void;
@@ -888,8 +902,26 @@ function PositionSizerBlock({
   const stopLossDistance = currentPrice - stopLossPrice;
   const invalidStop = !Number.isFinite(stopLossDistance) || currentPrice <= 0 || stopLossDistance <= 0;
   const shares = !invalidStop ? Math.floor(riskAmount / stopLossDistance) : 0;
+  const totalCost = shares * currentPrice;
   const maxLoss = !invalidStop ? shares * stopLossDistance : 0;
-  const rrRatio = stopLossPercent > 0 ? (5 / stopLossPercent).toFixed(2) : "0"; // Annahme: 5% Ziel
+
+  // R:R — target1 aus ChartAnalysis wenn vorhanden, sonst 2:1 Fallback
+  const upside = target1 && target1 > currentPrice
+    ? target1 - currentPrice
+    : stopLossDistance * 2;
+  const rrRatio = stopLossDistance > 0
+    ? (upside / stopLossDistance).toFixed(1)
+    : "—";
+  const rrLabel = target1 ? `Ziel $${target1.toFixed(2)}` : "2:1 Annahme";
+
+  // Options-Sizing — nur wenn iv_atm vorhanden
+  // Geschätzte ATM-Prämie: 0.4 × IV/100 × Kurs × √(21/252) ≈ Monats-Prämie
+  const optionPremiumEst = (ivAtm && currentPrice)
+    ? Math.round(currentPrice * (ivAtm / 100) * 0.4 * Math.sqrt(21 / 252) * 100) / 100
+    : null;
+  const contracts = (optionPremiumEst && riskAmount > 0)
+    ? Math.floor(riskAmount / (optionPremiumEst * 100))
+    : null;
 
   return (
     <div className="card p-4">
@@ -934,6 +966,11 @@ function PositionSizerBlock({
               max="20"
               className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-sm font-mono text-[var(--text-primary)] focus:border-[var(--accent-blue)] outline-none"
             />
+            {atr && (
+              <p className="text-[10px] text-[var(--text-muted)] mt-1">
+                ATR(14): ${atr.toFixed(2)} = {((atr / currentPrice) * 100).toFixed(1)}%
+              </p>
+            )}
           </div>
         </div>
 
@@ -954,7 +991,7 @@ function PositionSizerBlock({
           <StatCell 
             label="Aktienanzahl" 
             value={shares.toLocaleString()}
-            sub={`@ $${currentPrice.toFixed(2)}`}
+            sub={`Kapitaleinsatz $${totalCost.toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
           />
           
           <StatCell 
@@ -966,9 +1003,187 @@ function PositionSizerBlock({
           <StatCell 
             label="R:R Verhältnis" 
             value={`1:${rrRatio}`}
-            sub="Annahme: 5% Ziel"
+            sub={rrLabel}
           />
         </div>
+      </div>
+
+      {/* Options-Sizing — nur wenn contracts !== null */}
+      {contracts !== null && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-2">
+            Options-Sizing
+          </p>
+          <StatCell
+            label="Kontrakte (ATM)"
+            value={contracts.toString()}
+            sub={`Prämie ~$${optionPremiumEst?.toFixed(2)} × 100`}
+          />
+          {expectedMovePct && (
+            <p className="text-[10px] text-[var(--text-muted)] mt-1">
+              Expected Move ±{expectedMovePct.toFixed(1)}%
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TickerChatBlock({
+  ticker,
+  contextSnapshot,
+}: {
+  ticker: string;
+  contextSnapshot: Record<string, unknown>;
+}) {
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function sendMessage() {
+    const text = input.trim();
+    if (!text || loading) return;
+    setInput("");
+
+    const next: ChatMsg[] = [...messages, { role: "user", content: text }];
+    setMessages(next);
+    setLoading(true);
+
+    try {
+      const res = await fetch(`/api/analysis/chat/${ticker}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: next,
+          context_snapshot: contextSnapshot,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: data.answer },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Fehler — Antwort konnte nicht geladen werden." },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  const suggestions = [
+    "Was ändert sich wenn VIX auf 35 steigt?",
+    "Welches Options-Setup passt zur aktuellen Empfehlung?",
+    "Was sind die größten Torpedorisiken?",
+  ];
+
+  return (
+    <div className="card p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-3">
+        AI Analyst — {ticker}
+      </p>
+
+      {/* Nachrichten-Verlauf */}
+      {messages.length === 0 ? (
+        <div className="space-y-2 mb-3">
+          <p className="text-xs text-[var(--text-secondary)]">
+            Stelle eine Frage zum aktuellen Setup:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((s) => (
+              <button
+                key={s}
+                onClick={() => { setInput(s); }}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5
+                           text-xs text-[var(--text-secondary)]
+                           hover:border-[var(--accent-blue)]
+                           hover:text-[var(--accent-blue)] transition-colors"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3 mb-3 max-h-72 overflow-y-auto pr-1">
+          {messages.map((msg, i) => (
+            <div
+              key={i}
+              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                className={`rounded-xl px-3 py-2 text-xs leading-relaxed max-w-[85%]
+                  ${msg.role === "user"
+                    ? "bg-[var(--accent-blue)] text-white"
+                    : "bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
+                  }`}
+              >
+                {msg.content}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="flex justify-start">
+              <div className="rounded-xl px-3 py-2 bg-[var(--bg-tertiary)]">
+                <RefreshCw size={12} className="animate-spin text-[var(--text-muted)]" />
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+      )}
+
+      {/* Input */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Frage zum Setup..."
+          disabled={loading}
+          className="flex-1 rounded-lg border border-[var(--border)]
+                     bg-[var(--bg-secondary)] px-3 py-2 text-sm
+                     text-[var(--text-primary)] placeholder-[var(--text-muted)]
+                     focus:border-[var(--accent-blue)] outline-none
+                     disabled:opacity-50"
+        />
+        <button
+          onClick={sendMessage}
+          disabled={loading || !input.trim()}
+          className="rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm
+                     text-white hover:opacity-90 disabled:opacity-40
+                     disabled:cursor-not-allowed transition-opacity"
+        >
+          Senden
+        </button>
+        {messages.length > 0 && (
+          <button
+            onClick={() => setMessages([])}
+            disabled={loading}
+            className="rounded-lg border border-[var(--border)] px-3 py-2
+                       text-xs text-[var(--text-muted)]
+                       hover:text-[var(--text-primary)] transition-colors"
+          >
+            Reset
+          </button>
+        )}
       </div>
     </div>
   );
@@ -2029,9 +2244,24 @@ export default function ResearchDashboard() {
   }, [ticker]);
 
   // Feature 3: Position Sizer
-  const [accountSize, setAccountSize] = useState<number>(10000);
-  const [riskPercent, setRiskPercent] = useState<number>(1);
-  const [stopLoss, setStopLoss] = useState<number>(5);
+  const [accountSize, setAccountSize] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("kafin_account_size");
+      return saved ? parseFloat(saved) : 10000;
+    } catch { return 10000; }
+  });
+  const [riskPercent, setRiskPercent] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("kafin_risk_pct");
+      return saved ? parseFloat(saved) : 1;
+    } catch { return 1; }
+  });
+  const [stopLoss, setStopLoss] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("kafin_stop_pct");
+      return saved ? parseFloat(saved) : 5;
+    } catch { return 5; }
+  });
 
   // Letzte 5 Suchen speichern
   useEffect(() => {
@@ -2060,6 +2290,20 @@ export default function ResearchDashboard() {
       localStorage.setItem("kafin_account_size", accountSize.toString());
     } catch {}
   }, [accountSize]);
+
+  // Risk Percent speichern bei Änderung
+  useEffect(() => {
+    try {
+      localStorage.setItem("kafin_risk_pct", riskPercent.toString());
+    } catch {}
+  }, [riskPercent]);
+
+  // Stop Loss speichern bei Änderung
+  useEffect(() => {
+    try {
+      localStorage.setItem("kafin_stop_pct", stopLoss.toString());
+    } catch {}
+  }, [stopLoss]);
 
   const loadData = useCallback(async (forceRefresh = false) => {
     if (forceRefresh) {
@@ -2093,6 +2337,15 @@ export default function ResearchDashboard() {
       setData(result);
       setOnWatchlist(result.is_watchlist);
       cacheSet(`research:${tickerUpper}`, result, 600);
+      
+      // ATR als Stop-Loss Vorschlag (nur wenn noch nie manuell gesetzt)
+      if (result.atr_14 && result.price && result.price > 0) {
+        const atrPct = (result.atr_14 / result.price) * 100;
+        const rounded = Math.round(atrPct * 10) / 10; // eine Nachkommastelle
+        const neverSaved = !localStorage.getItem("kafin_stop_pct");
+        if (neverSaved) setStopLoss(rounded);
+      }
+      
       if (result.last_audit) {
         setAiReport(result.last_audit.report_text);
         setAiDate(result.last_audit.date);
@@ -2103,7 +2356,23 @@ export default function ResearchDashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [tickerUpper]);
+  }, [tickerUpper, overrideTicker]);
+
+  const contextSnapshot = useMemo(() => {
+    if (!data) return {};
+    return {
+      price: data.price,
+      opportunity_score: data.opportunity_score,
+      torpedo_score: data.torpedo_score,
+      recommendation: data.recommendation,
+      atr_14: data.atr_14,
+      iv_atm: data.iv_atm,
+      expected_move_pct: data.expected_move_pct,
+      rsi: data.rsi,
+      trend: data.trend,
+      report_text: data.last_audit?.report_text ?? "",
+    };
+  }, [data]);
 
   const loadScoreDelta = useCallback(async () => {
     try {
@@ -2907,6 +3176,10 @@ export default function ResearchDashboard() {
         accountSize={accountSize}
         riskPercent={riskPercent}
         stopLoss={stopLoss}
+        atr={data.atr_14 ?? undefined}
+        target1={chartAnalysis?.target_1 ?? undefined}
+        ivAtm={data.iv_atm ?? undefined}
+        expectedMovePct={data.expected_move_pct ?? undefined}
         onAccountSizeChange={setAccountSize}
         onRiskPercentChange={setRiskPercent}
         onStopLossChange={setStopLoss}
@@ -2928,6 +3201,14 @@ export default function ResearchDashboard() {
       {/* ══════════════════════════════════════════════════════
           UNTERER TEIL: KI-ANALYSE
       ══════════════════════════════════════════════════════ */}
+      
+      {/* ── Interaktiver Chart ──────────────────────────── */}
+      <ChartAnalysisSection
+        ticker={tickerUpper}
+        expectedMovePct={data.expected_move_pct ?? undefined}
+        currentPrice={data.price ?? undefined}
+      />
+
       <div className="card-accent p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -3020,6 +3301,13 @@ export default function ResearchDashboard() {
           </div>
         )}
       </div>
+
+      {data && (
+        <TickerChatBlock
+          ticker={tickerUpper}
+          contextSnapshot={contextSnapshot}
+        />
+      )}
 
     </div>
   );

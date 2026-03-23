@@ -1,13 +1,29 @@
+"""
+Analysis Router - KI-Analyse Endpoints
+
+- /api/finbert/analyze: Sentiment-Analyse
+- /api/signals/scan: Signal-Scan für Watchlist
+- /api/opportunities/scan: Opportunity-Scanner
+- /api/chart-analysis/{ticker}: Technische Chartanalyse
+- /api/chart-analysis-top: Top-N Watchlist Chartanalyse
+- /api/analysis/chat/{ticker}: Multi-Turn AI-Chat pro Ticker (NEU)
+- /api/market-audit: Gesamtmarkt-Analyse mit DeepSeek
+
+NEU v6.4.0: Multi-Turn AI-Chat mit kontext-basierten Antworten,
+Was-wenn-Szenarien und Options-Setup-Empfehlungen.
+"""
+
 from fastapi import APIRouter, Query, HTTPException
 from typing import List, Optional
 from datetime import datetime
+from pydantic import BaseModel
 
 from backend.app.logger import get_logger
 from backend.app.analysis.finbert import analyze_sentiment
 from backend.app.analysis.signal_scanner import scan_all_signals
 from backend.app.analysis.opportunity_scanner import scan_upcoming_opportunities
 from backend.app.analysis.chart_analyst import analyze_chart, analyze_top_watchlist
-from backend.app.analysis.deepseek import call_deepseek
+from backend.app.analysis.deepseek import call_deepseek, call_deepseek_chat
 from backend.app.data.market_overview import (
     get_market_overview, get_market_breadth, get_intermarket_signals, get_market_news_for_sentiment
 )
@@ -18,6 +34,14 @@ from backend.app.database import get_pool
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["analysis"])
+
+class ChatMessage(BaseModel):
+    role: str   # "user" | "assistant"
+    content: str
+
+class TickerChatRequest(BaseModel):
+    messages: list[ChatMessage]          # komplette Gesprächshistorie
+    context_snapshot: dict               # vom Frontend mitgeschickt
 
 @router.post("/api/finbert/analyze")
 async def api_finbert_analyze(text: str):
@@ -58,6 +82,58 @@ async def api_chart_analysis_top(limit: int = 5):
     logger.info(f"API Call: chart-analysis-top (limit={limit})")
     results = await analyze_top_watchlist(limit)
     return {"tickers": results}
+
+@router.post("/api/analysis/chat/{ticker}")
+async def api_ticker_chat(ticker: str, body: TickerChatRequest):
+    """
+    Multi-Turn AI-Chat für einen Ticker.
+    Kontext (Scores, Metriken, letzter Report) kommt vom Frontend mit.
+    Max 8 Nachrichten werden akzeptiert — ältere werden serverseitig abgeschnitten.
+    """
+    if not ticker or len(ticker) > 10:
+        raise HTTPException(status_code=400, detail="Ungültiger Ticker")
+
+    ctx = body.context_snapshot
+    ticker_upper = ticker.upper()
+
+    # System-Prompt aus Kontext aufbauen
+    report_excerpt = str(ctx.get("report_text", ""))[:2000]  # max 2000 Zeichen
+    system_prompt = f"""Du bist ein erfahrener Trader-Assistent für die Kafin-Plattform.
+Du analysierst {ticker_upper} und beantwortest Fragen dazu präzise und knapp.
+
+AKTUELLER KONTEXT:
+Ticker: {ticker_upper}
+Preis: ${ctx.get('price', 'N/A')}
+Opportunity-Score: {ctx.get('opportunity_score', 'N/A')}/10
+Torpedo-Score: {ctx.get('torpedo_score', 'N/A')}/10
+Empfehlung: {ctx.get('recommendation', 'N/A')}
+ATR(14): {ctx.get('atr_14', 'N/A')}
+IV ATM: {ctx.get('iv_atm', 'N/A')}%
+Expected Move: ±{ctx.get('expected_move_pct', 'N/A')}%
+RSI: {ctx.get('rsi', 'N/A')}
+Trend: {ctx.get('trend', 'N/A')}
+
+LETZTER AUDIT-REPORT (Auszug):
+{report_excerpt if report_excerpt else 'Noch kein Report generiert.'}
+
+REGELN:
+- Antworte auf Deutsch, maximal 150 Wörter
+- Keine Index-Shorts empfehlen (SH, PSQ, SQQQ, SPY-Puts auf breiten Markt)
+- Bei bärischer Einschätzung: Sektor-ETF-Puts, Einzeltitel-Puts oder Pair-Trades
+- Wenn Daten fehlen, klar sagen was unklar ist
+- Keine Finanzberatung — Empfehlungen sind Analysen, keine Garantien"""
+
+    # Nachrichten auf 8 begrenzen (die letzten 8)
+    messages = [{"role": m.role, "content": m.content}
+                for m in body.messages[-8:]]
+
+    answer = await call_deepseek_chat(
+        system_prompt=system_prompt,
+        messages=messages,
+        max_tokens=400,
+    )
+
+    return {"ticker": ticker_upper, "answer": answer}
 
 @router.post("/api/market-audit")
 async def api_market_audit():

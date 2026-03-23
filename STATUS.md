@@ -8,6 +8,9 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 3. Skimme die historischen Meilensteine nur für Kontext oder Audit-Zwecke.
 
 ## 🟢 Aktueller Stand
+- **AI-Chat Interface v6.4.0**: Multi-Turn DeepSeek Chat pro Ticker mit kontext-basierten Antworten, Was-wenn-Szenarien und Options-Setup-Empfehlungen
+- **Position Sizer v2.0**: Vollständige localStorage Persistenz, ATR-Stop-Loss Vorschläge, echtes R:R mit target1, Options-Sizing mit IV-basierten Prämien
+- **Chart Analysis Integration**: Expected-Move-Lines, Shared Component von Watchlist zu Research-Page
 - **Chart Analysis Overhaul v6.1.6**: Begründungen immer sichtbar (kein Akkordeon), ETF/Index Research mit Asset-Type Detection, vollständige Chart-Daten in Audit-Prompts, max_tokens 2048 für DeepSeek
 - **Modular Architecture v6.1.5**: Monolithische `main.py` vollständig in fachliche Router (`routers/`, `admin/`) zerlegt. Bessere Wartbarkeit und Übersichtlichkeit.
 - **Prompt Quality v6.1.4**: Alle TODO-Platzhalter implementiert (audit_report: Max Pain, CEO, Mitarbeiter; post_earnings: AH-Reaktion, Fear & Greed; morning_briefing: Fear & Greed); DeepSeek Modell-Matrix optimiert (Reasoner für komplexe Tasks, Chat für schnelle); groq.py API-Key aus settings statt module-level

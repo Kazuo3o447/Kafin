@@ -29,7 +29,7 @@ async def get_finra_short_volume(
     Gibt Short Volume Ratio zurück (0.0-1.0).
     """
     cache_key = f"finra:sv:{ticker.upper()}"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
 
@@ -79,7 +79,7 @@ async def get_finra_short_volume(
             "error": "Keine FINRA-Daten",
         }
         result["ticker"] = ticker.upper()
-        cache_set(cache_key, result, ttl_seconds=86400)  # 24h
+        await cache_set(cache_key, result, ttl_seconds=86400)  # 24h
         return result
     except Exception as e:
         return {"ticker": ticker.upper(), "error": str(e)}

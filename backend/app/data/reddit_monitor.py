@@ -34,7 +34,7 @@ async def get_reddit_sentiment(
     Gibt Durchschnitts-Score + Mention-Count zurück.
     """
     cache_key = f"reddit:{ticker.upper()}:{hours}h"
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
 
@@ -105,7 +105,7 @@ async def get_reddit_sentiment(
                 "label":        "keine Daten",
                 "source":       "reddit",
             }
-            cache_set(cache_key, result, ttl_seconds=3600)
+            await cache_set(cache_key, result, ttl_seconds=3600)
             return result
 
         # FinBERT-Bewertung (lokal, kostenlos)
@@ -133,7 +133,7 @@ async def get_reddit_sentiment(
             "titles_sample": titles[:3],
             "source":        "reddit_wsb_stocks",
         }
-        cache_set(cache_key, result, ttl_seconds=3600)
+        await cache_set(cache_key, result, ttl_seconds=3600)
         return result
 
     except Exception as e:

@@ -95,7 +95,7 @@ async def get_filing_diff(
     cache_key = (
         f"filing_diff:{ticker.upper()}:{filing_type}"
     )
-    cached = cache_get(cache_key)
+    cached = await cache_get(cache_key)
     if cached:
         return cached
 
@@ -233,5 +233,5 @@ async def get_filing_diff(
         "chars_analyzed": total_chars,
     }
 
-    cache_set(cache_key, result, ttl_seconds=86400)
+    await cache_set(cache_key, result, ttl_seconds=86400)
     return result

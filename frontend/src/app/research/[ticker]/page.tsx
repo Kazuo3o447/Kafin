@@ -3216,7 +3216,7 @@ export default function ResearchDashboard() {
             <span className="text-[var(--text-secondary)]">Ø Surprise: <span className={`font-semibold ${colorPct(data.avg_surprise_pct)}`}>{fmt.pct(data.avg_surprise_pct)}</span></span>
             <span className="text-[var(--text-secondary)]">Letzter: <span className={`font-semibold ${colorPct(data.last_surprise_pct)}`}>{fmt.pct(data.last_surprise_pct)}</span></span>
           </div>
-          {data.quarterly_history.length > 0 ? (
+          {Array.isArray(data.quarterly_history) && data.quarterly_history.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>

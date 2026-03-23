@@ -86,7 +86,36 @@ CREATE TABLE IF NOT EXISTS score_history (
     created_at TIMESTAMP DEFAULT NOW(),
     UNIQUE(ticker, date)
 );
+
+-- Trade Journal: Echte Positionen mit strukturierten Feldern
+CREATE TABLE IF NOT EXISTS trade_journal (
+    id              BIGSERIAL PRIMARY KEY,
+    ticker          VARCHAR(20)   NOT NULL,
+    direction       VARCHAR(10)   NOT NULL DEFAULT 'long',  -- 'long' | 'short'
+    entry_date      DATE          NOT NULL,
+    entry_price     NUMERIC(12,4) NOT NULL,
+    shares          NUMERIC(12,4),
+    stop_price      NUMERIC(12,4),
+    target_price    NUMERIC(12,4),
+    thesis          TEXT,
+    opportunity_score NUMERIC(4,1),
+    torpedo_score     NUMERIC(4,1),
+    recommendation  VARCHAR(50),
+    exit_date       DATE,
+    exit_price      NUMERIC(12,4),
+    exit_reason     VARCHAR(100),  -- 'stop_hit' | 'target_hit' | 'manual' | 'earnings_reaction'
+    notes           TEXT,
+    created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_journal_ticker
+ON trade_journal(ticker);
+
+CREATE INDEX IF NOT EXISTS idx_journal_entry_date
+ON trade_journal(entry_date DESC);
 """
+
 
 CUSTOM_SEARCH_TERMS_SQL = """
 CREATE TABLE IF NOT EXISTS custom_search_terms (

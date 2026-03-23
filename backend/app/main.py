@@ -33,6 +33,7 @@ from backend.app.routers.analysis import router as analysis_router
 from backend.app.routers.shadow import router as shadow_router
 from backend.app.routers.logs import router as logs_router
 from backend.app.routers.system import router as system_router
+from backend.app.routers.journal import router as journal_router
 
 logger = get_logger(__name__)
 
@@ -180,6 +181,7 @@ app.include_router(analysis_router)
 app.include_router(shadow_router)
 app.include_router(logs_router)
 app.include_router(system_router)
+app.include_router(journal_router)
 
 
 async def _run_pending_migrations(pool) -> None:

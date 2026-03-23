@@ -13,6 +13,7 @@ import {
   CalendarDays,
   Search,
   BarChart2,
+  BookOpen,
 } from "lucide-react";
 import { useMemo } from "react";
 
@@ -24,6 +25,7 @@ const navItems = [
   { label: "Earnings-Radar", href: "/earnings", icon: CalendarDays },
   { label: "Reports", href: "/reports", icon: FileText },
   { label: "News", href: "/news", icon: Newspaper },
+  { label: "Journal", href: "/journal", icon: BookOpen },
   { label: "Performance", href: "/performance", icon: LineChart },
   { label: "Einstellungen", href: "/settings", icon: Settings },
 ];

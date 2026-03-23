@@ -58,7 +58,7 @@ async def get_economic_calendar(days_back: int = 7, days_forward: int = 7) -> li
         # Usage tracken
         try:
             from backend.app.analysis.usage_tracker import track_call
-            track_call(api_name="finnhub")
+            await track_call(api_name="finnhub")
         except Exception:
             pass
 
@@ -146,7 +146,7 @@ async def get_company_news(ticker: str, from_date: str, to_date: str) -> List[Ne
         # Usage tracken
         try:
             from backend.app.analysis.usage_tracker import track_call
-            track_call(api_name="finnhub")
+            await track_call(api_name="finnhub")
         except Exception:
             pass
         return [
@@ -392,21 +392,21 @@ async def get_general_news(category: str = "general", min_id: int = 0) -> list[d
         ]
 
     url = f"https://finnhub.io/api/v1/news?category={category}&token={settings.finnhub_api_key}"
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(url)
         response.raise_for_status()
-        news = response.json()
+        data = response.json()
         
         # Usage tracken
         try:
             from backend.app.analysis.usage_tracker import track_call
-            track_call(api_name="finnhub")
+            await track_call(api_name="finnhub")
         except Exception:
             pass
 
         # Nimm die 15 neuesten, filtere auf relevante Quellen
         filtered = []
-        for n in news[:30]:
+        for n in data[:30]:
             source = n.get("source", "").lower()
             # Priorisiere Qualitätsquellen
             if any(s in source for s in ["reuters", "bloomberg", "cnbc", "wsj", "ft", "associated press", "yahoo"]):

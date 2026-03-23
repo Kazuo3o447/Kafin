@@ -19,7 +19,7 @@ from typing import List, Dict, Any
 from collections import deque
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # ---------------------------------------------------------------------------
 # File Logging Configuration
@@ -79,7 +79,7 @@ def _memory_buffer_processor(logger, log_method, event_dict):
     
     # Sicherstellen, dass ein Timestamp vorhanden ist
     if "timestamp" not in log_entry:
-        log_entry["timestamp"] = datetime.utcnow().isoformat()
+        log_entry["timestamp"] = datetime.now(timezone.utc).isoformat()
     
     # Levelname aus dem Methoden-Namen ableiten, falls nicht gesetzt
     if "level" not in log_entry:
@@ -164,7 +164,9 @@ def _logger_matches_module(logger_name: str, expected_names: list[str]) -> bool:
     )
 
 def _relative_time(dt: datetime) -> str:
-    now = datetime.utcnow()
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
     diff = now - dt
     seconds = diff.total_seconds()
     if seconds < 60:
@@ -185,7 +187,7 @@ def get_module_status() -> Dict[str, Any]:
     
     status_result = {
         "modules": {},
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "debug": {
             "total_logs": 0,
             "log_buffer_size": len(_log_buffer)
@@ -232,7 +234,9 @@ def get_module_status() -> Dict[str, Any]:
             # Check for error or warning
             level = log.get("level", "").lower()
             if level in ("error", "warning", "critical"):
-                if last_error is None or ts > datetime.fromisoformat(last_error.get("timestamp", "1970")):
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                if last_error is None or ts > datetime.fromisoformat(last_error.get("timestamp", "1970").replace("Z", "+00:00")):
                     last_error = {
                         "timestamp": ts_str,
                         "level": level,
@@ -243,7 +247,7 @@ def get_module_status() -> Dict[str, Any]:
             # Check for success pattern
             event = log.get("event", "")
             if config["success_pattern"].search(event):
-                if last_run is None or ts > datetime.fromisoformat(last_run):
+                if last_run is None or ts > datetime.fromisoformat(last_run.replace("Z", "+00:00")):
                     last_run = ts_str
                     logger.info(f"Module {module_id}: Found success pattern at {ts_str}")
         
@@ -255,7 +259,9 @@ def get_module_status() -> Dict[str, Any]:
             # Check if last run is recent (within 24h)
             try:
                 last_run_dt = datetime.fromisoformat(last_run.replace("Z", "+00:00"))
-                if datetime.utcnow() - last_run_dt < timedelta(hours=24):
+                if last_run_dt.tzinfo is None:
+                    last_run_dt = last_run_dt.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) - last_run_dt < timedelta(hours=24):
                     status = "ok"
                     logger.info(f"Module {module_id}: Status = ok (last run {last_run_dt})")
                 else:

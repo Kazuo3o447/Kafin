@@ -47,7 +47,7 @@ async def _fmp_get(endpoint: str, params: dict = None) -> list | dict | None:
                 # Usage tracken (nach erfolgreichem Response)
                 try:
                     from backend.app.analysis.usage_tracker import track_call
-                    track_call(api_name="fmp")
+                    await track_call(api_name="fmp")
                 except Exception:
                     pass
                 
@@ -103,7 +103,7 @@ async def get_analyst_estimates(ticker: str) -> EarningsExpectation | None:
         data = await _fmp_get(f"/api/v3/analyst-estimates/{ticker}")
 
     if not data:
-        logger.error(f"FMP Analyst Estimates für {ticker} nicht verfügbar - API-Fehler oder Rate Limit.")
+        logger.warning(f"FMP Analyst Estimates für {ticker} nicht verfügbar - API-Fehler oder Rate Limit.")
         return None
 
     if isinstance(data, list) and data:

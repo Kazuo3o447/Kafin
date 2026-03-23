@@ -39,33 +39,28 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
     """
     import yfinance as yf
     from datetime import datetime as dt
+    
+    days = 5  # Standardwert für history-Aufrufe
 
     # Cache-Check
     cache_key = f"yf:enriched_v2:{ticker.upper()}"
-    cached_data = None  # Skip cache in sync function for now
+    cached_data = cache_get(cache_key)
     if cached_data:
         entry.update(cached_data)
         return entry
 
     def _get_stock():
+        return yf.Ticker(ticker)
 
-
-    
-
-    return yf.Ticker(ticker)
-
-
-    stock = await asyncio.to_thread(_get_stock)
+    stock = _get_stock()
     result = {}
 
     # --- Kursdaten via fast_info ---
     try:
         def _get_fast_info():
+            return stock.fast_info
 
-        
-        return stock.fast_info
-
-        fi = await asyncio.to_thread(_get_fast_info)
+        fi = _get_fast_info()
         try:
             if fi.last_price:
                 result["price"] = round(float(fi.last_price), 2)
@@ -105,11 +100,9 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
     try:
         import pandas as pd
         def _get_hist():
+            return stock.history(period=f"{max(days, 2)}d")
 
-        
-        return stock.history(period=f"{max(days, 2)}d")
-
-        hist = await asyncio.to_thread(_get_hist)
+        hist = _get_hist()
 
         if len(hist) >= 2:
             if not result.get("price"):

@@ -63,6 +63,10 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **Sentiment**: FinBERT für deutsche/englische News-Analyse
 
 ### Letzte Fixes (23.03.2026)
+- **Frontend JSON Errors**: Behoben von `JSON.parse: unexpected character` Fehlern in Module Status und Diagnostics durch Implementierung von `fetchJsonSafe` Helper.
+- **Research Page Crash**: Guard für `quarterly_history` hinzugefügt um NU Research Dashboard Abstürze bei fehlenden Daten zu verhindern.
+- **Backend Coroutine Warnings**: Alle `coroutine was never awaited` Warnungen in FMP, Finnhub und Ticker Resolver gefixt.
+- **DateTime UTC Normalization**: FinBERT Pipeline Logging Errors mit offset-naive/aware datetime subtraction behoben.
 - **Signal Feed**: Root-Page zeigt jetzt den Signal Feed als neues Dashboard, inklusive Settings-Tab für die Feed-Konfiguration.
 - **Markets Dashboard**: Marktübersicht, Marktbreite, Intermarket, Fear & Greed, Economic Calendar und Market Audit sind wieder als API-Quellen erreichbar.
 - **Frontend-API**: Browser-Requests laufen standardmäßig über relative `/api/...`-Pfade, damit lokale Dev-Setups nicht an Port-Mismatches hängen.

@@ -1,6 +1,10 @@
 # Stage 1: Build
 FROM node:20-alpine AS builder
 WORKDIR /app
+ARG NEXT_PUBLIC_API_URL=http://localhost:8001
+ARG INTERNAL_API_URL=http://kafin-backend:8000
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV INTERNAL_API_URL=${INTERNAL_API_URL}
 COPY package*.json ./
 RUN npm ci
 COPY . .

@@ -845,26 +845,33 @@ async def api_research_dashboard(
     estimates  = safe(4)
     history    = safe(5)
 
-    # yfinance Fallback wenn FMP leer
+    # ── Earnings-Fallback yfinance ───────────────────────────────
     if (not history
         or not getattr(history, "all_quarters", None)):
         yf_history = await get_earnings_history_yf(
             effective_ticker
         )
         if yf_history:
+            # Konvertiere yfinance Daten zu EarningsHistorySummary Struktur
+            quarters = []
+            for q in yf_history.get("all_quarters", []):
+                quarters.append(SimpleNamespace(
+                    quarter=q.get("quarter", ""),
+                    eps_actual=q.get("eps_actual"),
+                    eps_consensus=q.get("eps_consensus"),
+                    eps_surprise_percent=q.get("eps_surprise_percent"),
+                    stock_reaction_1d=None,  # yfinance hat keine Reaktionsdaten
+                ))
+            
             history = SimpleNamespace(
                 quarters_beat=yf_history["quarters_beat"],
-                avg_surprise_percent=yf_history[
-                    "avg_surprise_percent"
-                ],
-                all_quarters=yf_history["all_quarters"],
-                last_quarter=SimpleNamespace(
-                    **yf_history["all_quarters"][0]
-                ) if yf_history["all_quarters"] else None,
+                avg_surprise_percent=yf_history["avg_surprise_percent"],
+                all_quarters=quarters,
+                last_quarter=quarters[0] if quarters else None,
                 source="yfinance",
             )
             logger.info(
-                f"Earnings-Fallback yfinance für {ticker}"
+                f"Earnings-Fallback yfinance für {ticker} - {len(quarters)} quarters loaded"
             )
 
     price_tgt  = safe(6)
@@ -1517,7 +1524,8 @@ async def api_research_dashboard(
             "avg_surprise_pct": avg_surprise,
             "last_surprise_pct": last_surprise_pct,
             "last_beat": last_beat,
-            "history": quarterly_history,
+            "quarterly_history": quarterly_history,
+            "earnings_source": getattr(history, "source", "fmp") if history else "fmp",
             "sector_calendar": sector_earnings,
         },
         "analyst": {

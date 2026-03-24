@@ -2815,7 +2815,7 @@ async def _save_decision_snapshot(
 
     payload = {
         "ticker": ticker.upper(),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc),  # datetime object, not string
         "opportunity_score": round(_safe_float(opportunity_score, 0.0), 1),
         "torpedo_score": round(_safe_float(torpedo_score, 0.0), 1),
         "recommendation": recommendation,

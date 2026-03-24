@@ -102,6 +102,7 @@ services:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-changeme}
+      - N8N_API_KEY=${N8N_API_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1NzY0ZDQ1YS01NDgxLTRhODMtYTBiMS1mMTBkOTQzYTgwZDEiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiODU0NTNjNDktOWU4ZS00NzhkLWE1MGItMWZhNTJkMzdlZjMyIiwiaWF0IjoxNzc0MzY4OTEwfQ.QJ-3IXLLXuDnaMA7AT7jDKe0-_GlA3KLgQtFFGw22Lw}
     volumes:
       - n8n-data:/home/node/.n8n
     networks:

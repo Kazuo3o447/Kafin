@@ -18,6 +18,15 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **Valid-Ticker Fallback**: Wenn FMP für einen gültigen Ticker kein Profil liefert, greift jetzt ein yfinance-Fallback statt die Analyse fälschlich zu blockieren.
 - **Ticker-Resolver Fix**: Mapping- und Suffix-Checks sind korrigiert, damit valide Ticker nicht durch Resolver-Fehler ausgebremst werden.
 
+### 🚀 **Neu in v7.9.4 - N8N Workflow Integration**
+
+- **N8N API Key**: Vollständig konfiguriert und funktionsfähig mit JWT-Authentifizierung
+- **Workflow Monitoring**: 2 alte Workflows aktiv (News-Pipeline, SEC-Scanner) mit automatischer Datensammlung
+- **API Key Management**: Integration in `.env`, `docker-compose.yml` und `n8n_setup.py`
+- **Troubleshooting Guide**: Vollständige Dokumentation für Workflow-Management und Monitoring
+- **Health Checks**: N8N Status Endpoints funktionieren und melden `{"status":"ok"}`
+- **Manual Triggers**: Backend Endpunkte für Morning Briefing, Post-Earnings Review etc. verfügbar
+
 ### v7.9.3 Highlights
 - **Data Cleanup System**: Vollständiges Daten-Aufräum-System implementiert, um Speicherüberlauf zu verhindern.
 - **Massenlösch-Endpunkte**: `DELETE /api/data/cleanup/{ticker}` löscht alle Daten zu einem Ticker aus allen Tabellen.

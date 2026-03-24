@@ -23,11 +23,12 @@ N8N_PASSWORD = os.getenv("N8N_PASSWORD", "")
 async def setup_workflows():
     """Erstellt alle benötigten n8n-Workflows."""
 
-    # Falls kein Passwort gesetzt ist, kein Auth mitsenden, aber BasicAuth verlangt zumindest leere Strings
-    auth = httpx.BasicAuth(N8N_USER, N8N_PASSWORD) if N8N_PASSWORD else None
+    # N8N API Key für Workflow-Management
+    api_key = os.getenv('N8N_API_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1NzY0ZDQ1YS01NDgxLTRhODMtYTBiMS1mMTBkOTQzYTgwZDEiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiODU0NTNjNDktOWU4ZS00NzhkLWE1MGItMWZhNTJkMzdlZjMyIiwiaWF0IjoxNzc0MzY4OTEwfQ.QJ-3IXLLXuDnaMA7AT7jDKe0-_GlA3KLgQtFFGw22Lw')
+    headers = {'X-N8N-API-KEY': api_key}
     
-    # Try basic auth first
-    async with httpx.AsyncClient(base_url=N8N_URL, auth=auth, timeout=30.0) as client:
+    # Try API Key first, fallback to Basic Auth
+    async with httpx.AsyncClient(base_url=N8N_URL, headers=headers, timeout=30.0) as client:
 
         # Workflow 1a: News-Pipeline Werktags (Mo-Fr 13:00-22:30 CET, alle 30 Minuten)
         weekday_news_workflow = {

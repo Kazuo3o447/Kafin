@@ -8,6 +8,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 3. Skimme die historischen Meilensteine nur für Kontext oder Audit-Zwecke.
 
 ## Aktueller Stand
+- **N8N Workflows v7.9.4**: API Key konfiguriert, 2 alte Workflows aktiv (News-Pipeline, SEC-Scanner), Datensammlung funktioniert. Neue Workflows haben Schema-Problem mit 'settings' Property.
 - **Data Cleanup System v7.9.3**: Vollständiges Daten-Aufräum-System implementiert mit Massenlösch-Endpunkten, Preview-Funktion und Watchlist-Integration. Alle Szenarien erfolgreich getestet.
 - **Valid-Ticker Fallback v7.9.2**: Wenn FMP für einen gültigen Ticker kein Profil liefert, greift jetzt ein yfinance-Fallback statt die Analyse fälschlich zu blockieren.
 - **Ticker-Resolver Fix v7.9.2**: Mapping- und Suffix-Checks sind korrektiert, damit valide Ticker nicht durch Resolver-Fehler ausgebremst werden.

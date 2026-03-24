@@ -29,6 +29,16 @@ Der Trading-Bot nutzt inzwischen die komplette derzeit erhobene Datenbasis für 
 - Kalibrierung von Gewichtungen und Schwellen erfolgt erst nach ausreichender Outcome-Historie.
 - Explainability bleibt Pflicht: Jede spätere Anpassung muss sich gegen reale Ergebnisse prüfen lassen.
 
+**Neu in v7.9.4 - N8N Workflow Integration:**
+
+- N8N API Key vollständig konfiguriert mit JWT-Authentifizierung.
+- 2 alte Workflows aktiv (News-Pipeline, SEC-Scanner) mit automatischer Datensammlung.
+- API Key Management in `.env`, `docker-compose.yml` und `n8n_setup.py` integriert.
+- Vollständige Dokumentation für Workflow-Management und Monitoring erstellt.
+- Health Checks und Troubleshooting Guides implementiert.
+- Backend Endpunkte für manuelle Trigger verfügbar (Morning Briefing, Post-Earnings Review).
+- Schema-Problem mit neuen Workflows identifiziert ('settings' Property fehlt).
+
 **Neu in v7.9.3 - Data Cleanup System:**
 
 - Vollständiges Daten-Aufräum-System implementiert, um Speicherüberlauf zu verhindern.

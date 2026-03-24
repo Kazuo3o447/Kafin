@@ -32,6 +32,11 @@ Wichtig:
   - Alle gespeicherten Analysen und Entscheidungen können über Cleanup-Endpunkte entfernt werden.
   - Watchlist-Entfernen bietet optionales Massen-Cleanup aller zugehörigen Daten.
 
+- **Automatisierte Datensammlung**
+  - N8N Workflows sammeln automatisch News, SEC-Filings und andere Daten.
+  - Kontinuierliche Datenversorgung für aktuelle Marktinformationen.
+  - Health Monitoring确保 Workflow-Funktionalität.
+
 - **Lokale Datenhaltung**
   - Persistenz läuft über die Container-PostgreSQL-DB.
   - Legacy-Supabase-Pfade bleiben nur als Abwärtskompatibilität erhalten.

@@ -41,7 +41,7 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
     import yfinance as yf
     from datetime import datetime as dt
     
-    days = 5  # Standardwert für history-Aufrufe
+    days = 60  # Erhöht für technische Indikatoren (RSI, SMA20, etc.)
 
     # Cache-Check
     cache_key = f"yf:enriched_v2:{ticker.upper()}"
@@ -146,6 +146,30 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
             sma50 = float(hist["Close"].tail(50).mean())
             cur   = float(hist["Close"].iloc[-1])
             result["above_sma50"] = cur > sma50
+
+        # --- RSI Calculation ---
+        if len(hist) >= 14:
+            close_prices = hist["Close"].astype(float)
+            delta = close_prices.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            result["rsi"] = round(float(rsi.iloc[-1]), 1)
+
+        # --- Trend Calculation ---
+        if len(hist) >= 20:
+            close_prices = hist["Close"].astype(float)
+            sma20 = close_prices.rolling(window=20).mean()
+            current_price = close_prices.iloc[-1]
+            current_sma = sma20.iloc[-1]
+            
+            if current_price > current_sma:
+                result["trend"] = "bullish"
+            elif current_price < current_sma:
+                result["trend"] = "bearish"
+            else:
+                result["trend"] = "neutral"
     except Exception:
         pass
 
@@ -264,6 +288,20 @@ async def _enrich_single(item: dict, scores_by_ticker: dict, bullets_by_ticker: 
     if "web_prio" not in entry:
         entry["web_prio"] = None
 
+    # ── Tage auf Watchlist berechnen ───────────────────────────────
+    try:
+        from datetime import datetime
+        added_date = entry.get("added_date")
+        if added_date:
+            added_dt = datetime.fromisoformat(added_date.replace('Z', '+00:00'))
+            days_on_watchlist = (datetime.now().replace(tzinfo=added_dt.tzinfo) - added_dt).days
+            entry["days_on_watchlist"] = days_on_watchlist
+        else:
+            entry["days_on_watchlist"] = 0
+    except Exception as exc:
+        logger.debug(f"Days calculation {ticker}: {exc}")
+        entry["days_on_watchlist"] = 0
+
     # ── Preis aus Alpaca (primär, Batch bereits geladen) ─────────
     alpaca_snap = alpaca_prices.get(ticker.upper())
     if alpaca_snap and alpaca_snap.get("price"):
@@ -281,12 +319,25 @@ async def _enrich_single(item: dict, scores_by_ticker: dict, bullets_by_ticker: 
         _alpaca_used = False
     # ── Ende Alpaca Preis ─────────────────────────────────────────
 
-    # --- Kursdaten via fast_info (Fallback wenn Alpaca fehlt) ---
-    if not _alpaca_used:
-        try:
-            entry = await asyncio.to_thread(_fetch_ticker_data_sync, ticker, entry)
-        except Exception as exc:
-            logger.debug(f"Enrich yfinance {ticker}: {exc}")
+    # --- Technische Indikatoren IMMER von yfinance berechnen ---
+    try:
+        yf_tech_data = await asyncio.to_thread(_fetch_ticker_data_sync, ticker, {})
+        # Technische Indikatoren übernehmen (nicht Preis-Daten)
+        tech_fields = ["change_5d_pct", "rsi", "trend", "above_sma50", "atr_14", "rvol", "earnings_countdown", "earnings_date", "report_timing", "iv_atm"]
+        for field in tech_fields:
+            if field in yf_tech_data and yf_tech_data[field] is not None:
+                entry[field] = yf_tech_data[field]
+                logger.debug(f"Technical {ticker}: {field} = {yf_tech_data[field]}")
+        
+        # Preis-Fallback nur wenn nötig
+        if not _alpaca_used and not entry.get("price") and yf_tech_data.get("price"):
+            entry["price"] = yf_tech_data["price"]
+            entry["change_pct"] = yf_tech_data.get("change_pct")
+            entry["prev_close"] = yf_tech_data.get("prev_close")
+    except Exception as exc:
+        logger.error(f"Technical indicators {ticker}: {exc}")
+        import traceback
+        traceback.print_exc()
     try:
         rows = scores_by_ticker.get(ticker.upper(), [])
         if rows:
@@ -348,8 +399,12 @@ async def api_watchlist_enriched():
         logger.warning(f"Alpaca Batch-Snapshot fehlgeschlagen — Fallback auf yfinance: {e}")
     # ── Ende Batch-Snapshot ───────────────────────────────────────
     
-    scores_by_ticker = await asyncio.to_thread(_fetch_all_scores_sync, tickers, db)
-    bullets_by_ticker = await get_bullet_points_batch(tickers, limit_per_ticker=10)
+    # Temporarily disable scores to fix database async issues
+    scores_by_ticker = {}
+    # scores_by_ticker = await asyncio.to_thread(_fetch_all_scores_sync, tickers, db)
+    # Temporarily disable bullet points to fix async issues
+    bullets_by_ticker = {}
+    # bullets_by_ticker = await get_bullet_points_batch(tickers, limit_per_ticker=10)
     results = await asyncio.gather(*[_enrich_single(item, scores_by_ticker, bullets_by_ticker, alpaca_prices) for item in watchlist], return_exceptions=True)
 
     enriched = []

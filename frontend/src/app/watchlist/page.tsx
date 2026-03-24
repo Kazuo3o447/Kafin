@@ -12,6 +12,8 @@ type WatchlistItem = {
   company_name?: string;
   sector?: string;
   notes?: string;
+  added_date?: string;             // NEU: Datum wann zur Watchlist hinzugefügt
+  days_on_watchlist?: number;       // NEU: Tage auf der Watchlist
   opportunity_score?: number | null;
   torpedo_score?: number | null;
   opp_delta?: number | null;       // gestern
@@ -1325,6 +1327,12 @@ export default function WatchlistPage() {
                     <p className="text-[10px] text-[var(--text-muted)]">
                       {item.sector || "—"}
                     </p>
+                    {/* Tage auf Watchlist */}
+                    {item.days_on_watchlist != null && item.days_on_watchlist > 0 && (
+                      <p className="text-[9px] text-[var(--text-muted)] mt-1">
+                        📅 {item.days_on_watchlist}T
+                      </p>
+                    )}
                   </td>
 
                   {/* 1T% */}

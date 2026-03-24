@@ -163,7 +163,7 @@ async def get_bullet_points_batch(
 
         tickers_upper = list(dict.fromkeys(t.upper() for t in tickers if t))
         # Eine Query für alle Ticker
-        res = (
+        res = await (
             db.table("short_term_memory")
             .select(
                 "ticker,date,sentiment_score,"

@@ -207,18 +207,21 @@ async def get_risk_metrics(ticker: str) -> dict:
         return {"beta": 1.35, "ticker": ticker}
 
     try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
-        beta = info.get("beta")
+        def _fetch():
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            beta = info.get("beta")
+            
+            if beta is None:
+                logger.warning(f"Kein Beta für {ticker} verfügbar")
+                return {"beta": None, "ticker": ticker}
+            
+            return {
+                "beta": round(float(beta), 2),
+                "ticker": ticker
+            }
         
-        if beta is None:
-            logger.warning(f"Kein Beta für {ticker} verfügbar")
-            return {"beta": None, "ticker": ticker}
-        
-        return {
-            "beta": round(float(beta), 2),
-            "ticker": ticker
-        }
+        return await asyncio.to_thread(_fetch)
     except Exception as e:
         logger.error(f"Risk Metrics Fehler für {ticker}: {e}")
         return {"beta": None, "ticker": ticker}
@@ -233,21 +236,24 @@ async def get_historical_volatility(ticker: str, days: int = 20) -> Optional[flo
         return 25.5  # Mock: 25.5% historische Vola
 
     try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period=f"{days + 10}d")  # Puffer für Feiertage
+        def _fetch():
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period=f"{days + 10}d")  # Puffer für Feiertage
+            
+            if hist.empty or len(hist) < days:
+                logger.warning(f"Nicht genug Daten für historische Vola: {ticker}")
+                return None
+            
+            # Berechne tägliche Returns
+            hist['returns'] = hist['Close'].pct_change()
+            
+            # Standardabweichung der Returns (annualisiert: sqrt(252 Trading Days))
+            daily_vol = hist['returns'].std()
+            annual_vol = daily_vol * np.sqrt(252) * 100  # In Prozent
+            
+            return round(float(annual_vol), 2)
         
-        if hist.empty or len(hist) < days:
-            logger.warning(f"Nicht genug Daten für historische Vola: {ticker}")
-            return None
-        
-        # Berechne tägliche Returns
-        hist['returns'] = hist['Close'].pct_change()
-        
-        # Standardabweichung der Returns (annualisiert: sqrt(252 Trading Days))
-        daily_vol = hist['returns'].std()
-        annual_vol = daily_vol * np.sqrt(252) * 100  # In Prozent
-        
-        return round(float(annual_vol), 2)
+        return await asyncio.to_thread(_fetch)
     except Exception as e:
         logger.error(f"Historische Volatilität Fehler für {ticker}: {e}")
         return None
@@ -271,70 +277,82 @@ async def get_atm_implied_volatility(ticker: str) -> Optional[OptionsData]:
         )
 
     try:
-        stock = yf.Ticker(ticker)
-        exps = getattr(stock, 'options', [])
-        
-        if not exps:
-            logger.warning(f"Keine Optionen für {ticker} verfügbar")
-            return None
+        def _fetch():
+            stock = yf.Ticker(ticker)
+            exps = getattr(stock, 'options', [])
+            
+            if not exps:
+                logger.warning(f"Keine Optionen für {ticker} verfügbar")
+                return None
 
-        # Finde nächste Expiration > 5 Tage
-        now = datetime.now()
-        target_exp = None
-        for exp in exps:
-            exp_date = datetime.strptime(exp, "%Y-%m-%d")
-            if (exp_date - now).days > 5:
-                target_exp = exp
-                break
+            # Finde nächste Expiration > 5 Tage
+            now = datetime.now()
+            target_exp = None
+            for exp in exps:
+                exp_date = datetime.strptime(exp, "%Y-%m-%d")
+                if (exp_date - now).days > 5:
+                    target_exp = exp
+                    break
+            
+            if not target_exp:
+                logger.warning(f"Keine passende Expiration für {ticker}")
+                return None
+            
+            opt = stock.option_chain(target_exp)
+            calls = opt.calls
+            puts = opt.puts
+            
+            if calls.empty or puts.empty:
+                return None
+            
+            # Aktueller Kurs
+            hist = stock.history(period="1d")
+            if hist.empty:
+                return None
+            current_price = float(hist['Close'].iloc[-1])
+            
+            # Finde ATM Strike (nächster zum aktuellen Kurs)
+            calls['distance'] = abs(calls['strike'] - current_price)
+            puts['distance'] = abs(puts['strike'] - current_price)
+            
+            atm_call = calls.loc[calls['distance'].idxmin()]
+            atm_put = puts.loc[puts['distance'].idxmin()]
+            
+            # Durchschnittliche IV von ATM Call und Put
+            iv_call = float(atm_call['impliedVolatility'])
+            iv_put = float(atm_put['impliedVolatility'])
+            iv_atm = (iv_call + iv_put) / 2 * 100  # In Prozent
+            
+            # Put/Call Ratio (Volume)
+            total_put_vol = float(puts['volume'].sum())
+            total_call_vol = float(calls['volume'].sum())
+            pcr = total_put_vol / total_call_vol if total_call_vol > 0 else 0.0
+            
+            # Gesamtvolumen
+            total_volume = int(total_put_vol + total_call_vol)
+            
+            return {
+                'current_price': current_price,
+                'iv_atm': round(iv_atm, 2),
+                'total_volume': total_volume,
+                'pcr': pcr
+            }
         
-        if not target_exp:
-            logger.warning(f"Keine passende Expiration für {ticker}")
+        result = await asyncio.to_thread(_fetch)
+        if not result:
             return None
         
-        opt = stock.option_chain(target_exp)
-        calls = opt.calls
-        puts = opt.puts
-        
-        if calls.empty or puts.empty:
-            return None
-        
-        # Aktueller Kurs
-        hist = stock.history(period="1d")
-        if hist.empty:
-            return None
-        current_price = float(hist['Close'].iloc[-1])
-        
-        # Finde ATM Strike (nächster zum aktuellen Kurs)
-        calls['distance'] = abs(calls['strike'] - current_price)
-        puts['distance'] = abs(puts['strike'] - current_price)
-        
-        atm_call = calls.loc[calls['distance'].idxmin()]
-        atm_put = puts.loc[puts['distance'].idxmin()]
-        
-        # Durchschnittliche IV von ATM Call und Put
-        iv_call = float(atm_call['impliedVolatility'])
-        iv_put = float(atm_put['impliedVolatility'])
-        iv_atm = (iv_call + iv_put) / 2 * 100  # In Prozent
-        
-        # Put/Call Ratio (Volume)
-        total_put_vol = float(puts['volume'].sum())
-        total_call_vol = float(calls['volume'].sum())
-        pcr = total_put_vol / total_call_vol if total_call_vol > 0 else 0.0
-        
-        # Gesamtvolumen
-        total_volume = int(total_put_vol + total_call_vol)
-        
-        # Historische Volatilität zum Vergleich
+        # Historische Volatilität zum Vergleich (async call)
         hist_vol = await get_historical_volatility(ticker, days=20)
         
         return OptionsData(
             ticker=ticker,
-            implied_volatility_atm=round(iv_atm, 2),
-            options_volume=total_volume,
-            put_call_ratio=round(pcr, 2),
-            historical_volatility=hist_vol,
+            implied_volatility_atm=result['iv_atm'],
+            options_volume=result['total_volume'],
+            put_call_ratio=result['pcr'],
+            historical_volatility=hist_vol or 0.0,
             expiration_date=target_exp,
-            iv_percentile=None  # TODO: Berechnung erfordert historische IV-Daten
+            iv_percentile=0.0  # Placeholder
         )
     except Exception as e:
         logger.error(f"ATM IV Fehler für {ticker}: {e}")
@@ -347,69 +365,72 @@ async def get_options_metrics(ticker: str) -> Optional[OptionsMetrics]:
         return OptionsMetrics(put_call_ratio_oi=1.1, put_call_ratio_vol=0.85, implied_volatility_atm=0.25, expiration="2024-01-01")
         
     try:
-        stock = yf.Ticker(ticker)
-        # Check if options exist
-        exps = getattr(stock, 'options', [])
-        if not exps:
-            return None
+        def _fetch():
+            stock = yf.Ticker(ticker)
+            # Check if options exist
+            exps = getattr(stock, 'options', [])
+            if not exps:
+                return None
 
-        # Finde nächste Expiration > 5 Tage in der Zukunft
-        now = datetime.now()
-        target_exp = None
-        for exp in exps:
-            exp_date = datetime.strptime(exp, "%Y-%m-%d")
-            if (exp_date - now).days > 5:
-                target_exp = exp
-                break
+            # Finde nächste Expiration > 5 Tage in der Zukunft
+            now = datetime.now()
+            target_exp = None
+            for exp in exps:
+                exp_date = datetime.strptime(exp, "%Y-%m-%d")
+                if (exp_date - now).days > 5:
+                    target_exp = exp
+                    break
+                    
+            if not target_exp:
+                return None
                 
-        if not target_exp:
-            return None
+            opt = stock.option_chain(target_exp)
+            calls = opt.calls
+            puts = opt.puts
             
-        opt = stock.option_chain(target_exp)
-        calls = opt.calls
-        puts = opt.puts
-        
-        if calls.empty or puts.empty:
-            return None
+            if calls.empty or puts.empty:
+                return None
+                
+            # Put/Call Ratio (Open Interest)
+            total_put_oi = float(puts['openInterest'].sum())
+            total_call_oi = float(calls['openInterest'].sum())
+            pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0.0
             
-        # Put/Call Ratio (Open Interest)
-        total_put_oi = float(puts['openInterest'].sum())
-        total_call_oi = float(calls['openInterest'].sum())
-        pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0.0
+            # Put/Call Ratio (Volume) - Smart Money Flow Indicator
+            total_put_vol = float(puts['volume'].sum()) if 'volume' in puts.columns else 0
+            total_call_vol = float(calls['volume'].sum()) if 'volume' in calls.columns else 0
+            put_call_ratio_vol = round(total_put_vol / total_call_vol, 2) if total_call_vol > 0 else None
+            
+            # IV ATM
+            # Approximiere aktuellen Kurs mittels yfinance history
+            hist = stock.history(period="1d")
+            if hist.empty:
+                 return None
+            current_price = float(hist['Close'].iloc[-1])
+            
+            # Finde ATM Call
+            calls['distance'] = abs(calls['strike'] - current_price)
+            atm_call = calls.loc[calls['distance'].idxmin()]
+            iv_atm = float(atm_call['impliedVolatility'])
+            
+            # yfinance gibt IV als Dezimal zurück (0.35 = 35%)
+            # Plausibilitätsprüfung: IV sollte zwischen 0.001 und 10.0 liegen
+            if iv_atm > 100:  # > 10000% ist unrealistisch, war in % statt Dezimal
+                iv_atm = iv_atm / 100
+            elif iv_atm < 0.001:  # < 0.1% ist unrealistisch
+                iv_atm = None
+            
+            if iv_atm is None:
+                return None
+            
+            return OptionsMetrics(
+                put_call_ratio_oi=round(pcr, 2),
+                put_call_ratio_vol=put_call_ratio_vol,
+                implied_volatility_atm=round(iv_atm, 4),
+                expiration=target_exp
+            )
         
-        # Put/Call Ratio (Volume) - Smart Money Flow Indicator
-        total_put_vol = float(puts['volume'].sum()) if 'volume' in puts.columns else 0
-        total_call_vol = float(calls['volume'].sum()) if 'volume' in calls.columns else 0
-        put_call_ratio_vol = round(total_put_vol / total_call_vol, 2) if total_call_vol > 0 else None
-        
-        # IV ATM
-        # Approximiere aktuellen Kurs mittels yfinance history
-        hist = stock.history(period="1d")
-        if hist.empty:
-             return None
-        current_price = float(hist['Close'].iloc[-1])
-        
-        # Finde ATM Call
-        calls['distance'] = abs(calls['strike'] - current_price)
-        atm_call = calls.loc[calls['distance'].idxmin()]
-        iv_atm = float(atm_call['impliedVolatility'])
-        
-        # yfinance gibt IV als Dezimal zurück (0.35 = 35%)
-        # Plausibilitätsprüfung: IV sollte zwischen 0.001 und 10.0 liegen
-        if iv_atm > 100:  # > 10000% ist unrealistisch, war in % statt Dezimal
-            iv_atm = iv_atm / 100
-        elif iv_atm < 0.001:  # < 0.1% ist unrealistisch
-            iv_atm = None
-        
-        if iv_atm is None:
-            return None
-        
-        return OptionsMetrics(
-            put_call_ratio_oi=round(pcr, 2),
-            put_call_ratio_vol=put_call_ratio_vol,
-            implied_volatility_atm=round(iv_atm, 4),
-            expiration=target_exp
-        )
+        return await asyncio.to_thread(_fetch)
     except Exception as e:
         logger.error(f"yfinance Options Fehler für {ticker}: {e}")
         return None
@@ -420,17 +441,20 @@ async def get_short_interest_yf(ticker: str) -> Optional[dict]:
         return {"short_interest_percent": 15.5, "short_ratio": 3.2, "shares_short": 50000000}
     
     try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
+        def _fetch():
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            
+            short_pct = info.get("shortPercentOfFloat")
+            short_pct_value = (short_pct * 100) if short_pct else 0
+            
+            return {
+                "short_interest_percent": round(short_pct_value, 2),
+                "short_ratio": info.get("shortRatio", 0),
+                "shares_short": info.get("sharesShort", 0),
+            }
         
-        short_pct = info.get("shortPercentOfFloat")
-        short_pct_value = (short_pct * 100) if short_pct else 0
-        
-        return {
-            "short_interest_percent": round(short_pct_value, 2),
-            "short_ratio": info.get("shortRatio", 0),
-            "shares_short": info.get("sharesShort", 0),
-        }
+        return await asyncio.to_thread(_fetch)
     except Exception as e:
         logger.error(f"yfinance short interest Fehler für {ticker}: {e}")
         return None
@@ -468,31 +492,36 @@ async def get_fundamentals_yf(ticker: str) -> Optional[dict]:
         return cached
 
     try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
+        def _fetch():
+            stock = yf.Ticker(ticker)
+            info = stock.info
 
-        if not info or not info.get("regularMarketPrice"):
-            return None
+            if not info or not info.get("regularMarketPrice"):
+                return None
 
-        result = {
-            "pe_ratio": info.get("trailingPE") or info.get("forwardPE"),
-            "ps_ratio": info.get("priceToSalesTrailing12Months"),
-            "market_cap": info.get("marketCap"),
-            "price": info.get("regularMarketPrice") or info.get("currentPrice"),
-            "eps_ttm": info.get("trailingEps"),
-            "revenue_ttm": info.get("totalRevenue"),
-            "sector": info.get("sector"),
-            "industry": info.get("industry"),
-            "forward_pe": info.get("forwardPE"),
-            "dividend_yield": info.get("dividendYield"),
-            "beta": info.get("beta"),
-            "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
-            "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
-            "analyst_target": info.get("targetMeanPrice"),
-            "analyst_recommendation": info.get("recommendationKey"),
-            "number_of_analysts": info.get("numberOfAnalystOpinions"),
-        }
-        await cache_set(cache_key, result, ttl_seconds=86400)  # 24h für Fundamentals
+            result = {
+                "pe_ratio": info.get("trailingPE") or info.get("forwardPE"),
+                "ps_ratio": info.get("priceToSalesTrailing12Months"),
+                "market_cap": info.get("marketCap"),
+                "price": info.get("regularMarketPrice") or info.get("currentPrice"),
+                "eps_ttm": info.get("trailingEps"),
+                "revenue_ttm": info.get("totalRevenue"),
+                "sector": info.get("sector"),
+                "industry": info.get("industry"),
+                "forward_pe": info.get("forwardPE"),
+                "dividend_yield": info.get("dividendYield"),
+                "beta": info.get("beta"),
+                "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
+                "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
+                "analyst_target": info.get("targetMeanPrice"),
+                "analyst_recommendation": info.get("recommendationKey"),
+                "number_of_analysts": info.get("numberOfAnalystOpinions"),
+            }
+            return result
+        
+        result = await asyncio.to_thread(_fetch)
+        if result:
+            await cache_set(cache_key, result, ttl_seconds=86400)  # 24h für Fundamentals
         return result
     except Exception as e:
         logger.error(f"yfinance Fundamentals Fehler für {ticker}: {e}")
@@ -507,16 +536,29 @@ async def get_market_context() -> dict:
     tickers = {"^GSPC": "sp500_perf", "^NDX": "ndx_perf", "GC=F": "gold_perf"}
     
     try:
+        def _fetch_all():
+            import yfinance as yf
+            hist = yf.download(
+                list(tickers.keys()),
+                period="5d",
+                group_by="ticker",
+                auto_adjust=True,
+                progress=False
+            )
+            return hist
+        
+        hist = await asyncio.to_thread(_fetch_all)
+        
         for ticker, key in tickers.items():
             try:
-                stock = yf.Ticker(ticker)
-                hist = stock.history(period="5d")
-                if not hist.empty and len(hist) >= 2:
-                    first_price = float(hist["Close"].iloc[0])
-                    last_price = float(hist["Close"].iloc[-1])
-                    if first_price > 0:
-                        perf = ((last_price - first_price) / first_price) * 100
-                        result[key] = round(perf, 2)
+                if ticker in hist.columns and not hist[ticker].empty:
+                    ticker_hist = hist[ticker]
+                    if len(ticker_hist) >= 2:
+                        first_price = float(ticker_hist["Close"].iloc[0])
+                        last_price = float(ticker_hist["Close"].iloc[-1])
+                        if first_price > 0:
+                            perf = ((last_price - first_price) / first_price) * 100
+                            result[key] = round(perf, 2)
             except Exception as e:
                 logger.error(f"yfinance Fehler für Market Context {ticker}: {e}")
     except Exception as e:

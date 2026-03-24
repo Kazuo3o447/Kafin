@@ -606,13 +606,6 @@ async def get_market_breadth() -> dict:
     - pct_above_sma50_5d_ago: None,   # Placeholder
     - pct_above_sma50_20d_ago: None,  # Placeholder
     """
-    DOW_COMPONENTS = [
-        "AAPL","MSFT","AMZN","NVDA","GOOGL","META","TSLA","BRK-B",
-        "JPM","V","UNH","XOM","JNJ","WMT","PG","MA","HD","CVX",
-        "MRK","ABBV","KO","PEP","AVGO","TMO","COST","ACN","MCD",
-        "BAC","LLY","ORCL"
-    ]
-
     cache_key = "market:breadth"
     cached = await cache_get(cache_key)
     if cached:
@@ -622,7 +615,7 @@ async def get_market_breadth() -> dict:
         above_50 = above_200 = advancing = declining = total = 0
 
         # EIN Batch-Download statt 50 einzelne Calls
-        hist_data = await asyncio.to_thread(_batch_download, SP500_TOP50, period="1y")
+        hist_data = await _batch_download(SP500_TOP50, period="1y")
 
         for ticker in SP500_TOP50:
             try:

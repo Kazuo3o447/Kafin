@@ -4,6 +4,12 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 
 ## 🚀 Aktuelle Features (März 2026)
 
+### v7.3.1 Highlights
+- **Async Performance Overhaul**: Alle yfinance-Aufrufe non-blocking, Market Breadth wiederhergestellt
+- **Batch-Download Optimierung**: `get_market_context` nutzt jetzt parallele Downloads
+- **Event Loop Protection**: Keine blockierenden I/O-Aufrufe mehr im Backend
+- **Market Breadth Fix**: Marktbreite-Daten werden wieder korrekt angezeigt
+
 ### v7.3.0 Highlights
 - **Performance-Lernpfade**: Earnings & Momentum Kalibrierungs-Tracking mit Accuracy-Statistiken
 - **Earnings Auto-Trigger**: Täglich 08:10 CET automatische Shadow Trades bei starken Signalen
@@ -65,10 +71,14 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **Regulatorisch**: SEC EDGAR (Form 8-K, 4) für Insider-Transaktionen
 - **Sentiment**: FinBERT für deutsche/englische News-Analyse
 
-### Letzte Fixes (23.03.2026)
+### Letzte Fixes (24.03.2026)
+- **Market Breadth wiederhergestellt**: `get_market_breadth()` gab `{"error":"Keine Daten"}` zurück wegen falschem `asyncio.to_thread()` Wrapper um `_batch_download()`. Jetzt wieder voll funktionsfähig mit Marktbreite-Daten.
+- **Async/Blocking Konsistenz**: Alle yfinance-Aufrufe im Backend sind jetzt non-blocking. 7 Funktionen korrigiert (`get_risk_metrics`, `get_historical_volatility`, `get_atm_implied_volatility`, `get_options_metrics`, `get_short_interest_yf`, `get_fundamentals_yf`, `get_market_context`).
+- **Performance Boost**: `get_market_context` nutzt jetzt Batch-Download für alle 3 Ticker gleichzeitig statt 3 einzelne Calls.
+- **Event Loop Protection**: Keine blockierenden I/O-Aufrufe mehr im Backend – alle laufen im Thread-Pool für bessere Concurrency.
+- **Research Dashboard Normalisierung**: Verschachtelte API-Antworten (`fundamentals`, `technicals`, `earnings`, `analyst`, `sentiment`, `smart_money`) werden jetzt in das flache Frontend-Schema gemappt, damit die Research-Seite wieder zuverlässig Daten rendert.
 - **Frontend JSON Errors**: Behoben von `JSON.parse: unexpected character` Fehlern in Module Status und Diagnostics durch Implementierung von `fetchJsonSafe` Helper.
 - **Research Page Crash**: Guard für `quarterly_history` hinzugefügt um NU Research Dashboard Abstürze bei fehlenden Daten zu verhindern.
-- **Research Dashboard Normalisierung**: Verschachtelte API-Antworten (`fundamentals`, `technicals`, `earnings`, `analyst`, `sentiment`, `smart_money`) werden jetzt in das flache Frontend-Schema gemappt, damit die Research-Seite wieder zuverlässig Daten rendert.
 - **Backend Coroutine Warnings**: Alle `coroutine was never awaited` Warnungen in FMP, Finnhub und Ticker Resolver gefixt.
 - **DateTime UTC Normalization**: FinBERT Pipeline Logging Errors mit offset-naive/aware datetime subtraction behoben.
 - **Font Rendering Issues**: Inter Font-Konfiguration verbessert mit expliziten weights, display:swap und system-ui fallbacks um `glyf: empty gid` Warnungen zu beheben.

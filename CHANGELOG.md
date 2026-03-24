@@ -2,6 +2,20 @@
 
 Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 
+## [7.3.1] - 2026-03-24 - Async Performance Overhaul
+
+### ⚡ Async/Blocking Konsistenz & Performance
+- **Market Breadth wiederhergestellt**: `get_market_breadth()` gab `{"error":"Keine Daten"}` zurück wegen falschem `asyncio.to_thread()` Wrapper um `_batch_download()`. Jetzt wieder voll funktionsfähig.
+- **Alle yfinance-Aufrufe non-blocking**: 7 Funktionen korrigiert, die synchron yfinance calls verwendet haben:
+  - `get_risk_metrics()`, `get_historical_volatility()`, `get_atm_implied_volatility()`
+  - `get_options_metrics()`, `get_short_interest_yf()`, `get_fundamentals_yf()`
+  - `get_market_context()` (jetzt mit Batch-Download statt 3 einzelne Calls)
+- **Event Loop Protection**: Keine blockierenden I/O-Aufrufe mehr im Backend – alle laufen im Thread-Pool.
+- **Performance Boost**: `get_market_context` nutzt jetzt `yfinance.download()` Batch für alle 3 Ticker gleichzeitig.
+
+### 📚 Dokumentation
+- **Async Performance Guide**: Neue technische Dokumentation unter `docs/ASYNC_PERFORMANCE.md` mit Best Practices und Beispielen.
+
 ## [7.3.0] - 2026-03-23 - Lernpfade + Auto-Trigger
 
 ### 🧠 Zwei Lernpfade
@@ -30,16 +44,6 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 - **Daten-Normalisierung**: Verschachtelte Research-API-Antworten werden im Frontend jetzt zuverlässig in das erwartete Dashboard-Schema gemappt, damit die Boards auch ohne Fehler wieder Inhalte anzeigen.
 
 ## [7.2.0] - 2026-03-23 - Alpaca Integration + Learning Module
-
-### 🔗 Alpaca Paper Trading
-- **`backend/app/data/alpaca.py`**: Account, Positions, Market Orders via httpx
-- **Paper Trade Button**: P1-Signal-Karten im Signal Feed → direkter Alpaca-Order
-- **Bracket Orders**: Stop-Loss und Take-Profit automatisch gesetzt
-- **Shadow Sync**: Alpaca Paper Trades werden auch als Shadow Trade geloggt
-
-### 📊 Performance — 4 Tabs
-- **Tab "Meine Trades"**: Echte Trade-Erfassung (ersetzt separates Journal)
-  mit Alpaca-Account-Banner, Signal-Badges, P&L direction-aware
 - **Tab "Lernkurve"**: Decision Snapshots — Trefferquote, T+1/5/20 Returns,
   Datenqualitäts-Flags
 - **`real_trades`-Tabelle**: Entry/Exit/These/Alpaca-Order-ID

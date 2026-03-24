@@ -3083,6 +3083,65 @@ export default function ResearchDashboard() {
             <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
             {refreshing ? "Lädt..." : "Aktualisieren"}
           </button>
+          
+          {/* KI Reasoner Buttons */}
+          <button
+            onClick={handleAuditReport}
+            disabled={aiLoading || data?.data_sufficient_for_ai === false}
+            title={data?.data_sufficient_for_ai === false
+              ? data?.ai_blocked_reason
+              : "KI-Analyse starten (30-60s)"}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
+              data?.data_sufficient_for_ai === false
+                ? "border border-[var(--accent-red)]/40 text-[var(--accent-red)] cursor-not-allowed"
+                : aiReport
+                ? "border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+                : "border border-[var(--accent-blue)] text-[var(--accent-blue)] hover:bg-[var(--accent-blue)]/10"
+            }`}
+          >
+            {aiLoading ? (
+              <>
+                <RefreshCw size={12} className="animate-spin" />
+                KI...
+              </>
+            ) : aiReport ? (
+              <>
+                <Sparkles size={12} />
+                KI-Analyse
+              </>
+            ) : (
+              <>
+                <Sparkles size={12} />
+                KI-Analyse
+              </>
+            )}
+          </button>
+          
+          <button
+            onClick={handleReviewTrade}
+            disabled={reviewLoading || !aiReport}
+            title={!aiReport ? "Zuerst KI-Analyse starten" : "Trade-Entscheidung prüfen"}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
+              !aiReport
+                ? "border border-[var(--border)] text-[var(--text-muted)] cursor-not-allowed"
+                : reviewLoading
+                ? "border border-[var(--accent-amber)] text-[var(--accent-amber)] hover:bg-[var(--accent-amber)]/10"
+                : "border border-[var(--accent-green)] text-[var(--accent-green)] hover:bg-[var(--accent-green)]/10"
+            }`}
+          >
+            {reviewLoading ? (
+              <>
+                <RefreshCw size={12} className="animate-spin" />
+                Prüft...
+              </>
+            ) : (
+              <>
+                <Activity size={12} />
+                Trade prüfen
+              </>
+            )}
+          </button>
+          
           <button
             onClick={handleWatchlist}
             disabled={watchlistLoading}
@@ -3583,15 +3642,7 @@ export default function ResearchDashboard() {
         loading={oiLoading}
       />
 
-      {/* Trade prüfen */}
-      <button
-        onClick={handleReviewTrade}
-        disabled={reviewLoading}
-        className="rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Trade prüfen
-      </button>
-
+      
       {/* Block 4: Earnings-Historie + Insider */}
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="card p-4">
@@ -3762,38 +3813,6 @@ export default function ResearchDashboard() {
                 {fmt.date(aiDate)} {new Date(aiDate).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
               </span>
             )}
-            <button
-              onClick={handleAuditReport}
-              disabled={aiLoading || data?.data_sufficient_for_ai === false}
-              title={data?.data_sufficient_for_ai === false
-                ? data?.ai_blocked_reason
-                : undefined}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm
-                         font-semibold transition-all disabled:opacity-50 ${
-                data?.data_sufficient_for_ai === false
-                  ? "border border-[var(--accent-red)]/40 text-[var(--accent-red)] cursor-not-allowed"
-                  : aiReport
-                  ? "border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
-                  : "bg-[var(--accent-blue)] text-white hover:opacity-90"
-              } disabled:cursor-not-allowed`}
-            >
-              {aiLoading ? (
-                <>
-                  <RefreshCw size={14} className="animate-spin" />
-                  Analysiert... (30-60s)
-                </>
-              ) : aiReport ? (
-                <>
-                  <RefreshCw size={14} />
-                  Neu analysieren
-                </>
-              ) : (
-                <>
-                  <Sparkles size={14} />
-                  KI-Analyse starten
-                </>
-              )}
-            </button>
           </div>
         </div>
 
@@ -3801,7 +3820,7 @@ export default function ResearchDashboard() {
           <div className="rounded-xl border border-dashed border-[var(--border)] py-12 text-center">
             <Sparkles size={24} className="mx-auto mb-3 text-[var(--text-muted)]" />
             <p className="text-sm text-[var(--text-muted)]">
-              Klicke "KI-Analyse starten" für eine vollständige Einschätzung
+              Klicke oben auf "KI-Analyse" für eine vollständige Einschätzung
             </p>
             <p className="text-xs text-[var(--text-muted)] mt-1">
               Opportunity/Torpedo-Score · Handlungsempfehlung · Konkrete Levels

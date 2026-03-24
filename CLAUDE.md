@@ -29,6 +29,8 @@
 ### Bot-Referenz
 - `bot.md` ist die kanonische Beschreibung des Trading-Bots: Datenquellen, Scoring, Review-Flow, Snapshot-/Learning-Kurve und Explainability.
 - **Aktueller Modus**: Audit-Sammlung & Baseline-Phase — der Bot sammelt Decision Snapshots, bevor Gewichtungen kalibriert werden.
+- **Valid-Ticker-Fallback**: Wenn FMP für einen gültigen Ticker kein Profil liefert, greift der Bot auf yfinance-Fundamentals zurück statt die Analyse fälschlich abzubrechen.
+- **Ticker-Resolver**: Mapping- und Suffix-Prüfung sind korrigiert; Resolver-Fehler sollen keine gültigen US-Ticker mehr blockieren.
 - Wenn du den Bot änderst, halte `bot.md`, `STATUS.md`, `CHANGELOG.md` und `FUTURE.md` synchron.
 
 ## Kafin — KI-gestützte Earnings-Trading-Plattform

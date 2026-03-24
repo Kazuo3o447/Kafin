@@ -14,6 +14,10 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **Bot-Dokumentation**: `bot.md` ist die kanonische Referenz für Datenquellen, Scoring, Review-Flow, Snapshot-/Learning-Kurve und Explainability
 - **Decision Pipeline**: Review-/Audit-Flow nutzt jetzt die komplette Datenbasis für Earnings, Fundamentals, Technicals, Macro, Sentiment, Insider, Short Interest und Options
 
+### v7.9.2 Highlights
+- **Valid-Ticker Fallback**: Wenn FMP für einen gültigen Ticker kein Profil liefert, greift jetzt ein yfinance-Fallback statt die Analyse fälschlich zu blockieren.
+- **Ticker-Resolver Fix**: Mapping- und Suffix-Checks sind korrigiert, damit valide Ticker nicht durch Resolver-Fehler ausgebremst werden.
+
 ### v7.5.0 Highlights
 - **Makro-Regime-Gate**: Risk Off (VIX > 30) degradiert Long-Empfehlungen zu Watch
 - **ATR-basierte Stops**: 1.5× ATR statt pauschal -8% mit Sicherheitsprüfung

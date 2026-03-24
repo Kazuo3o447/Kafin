@@ -18,6 +18,7 @@ from backend.app.analysis.deepseek import call_deepseek
 from backend.app.memory.long_term import get_all_insights_for_report
 from backend.app.memory.short_term import _calc_sentiment_from_bullets
 from backend.app.analysis.shadow_portfolio import open_shadow_trade
+from schemas.valuation import ValuationData
 
 logger = get_logger(__name__)
 
@@ -33,6 +34,21 @@ def _fmt(value, date, unit="", fallback="Nicht verfügbar"):
     if date:
         result += f" (Stand: {date})"
     return result
+
+
+def _valuation_from_fundamentals(ticker: str, fundamentals: dict) -> ValuationData:
+    """Kleiner lokaler Fallback für Profil-/Bewertungsdaten aus yfinance."""
+    return ValuationData(
+        ticker=ticker,
+        sector=fundamentals.get("sector"),
+        industry=fundamentals.get("industry"),
+        pe_ratio=fundamentals.get("pe_ratio") or fundamentals.get("forward_pe"),
+        ps_ratio=fundamentals.get("ps_ratio"),
+        market_cap=fundamentals.get("market_cap"),
+        debt_to_equity=fundamentals.get("debt_to_equity"),
+        current_ratio=fundamentals.get("current_ratio"),
+        free_cash_flow_yield=fundamentals.get("free_cash_flow_yield"),
+    )
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 AUDIT_PROMPT_PATH = os.path.join(ROOT_DIR, "prompts", "audit_report.md")
@@ -137,8 +153,16 @@ async def generate_audit_report(ticker: str) -> str:
     
     profile = await get_company_profile(ticker)
     if not profile:
-        logger.warning(f"Ticker-Validierung fehlgeschlagen für {ticker}.")
-        return f"Fehler: Ticker '{ticker}' ist ungültig (kein Profil gefunden)."
+        try:
+            yf_fundamentals = await get_fundamentals_yf(ticker)
+            if yf_fundamentals:
+                profile = _valuation_from_fundamentals(ticker, yf_fundamentals)
+                logger.info(f"[{ticker}] Profil-Fallback via yfinance aktiviert")
+        except Exception as exc:
+            logger.debug(f"[{ticker}] Profil-Fallback via yfinance fehlgeschlagen: {exc}")
+        if not profile:
+            logger.warning(f"Ticker-Validierung fehlgeschlagen für {ticker}.")
+            return f"Fehler: Ticker '{ticker}' ist ungültig (kein Profil gefunden)."
 
     # Daten laden — jeder Call einzeln abgesichert
     estimates = None
@@ -2343,7 +2367,15 @@ async def generate_trade_review_decision(ticker: str) -> dict:
 
     profile = await get_company_profile(ticker)
     if not profile:
-        raise ValueError(f"Ticker '{ticker}' ist ungültig (kein Profil gefunden).")
+        try:
+            yf_fundamentals = await get_fundamentals_yf(ticker)
+            if yf_fundamentals:
+                profile = _valuation_from_fundamentals(ticker, yf_fundamentals)
+                logger.info(f"[TradeReview] Profil-Fallback via yfinance für {ticker} aktiviert")
+        except Exception as exc:
+            logger.debug(f"[TradeReview] Profil-Fallback via yfinance fehlgeschlagen: {exc}")
+        if not profile:
+            raise ValueError(f"Ticker '{ticker}' ist ungültig (kein Profil gefunden).")
 
     estimates = None
     try:

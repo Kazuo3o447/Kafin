@@ -31,6 +31,8 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - **Bot Review Flow v7.9.0**: Der Review-/Audit-Flow nutzt jetzt die vollständige Datenbasis für Earnings, Fundamentals, Technicals, Macro, Sentiment, Insider, Short Interest und Options. Die kanonische Bot-Doku steht in `bot.md`.
 - **Bot-Tests**: Backend-Test-Suite ist wieder grün (`24 passed, 6 warnings`); die letzten technischen Restprobleme (Async-Fehler, Pydantic-Deprecation, UTC-Zeitstempel) sind vollständig behoben.
 - **Audit-Sammlung & Baseline v7.9.1**: Der Bot befindet sich aktuell in der Audit-Sammelphase. Decision Snapshots werden systematisch gesammelt, um eine empirische Baseline für die spätere Kalibrierung der Gewichtung und Schwellen aufzubauen. Der Fokus liegt auf vollständigen Daten und nachvollziehbaren Entscheidungen, nicht auf aggressiven Anpassungen.
+- **Valid-Ticker Fallback v7.9.2**: Valide Ticker wie `GOOGL` fallen jetzt bei fehlendem FMP-Profil auf yfinance-Fundamentals zurück, statt als ungültig abgelehnt zu werden.
+- **Ticker-Resolver Fix**: Der Preis-/Daten-Check für Mapping- und Suffix-Ticker ist korrigiert, damit der Resolver keine falschen Negativentscheidungen auslöst.
 - **Decision Snapshots API**: `GET /api/data/decision-snapshots` und `POST /api/data/decision-snapshots` sind implementiert und ermöglichen die Analyse und manuelle/batch-basierte Speicherung von Audits.
 - **Lernpfade-Status**: `GET /api/data/lernpfade-stats` zeigt die Reife der Earnings- und Momentum-Pfade sowie den Kalibrierungs-Status (`calibration_ready`).
 > **Datenbankhinweis:** Kafin nutzt lokales **PostgreSQL 16** (Docker: `kafin-postgres`).

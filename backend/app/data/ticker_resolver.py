@@ -64,10 +64,8 @@ KNOWN_MAPPINGS = {
 async def _get_price_for_ticker(ticker_str: str) -> Optional[float]:
     """Synchron — prüft ob ein Ticker einen validen Preis liefert."""
     try:
-        def _get_stock():
-            return yf.Ticker(ticker_str)
+        stock = await asyncio.to_thread(yf.Ticker, ticker_str)
 
-        stock = await asyncio.to_thread(_get_stock)
         def _get_fast_info():
             return stock.fast_info
 
@@ -77,7 +75,7 @@ async def _get_price_for_ticker(ticker_str: str) -> Optional[float]:
             return float(price)
         # Fallback via history
         def _get_hist():
-            return stock.history(period=f"{max(days, 2)}d")
+            return stock.history(period="5d")
 
         hist = await asyncio.to_thread(_get_hist)
         if not hist.empty:
@@ -124,12 +122,8 @@ async def resolve_ticker(ticker: str) -> dict:
     # 1. Bekanntes Mapping prüfen
     if ticker in KNOWN_MAPPINGS:
         primary = KNOWN_MAPPINGS[ticker]
-        def _check_mapped():
-            p = _get_price_for_ticker(primary)
-            fields = _count_data_fields(primary) if p else 0
-            return p, fields
-
-        price, fields = await asyncio.to_thread(_check_mapped)
+        price = await _get_price_for_ticker(primary)
+        fields = await _count_data_fields(primary) if price else 0
         if price:
             quality = "good" if fields >= 5 else "partial" if fields >= 2 else "poor"
             logger.info(
@@ -189,15 +183,6 @@ async def resolve_ticker(ticker: str) -> dict:
         candidate = f"{base}{suffix}"
         if candidate != ticker:
             candidates.append(candidate)
-
-    def _check_all_candidates():
-        results = []
-        for c in candidates:
-            p = _get_price_for_ticker(c)
-            if p:
-                fields = _count_data_fields(c)
-                results.append((c, p, fields))
-        return results
 
     # Da _get_price_for_ticker und _count_data_fields async sind, müssen wir einzeln awaiten
     found = []

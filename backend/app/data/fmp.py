@@ -26,6 +26,21 @@ logger = get_logger(__name__)
 FMP_BASE = "https://financialmodelingprep.com"
 
 
+def _valuation_from_fundamentals(ticker: str, fundamentals: dict) -> ValuationData:
+    """Baut ein ValuationData-Objekt aus einem yfinance-Fundamentals-Dict."""
+    return ValuationData(
+        ticker=ticker,
+        sector=fundamentals.get("sector"),
+        industry=fundamentals.get("industry"),
+        pe_ratio=fundamentals.get("pe_ratio") or fundamentals.get("forward_pe"),
+        ps_ratio=fundamentals.get("ps_ratio"),
+        market_cap=fundamentals.get("market_cap"),
+        debt_to_equity=fundamentals.get("debt_to_equity"),
+        current_ratio=fundamentals.get("current_ratio"),
+        free_cash_flow_yield=fundamentals.get("free_cash_flow_yield"),
+    )
+
+
 async def _fmp_get(endpoint: str, params: dict = None) -> list | dict | None:
     """
     Zentraler FMP-API-Call mit Fehlertoleranz.
@@ -88,21 +103,62 @@ async def get_company_profile(ticker: str) -> ValuationData | None:
         data = await _fmp_get(f"/api/v3/profile/{ticker}")
 
     if data is None:
-        logger.error(f"FMP Profil für {ticker} nicht verfügbar - API-Fehler oder Rate Limit.")
+        logger.warning(f"FMP Profil für {ticker} nicht verfügbar - versuche yfinance-Fallback.")
+        try:
+            from backend.app.data.yfinance_data import get_fundamentals_yf
+
+            yf_fundamentals = await get_fundamentals_yf(ticker)
+            if yf_fundamentals:
+                return _valuation_from_fundamentals(ticker, yf_fundamentals)
+        except Exception as exc:
+            logger.debug(f"yfinance-Fallback für {ticker} fehlgeschlagen: {exc}")
         return None
 
     if isinstance(data, list) and data:
         data = data[0]
     elif isinstance(data, list):
+        logger.warning(f"FMP Profil für {ticker} lieferte eine leere Liste - versuche yfinance-Fallback.")
+        try:
+            from backend.app.data.yfinance_data import get_fundamentals_yf
+
+            yf_fundamentals = await get_fundamentals_yf(ticker)
+            if yf_fundamentals:
+                return _valuation_from_fundamentals(ticker, yf_fundamentals)
+        except Exception as exc:
+            logger.debug(f"yfinance-Fallback für {ticker} nach leerer FMP-Liste fehlgeschlagen: {exc}")
         return None
 
-    return ValuationData(
+    profile = ValuationData(
         ticker=ticker,
         sector=data.get("sector"),
         industry=data.get("industry"),
         pe_ratio=data.get("pe") or data.get("peRatio"),
         market_cap=data.get("mktCap") or data.get("marketCap"),
     )
+
+    # Wenn FMP nur Teilfelder liefert, ergänze sie mit yfinance.
+    if not profile.sector or not profile.industry or not profile.pe_ratio or not profile.market_cap:
+        try:
+            from backend.app.data.yfinance_data import get_fundamentals_yf
+
+            yf_fundamentals = await get_fundamentals_yf(ticker)
+            if yf_fundamentals:
+                fallback = _valuation_from_fundamentals(ticker, yf_fundamentals)
+                profile = ValuationData(
+                    ticker=ticker,
+                    sector=profile.sector or fallback.sector,
+                    industry=profile.industry or fallback.industry,
+                    pe_ratio=profile.pe_ratio or fallback.pe_ratio,
+                    ps_ratio=profile.ps_ratio or fallback.ps_ratio,
+                    market_cap=profile.market_cap or fallback.market_cap,
+                    debt_to_equity=profile.debt_to_equity or fallback.debt_to_equity,
+                    current_ratio=profile.current_ratio or fallback.current_ratio,
+                    free_cash_flow_yield=profile.free_cash_flow_yield or fallback.free_cash_flow_yield,
+                )
+        except Exception as exc:
+            logger.debug(f"yfinance-Ergänzung für {ticker} fehlgeschlagen: {exc}")
+
+    return profile
 
 
 @rate_limit("fmp")

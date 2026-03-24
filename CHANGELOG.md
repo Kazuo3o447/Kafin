@@ -1,3 +1,13 @@
+## [7.9.2] - 2026-03-24 - Valid-Ticker Fallback & Resolver Fix
+
+### 🛠️ Bugfixes
+- **GOOGL / valide Ticker**: Fehlende FMP-Profile werden jetzt sauber über yfinance-Fundamentals abgefedert, damit valide US-Ticker nicht mehr fälschlich als ungültig gelten.
+- **Ticker Resolver**: Der Resolver-Bug mit async/await und undefiniertem Preis-Fallback wurde behoben, sodass Mapping- und Fallback-Ticker korrekt geprüft werden.
+- **Report-/Review-Flow**: Audit- und Trade-Review-Entscheidungen können auch dann laufen, wenn FMP nur Teil- oder keine Profildaten liefert.
+
+### 📚 Dokumentation
+- **`bot.md` / `STATUS.md` / `README.md`**: Auf den neuen Fallback-Stand für valide Ticker und den Resolver-Fix aktualisiert.
+
 ## [7.9.1] - 2026-03-24 - Audit-Sammlung & Baseline-Phase
 
 ### 📊 Audit-Sammlung & Baseline

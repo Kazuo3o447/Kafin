@@ -28,6 +28,8 @@ Der Trading-Bot nutzt inzwischen die komplette derzeit erhobene Datenbasis für 
 - Audits und Decision Snapshots werden zuerst gesammelt, um eine belastbare Baseline aufzubauen.
 - Kalibrierung von Gewichtungen und Schwellen erfolgt erst nach ausreichender Outcome-Historie.
 - Explainability bleibt Pflicht: Jede spätere Anpassung muss sich gegen reale Ergebnisse prüfen lassen.
+- Valide Ticker dürfen nicht an fehlenden FMP-Profilen scheitern; yfinance-Fundamentals dienen als Fallback, wenn FMP temporär keine Profildaten liefert.
+- Resolver-Fehler dürfen keine korrekten US-Ticker blockieren; Mapping- und Suffix-Prüfungen sind deshalb robust zu halten.
 
 **Technischer Status (24.03.2026):**
 - ✅ Backend-Tests stabil: `24 passed, 6 warnings` (keine Errors)

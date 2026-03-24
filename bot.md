@@ -37,6 +37,8 @@ Wichtig:
 - Backend-Test-Suite: `24 passed, 6 warnings` (keine Errors)
 - Audit-/Review-Flow: läuft stabil und nutzt alle relevanten Datenquellen für die Bewertung; der Schwerpunkt liegt aktuell auf dem Sammeln von Audits und Decision Snapshots als Baseline für die spätere Kalibrierung
 - Lernmodus: Gewichtungen werden noch **nicht** aggressiv angepasst, sondern erst nach ausreichender Audit-Historie empirisch nachgeschärft
+- Profil-Fallback: Wenn FMP für einen validen Ticker kein Profil liefert, ergänzt der Bot die Bewertung jetzt über yfinance-Fundamentals statt den Ticker fälschlich als ungültig abzulehnen.
+- Ticker-Resolver: Der Preis-/Daten-Check für bekannte Mappings und Suffix-Kandidaten ist korrigiert, sodass Resolver-Fehler nicht mehr falsche Negativentscheidungen triggern.
 - News-Pipeline: Alerts, Bullet-Extraktion und Sentiment-Filter sind wieder konsistent
 - Technische Restprobleme: Async-Fehler, Pydantic-Deprecation und UTC-Zeitstempel vollständig behoben
 - Dokumentationsquelle: `bot.md` ist die kanonische Referenz und sollte bei Bot-Änderungen mitgezogen werden

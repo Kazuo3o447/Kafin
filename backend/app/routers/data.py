@@ -25,6 +25,10 @@ from backend.app.data.yfinance_data import (
     get_technical_setup, get_fundamentals_yf, get_options_metrics, get_options_oi_analysis,
     get_earnings_history_yf, get_short_interest_yf, get_vwap
 )
+from backend.app.data.alpaca_data import (
+    get_bars as alpaca_get_bars,
+    get_snapshot as alpaca_get_snapshot,
+)
 from backend.app.data.ticker_resolver import resolve_ticker
 from backend.app.data.finra import get_finra_short_volume
 from backend.app.data.reddit_monitor import get_reddit_sentiment
@@ -477,6 +481,23 @@ async def api_sparkline(ticker: str, days: int = 7):
     cached = await cache_get(cache_key)
     if cached:
         return cached
+
+    # ── Alpaca Bars (primär) ──────────────────────────────────────
+    try:
+        bars = await alpaca_get_bars(ticker, days=days, timeframe="1Day")
+        if bars:
+            result = {
+                "ticker": ticker.upper(),
+                "data": [{"date": b["date"], "price": b["close"]} for b in bars],
+                "source": "alpaca",
+            }
+            await cache_set(cache_key, result, ttl_seconds=300)
+            return result
+    except Exception as e:
+        logger.debug(f"Alpaca Sparkline {ticker}: {e} — Fallback auf yfinance")
+    # ── Ende Alpaca Bars ──────────────────────────────────────────
+
+    # Bestehender yfinance-Block als Fallback (unverändert):
     try:
         def _get_stock():
             return yf.Ticker(ticker)
@@ -499,7 +520,7 @@ async def api_sparkline(ticker: str, days: int = 7):
                 "date": str(date_value),
                 "price": round(float(price), 2)
             })
-        result = {"ticker": ticker, "data": data[-days:]}
+        result = {"ticker": ticker, "data": data[-days:], "source": "yfinance"}
         await cache_set(cache_key, result, ttl_seconds=300)
         return result
     except Exception as e:
@@ -513,6 +534,20 @@ async def api_quick_snapshot(ticker: str):
     cached = await cache_get(cache_key)
     if cached:
         return cached
+
+    # ── Alpaca Quick-Snapshot (primär) ───────────────────────────
+    snap = await alpaca_get_snapshot(ticker)
+    if snap and snap.get("price"):
+        return {
+            "ticker":     ticker.upper(),
+            "price":      snap["price"],
+            "change_pct": snap.get("change_pct"),
+            "bid":        snap.get("bid"),
+            "ask":        snap.get("ask"),
+            "volume":     snap.get("volume"),
+            "source":     "alpaca",
+        }
+    # ── Fallback: yfinance ────────────────────────────────────────
 
     try:
         results = await asyncio.gather(
@@ -1567,7 +1602,13 @@ async def api_research_dashboard(
         "timestamp": datetime.now().isoformat(),
     }
 
-    await cache_set(cache_key, response, ttl_seconds=600)
+    # ── Earnings Live-Modus: Cache-TTL anpassen ───────────────────
+    cache_ttl = 10 if earnings_today else 600
+    if earnings_today:
+        logger.info(f"Earnings Live-Modus: Research-Cache für {ticker} auf 10s reduziert")
+    # ── Ende Earnings Live-Modus ───────────────────────────────────
+
+    await cache_set(cache_key, response, ttl_seconds=cache_ttl)
     return response
 
 @router.get("/earnings-radar")
@@ -1752,6 +1793,23 @@ async def api_signals_feed(force_refresh: bool = False):
     dedup_hours = int(cfg.get("dedup_hours", 24))
     quiet_days = int(cfg.get("quiet_period_pre_earnings_days", 2))
 
+    # ── Catalyst Clash: Makro-Events heute laden ──────────────────
+    high_impact_today: list[dict] = []
+    try:
+        from datetime import date as _date
+        today_str = _date.today().isoformat()
+        cal = await get_economic_calendar(days_back=0, days_forward=1)
+        for ev in cal:
+            ev_date = (ev.get("date") or "")[:10]
+            if ev_date == today_str and ev.get("impact") == "high":
+                high_impact_today.append({
+                    "event": ev.get("event", "Makro-Event"),
+                    "time":  (ev.get("date") or "")[:16],
+                })
+    except Exception as e:
+        logger.debug(f"Catalyst Clash Calendar: {e}")
+    # ── Ende Calendar ─────────────────────────────────────────────
+
     # Offene Journal-Positionen für Cross-Referenz
     open_positions: dict[str, dict] = {}  # ticker → position
     try:
@@ -1876,6 +1934,55 @@ async def api_signals_feed(force_refresh: bool = False):
         sig["is_resolved"] = False
         sig["bullets"] = _compose_signal_bullets(sig.get("_item", {}), sig)
         
+        # ── Catalyst Clash Warning ────────────────────────────────────
+        catalyst_clash = None
+        if high_impact_today:
+            # Prüfe ob Event in den nächsten 4 Stunden ist
+            from datetime import datetime as _dt, timezone as _tz
+            now_utc = _dt.now(_tz.utc)
+            for ev in high_impact_today:
+                try:
+                    ev_time_str = ev.get("time", "")
+                    if "T" in ev_time_str:
+                        ev_time = _dt.fromisoformat(
+                            ev_time_str.replace("Z", "+00:00")
+                        ).astimezone(_tz.utc)
+                        hours_until = (ev_time - now_utc).total_seconds() / 3600
+                        if -1 <= hours_until <= 4:
+                            catalyst_clash = {
+                                "event":       ev["event"],
+                                "hours_until": round(hours_until, 1),
+                                "warning": (
+                                    f"⚠️ {ev['event']} in "
+                                    f"{'jetzt' if hours_until <= 0 else f'{hours_until:.1f}h'} "
+                                    f"— Trade-Größe reduzieren"
+                                ),
+                            }
+                            break
+                except Exception:
+                    continue
+        sig["catalyst_clash"] = catalyst_clash
+        # ── Ende Catalyst Clash ───────────────────────────────────────
+
+        # ── Short Availability Check ──────────────────────────────────
+        sig["not_shortable"] = False
+        sig["hard_to_borrow"] = False
+
+        is_short_signal = sig.get("signal_type") in (
+            "torpedo_rising", "sma50_break", "sentiment_break"
+        )
+        # Nur für Short-relevante Signale prüfen (spart API-Calls)
+        if is_short_signal:
+            try:
+                from backend.app.data.alpaca_data import get_asset_info
+                asset = await get_asset_info(sig["ticker"])
+                if asset:
+                    sig["not_shortable"]  = not asset.get("shortable", True)
+                    sig["hard_to_borrow"] = not asset.get("easy_to_borrow", True)
+            except Exception as e:
+                logger.debug(f"Short availability {sig['ticker']}: {e}")
+        # ── Ende Short Availability ───────────────────────────────────
+        
         # Offene Position für diesen Ticker?
         pos = open_positions.get(sig["ticker"])
         sig["open_position"] = pos  # None wenn keine Position
@@ -1941,6 +2048,13 @@ async def api_signals_feed(force_refresh: bool = False):
     ]
     await cache_set(history_cache_key, current_history, ttl_seconds=86400)
 
+    # In api_signals_feed(), vor der finalen cache_set-Zeile:
+    has_earnings_today = any(
+        item.get("earnings_today") or item.get("earnings_countdown") == 0
+        for item in watchlist
+    )
+    _feed_ttl = 30 if has_earnings_today else 300
+
     response = {
         "signals": enriched_signals,
         "resolved_signals": resolved_signals[:5],
@@ -1956,8 +2070,13 @@ async def api_signals_feed(force_refresh: bool = False):
         "macro_regime": macro_dict.get("regime", "UNKNOWN"),
         "open_positions_count": len(open_positions),
         "tickers_with_positions": list(open_positions.keys()),
+        "has_catalyst_clash_today": len(high_impact_today) > 0,
+        "high_impact_events_today": high_impact_today[:3],
+        "has_earnings_today_active": has_earnings_today,
     }
-    await cache_set(cache_key, response, ttl_seconds=300)
+    await cache_set(cache_key, response, ttl_seconds=_feed_ttl)
+    if has_earnings_today:
+        logger.info("Earnings Live-Modus: Feed-Cache auf 30s reduziert")
     return response
 
 

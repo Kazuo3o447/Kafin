@@ -13,6 +13,7 @@ from backend.app.memory.short_term import (
     get_bullet_points_batch,
     _calc_sentiment_from_bullets,
 )
+from backend.app.data.alpaca_data import get_snapshots as alpaca_get_snapshots
 
 logger = get_logger(__name__)
 
@@ -246,19 +247,40 @@ def _fetch_all_scores_sync(tickers: list, db) -> dict:
         logger.debug(f"_fetch_all_scores_sync error: {e}")
         return {}
 
-async def _enrich_single(item: dict, scores_by_ticker: dict, bullets_by_ticker: dict | None = None) -> dict:
+async def _enrich_single(item: dict, scores_by_ticker: dict, bullets_by_ticker: dict | None = None, alpaca_prices: dict | None = None) -> dict:
     """Enriched einen einzelnen Watchlist-Ticker."""
     ticker = item.get("ticker")
     if not ticker:
         return item
     entry = dict(item)
     bullets_by_ticker = bullets_by_ticker or {}
+    alpaca_prices = alpaca_prices or {}
     if "web_prio" not in entry:
         entry["web_prio"] = None
-    try:
-        entry = await asyncio.to_thread(_fetch_ticker_data_sync, ticker, entry)
-    except Exception as exc:
-        logger.debug(f"Enrich yfinance {ticker}: {exc}")
+
+    # ── Preis aus Alpaca (primär, Batch bereits geladen) ─────────
+    alpaca_snap = alpaca_prices.get(ticker.upper())
+    if alpaca_snap and alpaca_snap.get("price"):
+        entry["price"]          = alpaca_snap["price"]
+        entry["change_pct"]     = alpaca_snap.get("change_pct")
+        entry["prev_close"]     = alpaca_snap.get("prev_close")
+        entry["bid"]            = alpaca_snap.get("bid")
+        entry["ask"]            = alpaca_snap.get("ask")
+        entry["volume_today"]   = alpaca_snap.get("volume")
+        if alpaca_snap.get("bid") and alpaca_snap.get("ask"):
+            spread = round(abs(alpaca_snap["ask"] - alpaca_snap["bid"]), 4)
+            entry["bid_ask_spread"] = round(spread / alpaca_snap["price"] * 100, 4)
+        _alpaca_used = True
+    else:
+        _alpaca_used = False
+    # ── Ende Alpaca Preis ─────────────────────────────────────────
+
+    # --- Kursdaten via fast_info (Fallback wenn Alpaca fehlt) ---
+    if not _alpaca_used:
+        try:
+            entry = await asyncio.to_thread(_fetch_ticker_data_sync, ticker, entry)
+        except Exception as exc:
+            logger.debug(f"Enrich yfinance {ticker}: {exc}")
     try:
         rows = scores_by_ticker.get(ticker.upper(), [])
         if rows:
@@ -307,9 +329,22 @@ async def api_watchlist_enriched():
     watchlist = await get_watchlist()
     db = get_supabase_client()
     tickers = list({item.get("ticker", "").upper() for item in watchlist if item.get("ticker")})
+    
+    # ── Alpaca Batch-Snapshot (1 Call für alle Ticker) ────────────
+    alpaca_prices: dict[str, dict] = {}
+    try:
+        alpaca_prices = await alpaca_get_snapshots(tickers)
+        if alpaca_prices:
+            logger.info(
+                f"Alpaca Batch-Snapshot: {len(alpaca_prices)}/{len(tickers)} Ticker geladen"
+            )
+    except Exception as e:
+        logger.warning(f"Alpaca Batch-Snapshot fehlgeschlagen — Fallback auf yfinance: {e}")
+    # ── Ende Batch-Snapshot ───────────────────────────────────────
+    
     scores_by_ticker = await asyncio.to_thread(_fetch_all_scores_sync, tickers, db)
     bullets_by_ticker = await get_bullet_points_batch(tickers, limit_per_ticker=10)
-    results = await asyncio.gather(*[_enrich_single(item, scores_by_ticker, bullets_by_ticker) for item in watchlist], return_exceptions=True)
+    results = await asyncio.gather(*[_enrich_single(item, scores_by_ticker, bullets_by_ticker, alpaca_prices) for item in watchlist], return_exceptions=True)
 
     enriched = []
     sectors: dict[str, int] = {}
@@ -328,8 +363,18 @@ async def api_watchlist_enriched():
         if concentration_pct > 60:
             concentration_warning = f"⚠️ Klumpenrisiko: {concentration_pct:.0f}% der Watchlist ist im Sektor '{dominant_sector}'. Diversifikation prüfen."
 
+    # ── Earnings Live-Modus: Cache-TTL anpassen ───────────────────
+    has_earnings_today = any(
+        entry.get("earnings_today") or entry.get("earnings_countdown") == 0
+        for entry in enriched
+    )
+    cache_ttl = 10 if has_earnings_today else 300
+    if has_earnings_today:
+        logger.info("Earnings Live-Modus: Watchlist-Cache auf 10s reduziert")
+    # ── Ende Earnings Live-Modus ───────────────────────────────────
+
     result = {"watchlist": enriched, "concentration_warning": concentration_warning, "sector_distribution": sectors}
-    await cache_set(cache_key, result, ttl_seconds=300)
+    await cache_set(cache_key, result, ttl_seconds=cache_ttl)
     return result
 
 @router.post("")

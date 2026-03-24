@@ -172,6 +172,13 @@ type SignalFeedItem = {
     entry_date: string;
   } | null;
   position_risk: "high" | "positive" | "neutral" | null;
+  catalyst_clash?: {
+    event: string;
+    hours_until: number;
+    warning: string;
+  } | null;
+  not_shortable?: boolean;
+  hard_to_borrow?: boolean;
 };
 
 type SignalPreparation = {
@@ -195,6 +202,12 @@ type SignalFeedResponse = {
   oldest_data_at?: string;
   config_snapshot?: Record<string, unknown>;
   macro_regime?: string;
+  has_catalyst_clash_today?: boolean;
+  high_impact_events_today?: Array<{
+    event: string;
+    time?: string;
+  }>;
+  has_earnings_today_active?: boolean;
 };
 
 type PaperTradeModalState = {
@@ -450,14 +463,50 @@ function SignalFeedView() {
       </section>
 
       <section>
+        {/* Catalyst Clash Banner */}
+        {feed?.has_catalyst_clash_today && (
+          <div className="rounded-lg border border-amber-500/30
+                          bg-amber-500/5 px-4 py-3 flex items-start gap-3 mb-4">
+            <span className="text-base mt-0.5">⚠️</span>
+            <div>
+              <p className="text-xs font-semibold text-amber-400 mb-1">
+                Catalyst Clash — Makro-Event heute
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(feed.high_impact_events_today || []).map((ev: {
+                  event: string; time?: string
+                }, i: number) => (
+                  <span key={i}
+                    className="text-[11px] text-amber-300/80 bg-amber-500/10
+                               px-2 py-0.5 rounded">
+                    {ev.event}
+                  </span>
+                ))}
+              </div>
+              <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                Bei aktiven Setups Trade-Größe reduzieren
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="mb-3 flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Active Signals</p>
             <h2 className="text-lg font-bold text-[var(--text-primary)]">Was gerade zählt</h2>
           </div>
-          <span className="text-xs text-[var(--text-muted)]">
-            {headlineSignals.length} Ergebnisse
-          </span>
+          <div className="flex items-center gap-2">
+            {feed?.has_earnings_today_active && (
+              <span className="flex items-center gap-1 text-[10px] font-medium
+                               text-[var(--accent-green)] animate-pulse">
+                <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent-green)]" />
+                Live
+              </span>
+            )}
+            <span className="text-xs text-[var(--text-muted)]">
+              {headlineSignals.length} Ergebnisse
+            </span>
+          </div>
         </div>
 
         {headlineSignals.length ? (
@@ -466,9 +515,26 @@ function SignalFeedView() {
               <div key={`${signal.ticker}-${signal.signal_type}`} className="card p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <Link href={`/research/${signal.ticker}`} className="text-lg font-bold text-[var(--accent-blue)] hover:opacity-80">
-                      {signal.ticker}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link href={`/research/${signal.ticker}`} className="text-lg font-bold text-[var(--accent-blue)] hover:opacity-80">
+                        {signal.ticker}
+                      </Link>
+                      {/* Short Availability Badges */}
+                      {signal.not_shortable && (
+                        <span className="text-[10px] px-2 py-0.5 rounded font-medium
+                                         bg-[var(--accent-red)]/10 text-[var(--accent-red)]"
+                              title="Dieser Titel ist aktuell nicht shortbar (Alpaca)">
+                          Not Shortable
+                        </span>
+                      )}
+                      {signal.hard_to_borrow && !signal.not_shortable && (
+                        <span className="text-[10px] px-2 py-0.5 rounded font-medium
+                                         bg-amber-500/10 text-amber-400"
+                              title="Hard to Borrow — Leihe kann teuer sein">
+                          HTB
+                        </span>
+                      )}
+                    </div>
                     <p className="mt-1 text-xs uppercase tracking-[0.24em] text-[var(--text-muted)]">
                       {signal.signal_type.replaceAll("_", " ")}
                     </p>
@@ -524,6 +590,14 @@ function SignalFeedView() {
                     ))}
                   </ul>
                 ) : null}
+
+                {/* Catalyst Clash Warning */}
+                {signal.catalyst_clash && (
+                  <div className="mt-4 rounded bg-amber-500/8 border border-amber-500/20
+                                  px-3 py-2 text-[11px] text-amber-400">
+                    {signal.catalyst_clash.warning}
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -1,61 +1,29 @@
-# Supabase
+# Legacy Supabase Compatibility Shim
 
-Dashboard: https://supabase.com/dashboard
-Docs: https://supabase.com/docs
-Python-Client: `supabase-py` (bereits in requirements.txt)
+Diese Datei ist historisch erhalten, aber **Supabase ist nicht mehr das Runtime-Backend**.
+Kafin verwendet lokal **PostgreSQL 16** im Docker-Container (`kafin-postgres`).
 
-## Konfiguration
-- SUPABASE_URL: https://knelzvalqagxxjkxnxug.supabase.co
-- SUPABASE_KEY: sb_publishable_JgKKKZ1o5z53Ispk0KVQcg_uba_EnhH
-- SUPABASE_PASSWORD: `Glurak.1944!` (Projekt-Passwort)
+`backend/app/db.py` stellt `get_supabase_client()` als **Compatibility-Shim** bereit,
+damit ältere Codepfade weiter funktionieren.
+Die Rückgabe ist ein lokaler PostgreSQL-Client aus `backend/app/database.py`.
 
-## Python-Client Nutzung
+## Was du heute verwenden sollst
 
 ```python
-from supabase import create_client
+from backend.app.db import get_supabase_client
 
-client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# SELECT
-result = client.table("watchlist").select("*").execute()
-rows = result.data
-
-# SELECT mit Filter
-result = client.table("watchlist").select("*").eq("ticker", "AAPL").execute()
-
-# INSERT
-result = client.table("watchlist").insert({
-    "ticker": "NVDA",
-    "company_name": "NVIDIA",
-    "sector": "Technology"
-}).execute()
-
-# UPDATE
-result = client.table("watchlist").update({
-    "notes": "Neuer Kommentar"
-}).eq("ticker", "NVDA").execute()
-
-# DELETE
-result = client.table("watchlist").delete().eq("ticker", "NVDA").execute()
-
-# UPSERT (Insert oder Update)
-result = client.table("long_term_memory").upsert({
-    "ticker": "AAPL",
-    "quarter": "Q1_2026",
-    "eps_actual": 1.65
-}).execute()
+db = get_supabase_client()
+rows = await db.table("watchlist").select("*").execute_async()
 ```
 
-## Tabellen (siehe database/schema.sql)
-- watchlist
-- short_term_memory
-- long_term_memory
-- macro_snapshots
-- btc_snapshots
-- audit_reports
+## Wichtige Hinweise
 
-## Tipps
-- Free Tier: 500MB DB, 50.000 Reads/Monat
-- Row-Level Security (RLS) aktivieren wenn das Dashboard public wird
-- JSONB-Felder für flexible Daten (z.B. bullet_points in short_term_memory)
-- Supabase generiert automatisch UUIDs als Primary Keys
+- **Keine Cloud-Verbindung**: Es gibt keinen produktiven Supabase-Account mehr für die App.
+- **Keine Secrets in Doku**: Alte URL-/Key-Werte wurden absichtlich entfernt.
+- **CRUD bleibt kompatibel**: Bestehende Tabellen wie `watchlist`, `short_term_memory`, `long_term_memory`, `macro_snapshots`, `btc_snapshots` und `audit_reports` laufen über den lokalen DB-Adapter.
+- **Neuer Code**: Für neue Pfade bitte direkt `get_db_client()` / `get_pool()` verwenden, wenn kein Supabase-Kompatibilitätslayer nötig ist.
+
+## Hintergrund
+
+Früher wurde `supabase-py` direkt verwendet. Heute ist die Doku nur noch als Übergangshilfe für Legacy-Code gedacht.
+Alle tatsächlichen Laufzeitzugriffe gehen gegen die lokale Container-PostgreSQL-Datenbank.

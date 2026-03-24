@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
+import asyncio
 import yfinance as yf
 
 from backend.app.db import get_supabase_client
@@ -18,6 +19,10 @@ def _current_quarter() -> str:
     return f"Q{quarter}_{now.year}"
 
 
+def _normalize_trade_signal(recommendation: str) -> str:
+    return recommendation.strip().upper().replace("_", " ")
+
+
 async def _get_next_trading_day_close(ticker: str, after_date: datetime) -> float | None:
     try:
         def _fetch():
@@ -28,7 +33,7 @@ async def _get_next_trading_day_close(ticker: str, after_date: datetime) -> floa
 
         hist = await asyncio.to_thread(_fetch)
         if hist.empty:
-            logger.warning(f"Keine Kursdaten für {ticker} ab {start}")
+            logger.warning(f"Keine Kursdaten für {ticker} ab {after_date.date()}")
             return None
         return round(float(hist["Close"].iloc[0]), 4)
     except Exception as exc:  # noqa: BLE001
@@ -41,6 +46,14 @@ TRADE_SIGNALS = {
     "BUY MIT ABSICHERUNG": "long",
     "STRONG SHORT": "short",
     "POTENTIELLER SHORT": "short",
+    "strong_buy": "long",
+    "buy_hedge": "long",
+    "strong_short": "short",
+    "potential_short": "short",
+    "STRONG BUY": "long",
+    "BUY HEDGE": "long",
+    "STRONG SHORT": "short",
+    "POTENTIAL SHORT": "short",
 }
 
 
@@ -52,8 +65,10 @@ async def open_shadow_trade(
     audit_report_id: str | None = None,
     trade_reason: str | None = None,   # NEU
     manual_entry: bool = False,         # NEU
+    atr_14: float | None = None,   # NEU — ATR aus TechnicalSetup
+    reasoner_stop_loss: float | None = None,
 ) -> Dict[str, Any]:
-    direction = TRADE_SIGNALS.get(recommendation)
+    direction = TRADE_SIGNALS.get(recommendation) or TRADE_SIGNALS.get(_normalize_trade_signal(recommendation))
     if not direction:
         return {"skipped": True, "reason": f"Keine Trade-Signal-Empfehlung: {recommendation}"}
 
@@ -63,7 +78,7 @@ async def open_shadow_trade(
         db = get_supabase_client()
         if db is None:
             return {"error": "Supabase nicht verfügbar"}
-        existing = (
+        existing = await (
             db.table("shadow_trades")
             .select("id")
             .eq("ticker", ticker)
@@ -83,10 +98,45 @@ async def open_shadow_trade(
         logger.warning(f"Shadow Trade für {ticker} übersprungen: kein Entry-Preis")
         return {"skipped": True, "reason": "Entry-Preis nicht verfügbar"}
 
-    if direction == "long":
-        stop_loss = round(entry_price * 0.92, 4)
+    # ALT — pauschal -8%
+    # if direction == "long":
+    #     stop_loss = round(entry_price * 0.92, 4)
+    # else:
+    #     stop_loss = round(entry_price * 1.08, 4)
+
+    # NEU — Reasoner-Stop-Loss hat Vorrang, sonst ATR-basiert mit Fallback auf -8%
+    ATR_MULTIPLIER = 1.5   # 1.5× ATR — Standardwert für Swing-Trades
+
+    if reasoner_stop_loss and reasoner_stop_loss > 0:
+        stop_loss = round(reasoner_stop_loss, 4)
+        logger.info(f"Reasoner-Stop {ticker}: Exit-Anker ${stop_loss}")
+    elif atr_14 and atr_14 > 0:
+        stop_distance = round(atr_14 * ATR_MULTIPLIER, 4)
+        if direction == "long":
+            stop_loss = round(entry_price - stop_distance, 4)
+        else:
+            stop_loss = round(entry_price + stop_distance, 4)
+        # Sicherheitsprüfung: Stop darf nicht unrealistisch nah sein
+        pct_distance = abs(entry_price - stop_loss) / entry_price * 100
+        if pct_distance < 2.0:
+            # ATR zu klein (illiquider Titel) — Fallback auf 5%
+            stop_loss = round(
+                entry_price * (0.95 if direction == "long" else 1.05), 4
+            )
+        logger.info(
+            f"ATR-Stop {ticker}: Entry ${entry_price} "
+            f"ATR ${atr_14:.2f} × {ATR_MULTIPLIER} = "
+            f"Stop ${stop_loss} ({pct_distance:.1f}%)"
+        )
     else:
-        stop_loss = round(entry_price * 1.08, 4)
+        # Fallback: -8% wenn kein ATR verfügbar
+        if direction == "long":
+            stop_loss = round(entry_price * 0.92, 4)
+        else:
+            stop_loss = round(entry_price * 1.08, 4)
+        logger.info(
+            f"Fallback-Stop {ticker}: kein ATR → ±8% = ${stop_loss}"
+        )
 
     record = {
         "ticker": ticker,
@@ -123,7 +173,7 @@ async def close_shadow_trade(ticker: str, quarter: str) -> Dict[str, Any]:
         db = get_supabase_client()
         if db is None:
             return {"error": "Supabase nicht verfügbar"}
-        result = (
+        result = await (
             db.table("shadow_trades")
             .select("*")
             .eq("ticker", ticker)
@@ -176,6 +226,14 @@ async def close_shadow_trade(ticker: str, quarter: str) -> Dict[str, Any]:
                         exit_reason = "stop_loss"
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"Stop-Loss-Check Fehler {ticker}: {exc} — nutze Exit-Preis")
+
+    # Wenn der Exit stark vom prognostizierten Stop-Loss abweicht, wird der
+    # Reasoner-Stop als fairer Exit-Anker genommen (Gap-/Deviation-Schutz).
+    if stop_loss and entry_price and exit_reason != "stop_loss":
+        deviation_pct = abs(exit_price - stop_loss) / stop_loss * 100
+        if deviation_pct >= 10.0:
+            actual_exit_price = stop_loss
+            exit_reason = "reasoner_stop_loss_deviation"
 
     if not entry_price:
         return {"error": "Entry-Preis fehlt"}

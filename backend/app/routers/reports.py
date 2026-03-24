@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from backend.app.logger import get_logger
 from backend.app.memory.watchlist import get_watchlist
-from backend.app.analysis.report_generator import generate_audit_report, generate_sunday_report, generate_morning_briefing, generate_after_market_report
+from backend.app.analysis.report_generator import generate_audit_report, generate_sunday_report, generate_morning_briefing, generate_after_market_report, generate_trade_review_decision
 from backend.app.analysis.post_earnings_review import run_post_earnings_review
 from backend.app.data.fmp import get_earnings_history
+from backend.app.analysis.report_generator import _save_decision_snapshot
 
 logger = get_logger(__name__)
 
@@ -228,6 +229,15 @@ async def api_trigger_earnings_audits():
             torp_val = float(torp or 10)
             rec_val = str(rec or "").upper()
 
+            # ATR für Stop-Loss berechnen
+            _tech = None
+            try:
+                from backend.app.data.yfinance_data import get_technical_setup
+                _tech = await get_technical_setup(ticker)
+            except Exception:
+                pass
+            _atr = getattr(_tech, "atr_14", None) if _tech else None
+
             trade_result = None
             if rec_val in ("STRONG BUY", "BUY") and opp_val >= 6.5 and torp_val <= 4.5:
                 trade_result = await open_shadow_trade(
@@ -237,6 +247,7 @@ async def api_trigger_earnings_audits():
                     torpedo_score=torp_val,
                     trade_reason=f"auto_earnings_trigger_T{ec}",
                     manual_entry=False,
+                    atr_14=_atr,   # NEU
                 )
             elif rec_val in ("STRONG SHORT", "SHORT") and torp_val >= 6.5 and opp_val <= 4.5:
                 trade_result = await open_shadow_trade(
@@ -246,6 +257,7 @@ async def api_trigger_earnings_audits():
                     torpedo_score=torp_val,
                     trade_reason=f"auto_earnings_trigger_T{ec}",
                     manual_entry=False,
+                    atr_14=_atr,   # NEU
                 )
 
             processed.append({
@@ -282,7 +294,7 @@ async def api_scan_earnings_results():
     
     wl = await get_watchlist()
     reviews_triggered = []
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     for item in wl:
         ticker = item.get("ticker")
@@ -368,3 +380,27 @@ async def api_briefing_archive(days: int = 7):
         }
     except Exception as e:
         return {"reports": [], "error": str(e)}
+
+@router.post("/review-trade/{ticker}")
+async def api_review_trade(ticker: str):
+    """Manueller Trade-Review-Trigger: Sendet vollständigen Kontext an DeepSeek Reasoner,
+       speichert Decision Snapshot und gibt Entscheidung zurück. Keine Trade-Ausführung hier."""
+    try:
+        # Hole den vollständigen Research-Kontext und erzeuge Review-Entscheidung
+        review_result = await generate_trade_review_decision(ticker)  # Neue oder angepasste Funktion
+        
+        # Speichere Decision Snapshot
+        await _save_decision_snapshot(
+            ticker=ticker,
+            opportunity_score=review_result.get("opportunity_score", 0.0),
+            torpedo_score=review_result.get("torpedo_score", 0.0),
+            recommendation=review_result.get("recommendation", "unknown"),
+            prompt_text=review_result.get("prompt_text", ""),
+            report_text=review_result.get("decision_text", ""),
+            raw_data=review_result.get("raw_data", {}),
+        )
+        
+        return {"status": "success", "decision": review_result}
+    except Exception as e:
+        logger.error(f"Trade-Review für {ticker} fehlgeschlagen: {e}")
+        return {"status": "error", "message": str(e)}

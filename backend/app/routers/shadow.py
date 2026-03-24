@@ -37,7 +37,7 @@ VALID_TRADE_REASONS = [
     "Short Squeeze Setup",
 ]
 
-@router.get("/api/shadow-portfolio")
+@router.get("/portfolio")
 async def api_shadow_portfolio_summary():
     cache_key = "shadow_portfolio_summary"
     cached = await cache_get(cache_key)
@@ -47,7 +47,7 @@ async def api_shadow_portfolio_summary():
     await cache_set(cache_key, result, ttl_seconds=120)
     return result
 
-@router.get("/api/shadow-portfolio/trades")
+@router.get("/portfolio/trades")
 async def api_shadow_portfolio_trades(status: str = "all"):
     try:
         db = get_supabase_client()
@@ -62,12 +62,12 @@ async def api_shadow_portfolio_trades(status: str = "all"):
     except Exception as exc:
         return {"trades": [], "count": 0, "error": str(exc)}
 
-@router.get("/api/shadow-portfolio/weekly-report")
+@router.get("/portfolio/weekly-report")
 async def api_shadow_portfolio_weekly():
     report = await get_weekly_shadow_report()
     return {"report": report}
 
-@router.post("/api/shadow/manual-trade")
+@router.post("/manual-trade")
 async def api_manual_shadow_trade(req: ManualTradeRequest):
     """Manueller Shadow-Trade mit Trade-Grund."""
     if req.trade_reason not in VALID_TRADE_REASONS:
@@ -102,7 +102,7 @@ async def api_manual_shadow_trade(req: ManualTradeRequest):
     )
     return result
 
-@router.get("/api/shadow/trade-reasons")
+@router.get("/trade-reasons")
 async def api_trade_reasons():
     """Liste aller validen Trade-Gründe."""
     return {"reasons": VALID_TRADE_REASONS}

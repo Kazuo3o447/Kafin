@@ -45,7 +45,10 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
 
     # Cache-Check
     cache_key = f"yf:enriched_v2:{ticker.upper()}"
-    cached_data = cache_get(cache_key)
+    try:
+        cached_data = asyncio.run(cache_get(cache_key))
+    except Exception:
+        cached_data = None
     if cached_data:
         entry.update(cached_data)
         return entry
@@ -205,7 +208,10 @@ def _fetch_ticker_data_sync(ticker: str, entry: dict) -> dict:
         pass
 
     if result:
-        cache_set(cache_key, result, ttl_seconds=300)
+        try:
+            asyncio.run(cache_set(cache_key, result, ttl_seconds=300))
+        except Exception:
+            pass
 
     entry.update(result)
     return entry
@@ -322,7 +328,7 @@ async def api_watchlist_enriched():
     """Gibt Watchlist inkl. Kurse, Scores und Earnings-Countdown zurück."""
     logger.info("API Call: watchlist-enriched")
     cache_key = "watchlist:enriched:v2"
-    cached_result = cache_get(cache_key)
+    cached_result = await cache_get(cache_key)
     if cached_result:
         return cached_result
 
@@ -387,12 +393,12 @@ async def api_add_watchlist_item(item: WatchlistItemCreate, background_tasks: Ba
     from backend.app.data.news_processor import process_news_for_ticker
     async def _scan_and_invalidate(ticker: str):
         await process_news_for_ticker(ticker)
-        cache_invalidate("watchlist:enriched:v2")
-        cache_invalidate(f"research_dashboard_{ticker}")
-        cache_invalidate_prefix("earnings_radar_")
+        await cache_invalidate("watchlist:enriched:v2")
+        await cache_invalidate(f"research_dashboard_{ticker}")
+        await cache_invalidate_prefix("earnings_radar_")
 
     background_tasks.add_task(_scan_and_invalidate, item.ticker.upper())
-    cache_invalidate("watchlist:enriched:v2")
+    await cache_invalidate("watchlist:enriched:v2")
     
     # TODO: Fix cross_signals array handling - temporarily using empty array
     return await add_ticker(item.ticker, company_name, sector, item.notes or "", [])
@@ -412,12 +418,12 @@ async def api_watchlist_earnings_this_week():
 @router.put("/{ticker}")
 async def api_update_watchlist_item(ticker: str, item: WatchlistItemUpdate):
     logger.info(f"API Call: update-watchlist-item {ticker}")
-    update_data = item.dict(exclude_unset=True) 
+    update_data = item.model_dump(exclude_unset=True)
     try:
         db = get_supabase_client()
         if db and update_data:
             await db.table("watchlist").update(update_data).eq("ticker", ticker.upper()).execute_async()
-        cache_invalidate("watchlist:enriched:v2")
+        await cache_invalidate("watchlist:enriched:v2")
         return {"status": "success", "updated": update_data}
     except Exception as e:
         logger.error(f"Watchlist Update Error für {ticker}: {e}")
@@ -426,6 +432,6 @@ async def api_update_watchlist_item(ticker: str, item: WatchlistItemUpdate):
 @router.delete("/{ticker}")
 async def api_remove_watchlist_item(ticker: str):
     logger.info(f"API Call: remove-watchlist-item {ticker}")
-    cache_invalidate("watchlist:enriched:v2")
+    await cache_invalidate("watchlist:enriched:v2")
     success = await remove_ticker(ticker)
     return {"status": "success"} if success else {"status": "error"}

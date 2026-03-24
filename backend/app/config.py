@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     groq_api_key: str = ""
     tavily_api_key: str = ""
+    twelve_data_api_key: str = ""
 
     # PostgreSQL (neu)
     database_url: str = (
@@ -55,6 +56,11 @@ class Settings(BaseSettings):
     alpaca_api_key: str = ""
     alpaca_secret_key: str = ""
     alpaca_base_url: str = "https://paper-api.alpaca.markets"
+    
+    # Alpaca Market Data (via .env)
+    alpaca_data_url: str = os.getenv(
+        "ALPACA_DATA_URL", "https://data.alpaca.markets"
+    )
 
     model_config = SettingsConfigDict(
         env_file=ENV_PATH,

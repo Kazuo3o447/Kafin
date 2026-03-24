@@ -9,6 +9,7 @@ from typing import Optional
 class MacroSnapshot(BaseModel):
     """Wöchentlicher Makro-Snapshot."""
     date: Optional[datetime] = None
+    fed_funds_rate: Optional[float] = None
     fed_rate: Optional[float] = None
     fed_rate_date: Optional[str] = None
     fed_expectation: Optional[str] = None

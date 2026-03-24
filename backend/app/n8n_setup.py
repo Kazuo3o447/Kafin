@@ -128,34 +128,10 @@ async def setup_workflows():
             }
         }
 
-        # Workflow 3: Sonntags-Report um 19:00 Uhr
-        sunday_workflow = {
-            "name": "Kafin: Sonntags-Report",
-            "active": True,
-            "nodes": [
-                {
-                    "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "0 19 * * 0"}]}},
-                    "name": "Trigger: Sonntag 19:00",
-                    "type": "n8n-nodes-base.scheduleTrigger",
-                    "position": [250, 300],
-                    "typeVersion": 1
-                },
-                {
-                    "parameters": {
-                        "url": "http://kafin-backend:8000/api/reports/generate-sunday",
-                        "method": "POST",
-                        "options": {}
-                    },
-                    "name": "Sonntags-Report generieren",
-                    "type": "n8n-nodes-base.httpRequest",
-                    "position": [450, 300],
-                    "typeVersion": 1
-                }
-            ],
-            "connections": {
-                "Trigger: Sonntag 19:00": {"main": [[{"node": "Sonntags-Report generieren", "type": "main", "index": 0}]]}
-            }
-        }
+        # sunday_workflow — DEPRECATED seit v7.0
+        # Ersetzt durch: Pre-Market Briefing (08:00) + After-Market Report (22:15)
+        # Workflow bleibt als Code-Referenz, wird aber nicht mehr deployt.
+        # sunday_workflow = { ... }
 
         # Workflow 4: Morning Briefing (Montag-Freitag 08:00 CET)
         morning_workflow = {
@@ -392,7 +368,7 @@ async def setup_workflows():
             }
         }
 
-        for wf in [weekday_news_workflow, weekend_news_workflow, sec_workflow, sunday_workflow, morning_workflow, earnings_review_workflow, sentiment_workflow, peer_morning_workflow, backup_workflow, earnings_auto_trigger_workflow]:
+        for wf in [weekday_news_workflow, weekend_news_workflow, sec_workflow, morning_workflow, earnings_review_workflow, sentiment_workflow, peer_morning_workflow, backup_workflow, earnings_auto_trigger_workflow]:
             try:
                 response = await client.post("/api/v1/workflows", json=wf)
                 if response.status_code in (200, 201):

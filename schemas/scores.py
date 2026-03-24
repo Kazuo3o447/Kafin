@@ -53,4 +53,5 @@ class AuditRecommendation(BaseModel):
     options_suggestion: Optional[str] = None
     data_completeness: float = 1.0
     low_confidence: bool = False     # True wenn < 50% Daten
+    macro_warning: Optional[str] = None   # NEU — Makro-Regime-Gate Warnung
     model_config = ConfigDict(from_attributes=True)

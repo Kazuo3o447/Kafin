@@ -1,6 +1,106 @@
-# Kafin Changelog
+## [7.9.1] - 2026-03-24 - Audit-Sammlung & Baseline-Phase
 
-Alle wichtigen Änderungen, Bugfixes und Features nach Version.
+### 📊 Audit-Sammlung & Baseline
+- **Audit-Sammlung aktiv**: Der Bot befindet sich jetzt in der Audit-Sammelphase. Decision Snapshots werden systematisch für die Baseline-Kalibrierung gesammelt.
+- **Decision Snapshots API**: `GET /api/data/decision-snapshots` und `POST /api/data/decision-snapshots` implementiert für Analyse und batch-basierte Speicherung.
+- **Lernpfade-Status**: `GET /api/data/lernpfade-stats` zeigt die Reife der Earnings- und Momentum-Pfade sowie den Kalibrierungs-Status (`calibration_ready`).
+- **Fokus**: Vollständige Datennutzung und nachvollziehbare Entscheidungen, nicht aggressive Gewichtsanpassungen.
+
+### 🔧 Technische Probleme vollständig behoben
+- **Async Cache Fehler**: `cache_invalidate()` und `cache_set()` in `watchlist.py` bekamen fehlende `await`s
+- **Pydantic Deprecation**: `.dict()` → `.model_dump()` in `journal.py`, `watchlist.py`, `yfinance_data.py`, `admin/score_backfill.py`
+- **UTC-Zeitstempel**: `datetime.utcnow()` → `datetime.now(timezone.utc)` in `system.py`, `reports.py`, `logs.py`, `analysis.py`, `reddit_monitor.py`, `alpaca_data.py`, `admin/__init__.py`, `routers/data.py`, `report_generator.py`
+
+### ✅ Testergebnis
+- **Backend-Tests**: `24 passed, 6 warnings` (keine Errors)
+- **Nur noch harmlose Warnungen**: FastAPI `on_event` Deprecation und Runtime-Warning im Report-Generator
+
+### 📚 Dokumentation
+- **`bot.md`**: Validierungsstand auf aktuellen Audit-/Lernmodus aktualisiert
+- **`docs/FUTURE.md`**: Kalibrierungs-Roadmap auf Audit-Sammelphase justiert
+
+## [7.9.0] - 2026-03-24 - Bot Documentation Refresh & Stability
+
+### 📚 Dokumentation
+- **`bot.md`**: Neue kanonische Bot-Dokumentation mit Datenquellen, Scoring, Review-Flow, Snapshot-/Learning-Kurve und Explainability-Hinweisen für andere Agents.
+- **`STATUS.md` / `CLAUDE.md` / `FUTURE.md` / `README.md`**: Status, Architektur-Hinweise und Roadmap an die aktuelle Bot- und DB-Architektur angepasst.
+
+### 🧠 Bot-Stabilität
+- **Scoring-Härtung**: Null-/Fallback-Fehler in der Entscheidungslogik beseitigt, Audit-/Sunday-Reports und News-Pipeline laufen wieder stabil.
+- **Testlage**: Backend-Tests sind wieder grün (`25 passed, 1 skipped`).
+
+## [7.8.0] - 2026-03-24 - Trade Prüfen Modal Implementation
+
+### 🚀 Neue Features
+- **Trade Prüfen Modal**: Frontend-Modal für manuelle Trade-Überprüfung und Ausführung basierend auf Reasoner-Entscheidungen. Datei: `frontend/src/app/research/[ticker]/page.tsx`.
+
+## [7.7.0] - 2026-03-24 - Signal Feed, News Pipeline & Monitoring Review
+
+### 📡 Signal Feed Enhancements
+- **Catalyst Clash Warning**: High-impact Macro-Events innerhalb von 4h werden im Signal Feed markiert.
+- **Short Availability Check**: `not_shortable` / `hard_to_borrow` für Short-relevante Signale via Alpaca Market Data.
+- **Earnings Live-Modus**: Cache-TTL für Watchlist, Research und Feed bei `earnings_today` dynamisch reduziert.
+
+### 📰 News Pipeline Fixes
+- **`bullet_points` statt `bullet_text`**: Research rendert gespeicherte News jetzt als einzelne Stichpunkte.
+- **Robuster Prompt-Pfad**: `news_processor.py` lädt den Prompt file-safe via `Path(__file__)` und nutzt Fallback-Prompt.
+- **ETF-Relevanz**: FinBERT-Schwelle für ETF-/Index-News reduziert, wichtige Keywords werden nicht weggefiltet.
+- **Google News Fallback**: Zusätzliche Ticker-Suche bei zu wenig Finnhub-News, inklusive Cache.
+- **n8n Workflows**: Alle News-Workflows zeigen auf `http://kafin-backend:8000` statt `http://api:8000`.
+
+### 🛠️ Monitoring & Diagnostics
+- **`GET /api/n8n/status`**: Separater Health-Check für n8n wurde ergänzt.
+- **`alpaca_data` Service-Check**: Alpaca Market Data ist als eigener Diagnostikpunkt sichtbar.
+- **Shadow Trade Fix**: `TRADE_SIGNALS` akzeptiert nun auch die Prompt-36/38-Labels in Unterstrich-/Lowercase-Form.
+
+### 📚 Dokumentation
+- **STATUS.md / CLAUDE.md / FUTURE.md**: Status, Architektur-Notizen und Roadmap wurden auf den aktuellen Stand gebracht.
+
+## [7.6.0] - 2026-03-24 - Alpaca Market Data als Preis-Layer
+
+### 📡 Alpaca Market Data API
+- **`backend/app/data/alpaca_data.py`**: Neuer Client für Marktdaten (separater Endpunkt data.alpaca.markets, gleiche Keys)
+- **Batch-Snapshot**: 1 Call für alle Watchlist-Ticker statt N×yfinance-Calls → Watchlist Enriched ~200ms statt 5–15s
+- **Sparkline/OHLCV**: Alpaca Bars primär, yfinance als Fallback
+- **Bid/Ask Live**: `latestQuote` Endpunkt
+- **Fallback-Architektur**: Alpaca primär → yfinance Fallback (nicht-US Ticker, Alpaca nicht konfiguriert)
+- **yfinance bleibt für**: Options, Short Interest, Fundamentals, ATR-Berechnung
+- **Systemdiagnostik**: `alpaca_data` als eigener Service-Check #11
+- **Settings**: Alpaca Market Data separat von Alpaca Trading
+
+## [7.5.0] - 2026-03-24 - Makro-Gate + Journal-Redirect
+
+### 🛡️ Makro-Regime-Gate + ATR-Stop
+- **Risk Off Gate**: VIX > 30 degradiert STRONG BUY → WATCH, VIX 25–30 → BUY MIT ABSICHERUNG
+- **ATR-basierte Stops**: Shadow Portfolio nutzt 1.5× ATR statt pauschal -8% mit Sicherheitsprüfung
+- **Budget-Neutralität**: Options-Flow 5%→12% vor Earnings (≤5T), Valuation 15%→11%, Technical 10%→7%
+- **Makro-Warnungen**: sichtbar im Audit-Report mit Erklärung warum Gate aktiv war
+
+### 🔄 Journal-Redirect
+- **/journal → /performance?tab=my_trades**: Eine Quelle der Wahrheit, keine Dopplung mehr
+- **Performance Tab-Parameter**: `?tab=my_trades` öffnet direkt den richtigen Tab
+- **Router.replace()**: Keine Browser-History-Einträge, flackerfreier Redirect
+
+### 📊 Smart-Money Boost
+- **Options-Flow Kontext**: Vor Earnings (≤5T) wird Smart-Money-Signal hochgewichtet
+- **Logging**: `[Options-Boost aktiv: EC=3T]` im Score-Breakdown sichtbar
+- **Sicherheitsprüfung**: ATR-Stop min 2% Abstand, Fallback auf ±8% bei fehlendem ATR
+
+## [7.4.0] - 2026-03-24 - Twelve Data Integration
+
+### 📊 Twelve Data API
+- **`backend/app/data/twelvedata.py`**: Neuer Client — ADX, Stochastic, Systemtest. httpx-basiert, kein SDK, 4h Cache.
+- **ADX (Average Directional Index)**: Trendstärke in TechnicalSetup — "strong" (≥25) / "moderate" (15–25) / "weak" (<15)
+- **Stochastic Oscillator**: %K/%D + Kreuzungssignal in TechnicalSetup
+- **IV Percentile**: Approximation aus HV20/HV60-Ratio bis echter TD-Optionsdaten-Zugang; ersetzt hartes TODO in yfinance_data.py
+- **Scoring**: ADX und Stochastic fließen in technical_setup-Subskala ein (±1.5 Punkte je nach Signalstärke)
+- **Research-Page**: ADX, Stochastic %K/%D, IV Percentile im Technicals-Block sichtbar mit Trend-Badges
+- **Systemdiagnostik**: Twelve Data als Service #10 in /api/diagnostics/full
+- **Settings**: Twelve Data in API-Übersicht und System-Check-Tab
+- **Budget**: ~30–50 Calls/Tag von 800 Free-Tier-Limit
+
+### 📚 Dokumentation
+- **Async Performance Guide**: Neue technische Dokumentation unter `docs/ASYNC_PERFORMANCE.md` mit Best Practices und Beispielen.
 
 ## [7.3.1] - 2026-03-24 - Async Performance Overhaul
 
@@ -44,10 +144,6 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 - **Daten-Normalisierung**: Verschachtelte Research-API-Antworten werden im Frontend jetzt zuverlässig in das erwartete Dashboard-Schema gemappt, damit die Boards auch ohne Fehler wieder Inhalte anzeigen.
 
 ## [7.2.0] - 2026-03-23 - Alpaca Integration + Learning Module
-- **Tab "Lernkurve"**: Decision Snapshots — Trefferquote, T+1/5/20 Returns,
-  Datenqualitäts-Flags
-- **`real_trades`-Tabelle**: Entry/Exit/These/Alpaca-Order-ID
-- **`decision_snapshots`-Tabelle**: Unveränderlicher Entscheidungs-Kontext
 
 ### 🧠 Decision Snapshot / Learning Module
 - **Automatisch bei jedem Audit-Report**: Scores, Rohdaten, Makro, Prompt gespeichert
@@ -274,7 +370,7 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 - **docker-compose.yml**: finbert-cache Volume für Modell-Persistenz
 - **Backend**: Vollständige Migration zu modernem FastAPI Pattern
 
-## [6.1.7] - 2026-03-23 - Menü-Struktur Optimierung
+## [6.1.7] - 2026-03-22 - Menü-Struktur Optimierung
 
 ### 🎨 UI/UX: Menü-Reihenfolge angepasst
 - **Dashboard** jetzt an erster Position in der Navigation
@@ -501,6 +597,11 @@ Alle wichtigen Änderungen, Bugfixes und Features nach Version.
 - **UI Components**: Farbcodierte Verbrauchs-Balken (grün/amber/rot bei 50/75%)
 - **Real-time**: Heutiger Verbrauch direkt aus Redis, historische Daten aus DB
 
+### 📊 Integration Benefits
+- **Divergenz-Erkennung**: Retail gierig + Insider bearisch = starkes Short-Signal
+- **Markt-Kontext**: Fear & Greed gibt übergeordnetes Sentiment
+- **Kohärenz**: Keine Feature-Inseln mehr, alle Daten fließen zusammen
+
 ## [5.13.6] - 2026-03-22 - Groq News-Extraction
 
 ### 🚀 Performance + Kosten
@@ -552,65 +653,7 @@ DeepSeek bleibt für Audit-Reports, Groq für Extraktion.
 - **FUTURE.md**: PostgreSQL Migration als erledigt markiert
 - **TODO.md**: Batch 4 technische Schuld abgebaut
 
-## [6.0.3] - 2026-03-22 - pgvector Embedding Pipeline
-
-### 🧠 Semantic Search Foundation
-- **embeddings.py**: all-MiniLM-L6-v2 lokal (22MB)
-  - 384 Dimensionen, CPU-optimiert für NUC-Performance
-  - `embed_text()`, `embed_batch()`, `save_embedding()` API
-  - Lazy-Loading mit Graceful Fallback bei fehlenden sentence-transformers
-  - `asyncio.to_thread()` für CPU-bound Embedding-Generation
-
-### 🔄 Auto-Embedding Integration
-- **short_term_memory**: Automatische Embedding-Generierung nach INSERT
-  - Non-blocking `asyncio.create_task()` im Hintergrund
-  - Text-Kombination: `{ticker}: bullet1 | bullet2 | bullet3`
-  - Fehler-resilient: Embedding-Fehler stoppen nicht die Pipeline
-- **Startup**: Modell im Hintergrund vorwärmen
-  - `embed_text("Kafin startup test")` vor dem ersten echten Einsatz
-  - Logging: "Embedding-Modell bereit" bei Erfolg
-
-### 🛠 Admin Tools
-- **POST /api/admin/embeddings/backfill**: Befüllung für Bestandsdaten
-  - Unterstützt: `short_term_memory`, `audit_reports`, `long_term_memory`
-  - Configurable Limit für Batch-Processing
-  - Returns: `processed`, `total`, `table` Statistiken
-  - Text-Extraction pro Tabelle optimiert
-
-### 📊 Technical Implementation
-- **pgvector Integration**: Direkte SQL `UPDATE ... SET embedding = $1::vector`
-  - 384-dimensionale Vektoren als formatierte Strings
-  - UUID-basierte Record-Identifikation
-  - Fehlerbehandlung mit Debug-Logging
-- **Performance**: Non-blocking Architektur
-  - Embeddings laufen parallel zum Haupt-Flow
-  - Keine Latenz-Erhöhung für News-Storage
-
-## [6.0.2] - 2026-03-22 - DB Switch Validierung
-
-### 🚀 Performance & Async Patterns
-- **database.py**: `execute_async()` für native async Execution
-  - `_row_to_dict()` Helper: UUID → str, datetime → isoformat Konvertierung
-  - Alle CRUD-Operationen nutzen `_row_to_dict()` für konsistente Typen
-  - Verhindert Vergleichsprobleme zwischen Supabase (String) und asyncpg (UUID)
-- **memory/watchlist.py**: Migration zu `execute_async()`
-  - Alle DB-Operationen jetzt nativ async statt `asyncio.to_thread()`
-  - Bessere Performance in FastAPI-Routes durch native async I/O
-- **memory/short_term.py**: JSONB Double-Encode Schutz
-  - Entfernt manuelles `json.dumps()` - asyncpg übernimmt automatisch
-  - Verhindert doppelte JSON-Kodierung in bullet_points Feld
-
-### 🔧 Typ-Kompatibilität
-- **UUID Handling**: Konvertiert zu Strings für Abwärtskompatibilität
-- **DateTime Format**: ISO-8601 Strings für konsistente API-Responses
-- **JSONB Felder**: Automatische Kodierung/Dekodierung durch asyncpg
-
-### ✅ Validierung
-- **Compilation Tests**: Alle Python-Module kompilieren erfolgreich
-- **Async-First**: Native async Patterns für optimale Performance
-- **Zero Breaking Changes**: Vollständige Kompatibilität mit bestehendem Code
-
-## [6.0.1] - 2026-03-22 - PostgreSQL Drop-in Adapter
+## [6.0.3] - 2026-03-22 - PostgreSQL Drop-in Adapter
 
 ### 🗄️ Database Migration
 - **database.py**: PostgreSQL QueryBuilder mit identischer Supabase-API
@@ -619,7 +662,6 @@ DeepSeek bleibt für Audit-Reports, Groq für Extraktion.
   - Filter-Methoden: `eq`, `neq`, `gte`, `lte`, `gt`, `lt`, `ilike`, `in_`, `is_`
   - Modifikatoren: `order`, `limit`
   - RETURNING * auf allen Schreiboperationen
-  - Synchroner `execute()` Wrapper via asyncio für bestehenden Code
   - JSON/JSONB Codec auto-registered für Supabase-Kompatibilität
 - **db.py**: Dünne Wrapper-Schicht, `get_supabase_client()` leitet weiter
   - Alle 177 bestehenden Aufrufe bleiben unverändert
@@ -628,11 +670,10 @@ DeepSeek bleibt für Audit-Reports, Groq für Extraktion.
   - PostgreSQL Pool bei Server-Start automatisch erstellt
   - Fehlerbehandlung mit Logging bei Verbindungsproblemen
 
-### 🔄 Zero-Code Migration
-- **Drop-in Replacement**: Kein einziger der 177 Supabase-Aufrufe muss geändert werden
-- **API-Kompatibilität**: `ExecuteResult(data=[...])` wie Supabase-Response
-- **Chaining-Syntax**: Volle Unterstützung für Method-Chaining
-- **Async/Sync Bridge**: Funktioniert in beiden Kontexten
+### 🔧 Konfiguration
+- **DATABASE_URL**: lokale PostgreSQL-Verbindung über `postgres`-Service
+- **Backend-Dependencies**: `asyncpg`, `psycopg2-binary`, `pgvector`
+- **Init-Skripte**: `database/init/01_extensions.sql`, `02_schema.sql`, `03_seed.sql`
 
 ## [5.16.4] - 2026-03-22 - Cascade 5 Self-Review
 
@@ -698,7 +739,7 @@ DeepSeek bleibt für Audit-Reports, Groq für Extraktion.
 - **Error Handling**: Reddit-Daten optional, graceful fallback
 
 ### 📊 Integration Benefits
-- **Divergenz-Erkennung**: Retail gierig + Insider bearish = starkes Short-Signal
+- **Divergenz-Erkennung**: Retail gierig + Insider bearisch = starkes Short-Signal
 - **Markt-Kontext**: Fear & Greed gibt übergeordnetes Sentiment
 - **Kohärenz**: Keine Feature-Inseln mehr, alle Daten fließen zusammen
 
@@ -985,10 +1026,27 @@ DeepSeek bleibt für Audit-Reports, Groq für Extraktion.
 - backend/app/analysis/groq.py
 - docs/TODO.md (priorisierte Aufgabenliste)
 
-### 🔧 Bug Fixes (Kritisch)
-- **chart_analyst.py**: Fallback-Dict enthält jetzt alle 6 Reasoning-Felder (why_entry, why_stop, trend_context, floor_scenario, turnaround_conditions, falling_knife_risk)
-- **markets/page.tsx**: API-Pfad korrigiert von `/api/data/chart-analysis/` zu `/api/chart-analysis/` — Index-Analyse funktioniert jetzt
-- **earnings/page.tsx**: Battle Card zeigt "Kein Rating" für neue Ticker ohne Scores statt fälschlich "Meiden"
+### 🔧 Backend-Änderungen
+- **market_overview.py**: SP500_TOP50 statt DOW_COMPONENTS, breadth_index hinzugefügt
+- **get_market_news_for_sentiment()**: FinBERT-Sentiment für Marktnachrichten
+- **get_general_news()**: Finnhub General News Endpoint
+- **Neue Endpoints**: /market-news-sentiment, /economic-calendar
+- **Promise.allSettled**: Robuste Parallel-Fetches für alle Blöcke
+
+### 🎨 Frontend-Updates
+- **SentimentBlock**: Neue Komponente mit Ticker/Markt/Vergleich und Warnungen
+- **UI Integration**: Sentiment-Daten in Research, Watchlist und Earnings Radar
+
+### 📊 API-Endpunkte
+- **Research**: `/api/data/research/{ticker}` - Sentiment-Felder erweitert
+- **Watchlist**: `/api/watchlist/enriched` - Batch-Sentiment-Enrichment
+- **Earnings**: `/api/data/earnings-radar` - Pre-Earnings Sentiment
+- **Add Ticker**: `/api/watchlist/` - BackgroundTasks für sofortigen Scan
+
+### ⚡ Performance
+- **Batch-Queries**: Sentiment-Daten für alle Ticker in einem Request
+- **Cache-Strategie**: Optimiertes Caching für Sentiment-Batches
+- **Async Processing**: BackgroundTasks für non-blocking News-Scans
 
 ## [5.12.2] - 2026-03-22 - Morning Brief + Index Analysis
 
@@ -1060,22 +1118,51 @@ DeepSeek bleibt für Audit-Reports, Groq für Extraktion.
 
 ### 🎨 Frontend
 - **TradeSetupBlock**: Neue Felder im TypeScript-Typ und UI-Rendering
-- **Risk Banner**: High/Medium Falling-Knife Risiken prominently angezeigt
+- **Risk Banner**: High/Medium Falling-Knife Risiken prominent angezeigt
 - **Collapsible Reasoning**: "Begründung anzeigen" Accordion mit detaillierter Analyse
 
-## [5.11.2] - 2026-03-22 - Settings Command Center Hotfix
+## [5.11.2] - 2026-03-22 - Earnings Battle Card
 
-### 🐛 Bugfixes (Review-Findings)
-- **Module-Status**: Object.entries() statt .map() für Record-Struktur, Log-Drilldown per Modul implementiert
-- **Fehler-Feed**: data.errors statt data.logs verwenden
-- **Log-Stats**: data.stats.error/warning/info statt flache Felder
-- **DB-Status**: /api/diagnostics/db statt /api/data/db-status + korrekte Object.entries-Struktur
-- **FinBERT-Test**: Query-Param ?text= statt JSON-Body
-- **Scoring-Config**: Object.entries() auf echte YAML-Struktur, Gewichte als %, Thresholds separat
-- **Pipeline-Ergebnisse**: JSON geparst, echte Zusammenfassung statt fire-and-forget
+### 🚀 Trading-Mehrwert
+- **Setup-Ampel**: Grün/Amber/Rot aus Opp+Torp Score
+- **Expected Move**: ±% mit Break-Even Levels
+- **Track Record**: Beats/8 + Ø Surprise + Letzter Beat
+- **Konsens**: EPS + Revenue auf einen Blick
+- **Buy-Rumor Warnung**: wenn +10% in 30T vor Earnings
+- **Backend**: quick_snapshot +expected_move, +price_change_30d
 
-### 🚀 Neu
-- **Readiness-Banner**: Kompakter Status-Header "Bereit / Prüfen erforderlich" mit Module-Count, Error-Count und Systemcheck-Zeitstempel
+### 🏗️ Backend
+- **quick_snapshot**: Expected Move aus IV berechnet
+- **30T-Performance**: Buy-Rumor Detection für Preis-Momentum
+- **Neue Felder**: expected_move_pct/usd, price_change_30d, current_price
+
+### 🎨 Frontend
+- **BattleCard**: Kompakte Darstellung aller trading-relevanten Daten
+- **Setup-Ampel**: Visuelle Entscheidungsgrundlage Tradeable/Prüfen/Meiden
+- **Risk Assessment**: Buy-Rumor Warnung bei starkem Vorlauf
+- **Research Link**: Direkter Sprung zur Detailseite
+
+## [5.11.0] - 2026-03-22 - Chart-Analyse Begründung
+
+### 🚀 Trading-Mehrwert
+- **Anti-Falling-Knife**: Jede Chart-Analyse enthält jetzt:
+  why_entry: Warum diese Entry-Zone (technische Struktur)
+  why_stop: Warum dieser Stop (welches Level geschützt)
+  trend_context: Ist der Trend intakt oder gebrochen?
+  floor_scenario: Nächster Support wenn Stop reisst
+  turnaround_conditions: Was für Trendwende nötig ist
+  falling_knife_risk: low/medium/high
+- **UI**: Falling-Knife Warnung (rot/amber) über Levels
+  Aufklappbarer "Begründung"-Block nach den Kacheln
+
+### 🏗️ Backend
+- **chart_analyst.py**: DeepSeek-Prompt um 6 neue Begründungsfelder erweitert
+- **JSON-Schema**: Strukturierte Antworten mit Trend-Kontext und Risiko-Bewertung
+
+### 🎨 Frontend
+- **TradeSetupBlock**: Neue Felder im TypeScript-Typ und UI-Rendering
+- **Risk Banner**: High/Medium Falling-Knife Risiken prominent angezeigt
+- **Collapsible Reasoning**: "Begründung anzeigen" Accordion mit detaillierter Analyse
 
 ## [5.10.11] - 2026-03-22 - Stability: Free-Tier News Sentiment Hardening
 
@@ -1112,7 +1199,7 @@ DeepSeek bleibt für Audit-Reports, Groq für Extraktion.
 - TechnicalSetup: change_5d_pct + change_1m_pct ergänzt
   einmal berechnen, mehrfach verwenden
 
-## [5.10.8] - 2026-03-22 - Performance: Markets Cold-Start Fix
+## [5.10.8] - 2026-03-22 - Markets Cold-Start Fix
 
 ### 🚀 Performance (kritisch)
 Vorher: 1-4 Minuten Cold-Start
@@ -1152,41 +1239,7 @@ Nachher: ~8-15 Sekunden Cold-Start
 ### 📝 Doku
 - **Future Scope**: Größere Architekturthemen wurden in `docs/FUTURE.md` verschoben
 
-## [5.10.5] - 2026-03-21 - Composite Regime Markets Header
-
-### ✨ Features
-- **Composite Regime Header**: Neuer prominenter Header auf /markets mit gewichteter Regime-Berechnung
-- **Multi-Faktor Scoring**: VIX, Credit Spread, Yield Curve, Market Breadth, Risk Appetite, VIX Structure
-- **Visual Regime Indicator**: Farbcodierte Anzeige (Risk-On/Neutral/Risk-Off) mit Score und Dominant-Faktor
-- **Expandable Details**: Klapbarer Faktor-Grid mit Signalen, Gewichtungen und Methodik-Erklärung
-- **Pure Frontend**: Berechnung läuft vollständig im Frontend, keine neue Backend-API benötigt
-
-### 🔧 Frontend
-- **calcCompositeRegime()**: Pure Funktion mit gewichteten Durchschnitt von 6 Marktfaktoren
-- **RegimeHeader**: Neue React-Komponente mit Mini-Dots und Detail-Ansicht
-- **MacroDashboard**: FRED-Regime jetzt als kleiner Hinweis statt prominenter Badge
-- **Markets Integration**: RegimeHeader vor allen 9 Daten-Blöcken positioniert
-
-### 🔧 Backend
-- **Placeholder**: `composite_regime_score` Feld in `daily_snapshots` für zukünftige historische Analysen
-
-### 📊 Methodik
-- **Score-Berechnung**: Gewichteter Durchschnitt (VIX 25%, Credit 20%, Yield 15%, Breadth 20%, Risk 10%, VIX Structure 10%)
-- **Regime-Schwellen**: Score ≥1.0 = Risk-On, ≤-0.5 = Risk-Off, sonst Neutral
-- **Signal-Stufen**: Jeder Faktor liefert -1, 0, 1, oder 2 Punkte basierend auf Marktschwellen
-
-## [5.10.4] - 2026-03-21 - Diagnostics Proxy Fix for Frontend
-
-### 🐛 Fixes
-- **Status Page**: `GET /api/diagnostics/full` läuft jetzt über eigene Next.js-Route statt Rewrite-Proxy
-- **Settings Page**: `GET /api/diagnostics/db` läuft ebenfalls über eine eigene Route
-- **Log Noise**: `Failed to proxy` / `ENOTFOUND` / `ECONNREFUSED` im `kafin-frontend`-Log für Diagnostics sollten damit verschwinden
-
-### 🔧 Frontend
-- **Route Handlers**: Diagnostics-Requests werden mit Timeout und sauberem 502/504-Fallback behandelt
-- **Compatibility**: `details`-Alias ergänzt, damit die Settings-Seite die Diagnose-Daten weiterverarbeiten kann
-
-## [5.10.3] - 2026-03-21 - FRED Robustness & Secret Redaction
+## [5.10.5] - 2026-03-21 - FRED Robustness & Secret Redaction
 
 ### 🐛 Fixes
 - **FRED Retry**: Temporäre `5xx`-Antworten von FRED werden bis zu 3x mit Backoff erneut versucht
@@ -1196,7 +1249,7 @@ Nachher: ~8-15 Sekunden Cold-Start
 ### 📝 Doku
 - **FRED API Docs**: Hartkodierten API-Key entfernt und Fehlerverhalten dokumentiert
 
-## [5.10.2] - 2026-03-21 - Ignore-Filter für erwartbare yfinance-404s
+## [5.10.4] - 2026-03-21 - Ignore-Filter für erwartbare yfinance-404s
 
 ### 🐛 Fixes
 - **Log-Filter**: Neue Kategorie `Ignore` für erwartbare yfinance-404-Fehler
@@ -1418,14 +1471,6 @@ Ticker merklich verändern — das ist korrekt.
 - `market_overview.py`: versionierte Cache-Keys für Übersicht und Intermarket-Signale
 - `api_market_audit`: DeepSeek-Prompt weiterhin mit Energie-, News- und Rotations-Kontext
 
-## [5.4.4] - 2026-03-21 - FinBERT/torch Verifikation
-
-### ✅ Verifikation
-- torch CPU-Version korrekt in requirements.txt
-- FinBERT-Modell wird bei Docker-Build vorgeladen
-- Fallback wenn torch fehlt (neutrale Scores statt Absturz)
-- Container-Test: `analyze_sentiment_batch()` funktioniert
-
 ## [5.6.0] - 2026-03-21 - Markets Dashboard v2
 
 ### 🚀 Trading-Mehrwert
@@ -1519,7 +1564,7 @@ Ticker merklich verändern — das ist korrekt.
 ## [5.5.1] - 2026-03-21 - P1b: Markets Dashboard v2 UI-Vervollständigung
 ### UI-Fehlerbehebung & Info-Block
 - **Dashboard-Info Block** hinzugefügt (10. Block mit Refresh-Legende)
-- **Block-Header-Badges** für alle 9 Datenblöcke implementiert
+- **Block-Header-Badges** für alle 9 Daten-Blöcke implementiert
 - **News-Block Empty-State** verbessert: bleibt sichtbar statt zu verschwinden
 - **API-Proxy** korrigiert: `localhost:8000` statt `8001`
 - **Frontend-Rendering** jetzt vollständig gemäß Dashboard-Spezifikation
@@ -2094,14 +2139,10 @@ The Status page was completely broken due to an ImportError in the diagnostics e
   - Target 1 + Target 2: grün gepunktet
   - Bias (bullish/bearish/neutral), Analysis-Text, Key-Risk
 
-### 🔌 Neue API-Endpoints
-- `GET /api/data/ohlcv/{ticker}?period=6mo&interval=1d` — OHLCV + SMA50/200
-- `GET /api/data/chart-overlays/{ticker}` — Alle Chart-Events aus Supabase
-
-### 🛠️ Verbesserungen
-- `chart_analyst.py`: DeepSeek gibt jetzt strukturiertes JSON zurück
+### 🔧 Backend-Änderungen
+- **chart_analyst.py**: DeepSeek gibt jetzt strukturiertes JSON zurück
   mit Fallback auf berechnete Levels bei Parse-Fehler
-- `ChartAnalysisSection.tsx`: Vollständig neu gebaut mit lightweight-charts
+- **ChartAnalysisSection.tsx**: Vollständig neu gebaut mit lightweight-charts
 - Legacy-Felder (support, resistance, analysis) bleiben für Abwärtskompatibilität
 
 ## [4.0] - 2026-03-18 - Signal Intelligence Complete

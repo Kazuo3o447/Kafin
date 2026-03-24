@@ -7,11 +7,11 @@ Kafin ist eine quantitative Handelsplattform für Aktienanalyse und automatisier
 ## Infrastruktur
 
 ### Hardware & Umgebung
-- **Version**: v6.1.5
+- **Version**: v7.9.0
 - **Umgebung**: production (Docker Swarm)
 - **Hardware**: NUC i3 / 16GB RAM / ZimaOS
 - **Container**: Backend (FastAPI) + Frontend (Next.js) + n8n
-- **Datenbank**: PostgreSQL 16 + pgvector (lokal)
+- **Datenbank**: PostgreSQL 16 + pgvector (lokal; `get_supabase_client()` ist nur ein Compatibility-Shim)
 - **Cache**: Redis (Session + API Cache + Usage Buffer)
 
 ### Backend-Struktur (Modular)
@@ -53,7 +53,7 @@ kafin-n8n         → n8n Automation Platform
 
 ### Backend Config
 - `config/scoring.yaml` — Score-Gewichtungen
-- `config/.env` — API Keys, Supabase
+- `config/.env` — API Keys, lokale Services und DB-Connectivity
 - `backend/app/logger.py` — Module-Definition
 - `docker-compose.yml` — Container-Setup
 - `n8n/workflows/` — Automation-Definitionen
@@ -109,7 +109,7 @@ kafin-n8n         → n8n Automation Platform
 - **Lucide** — Icon Library
 
 ### Daten & Cache
-- **PostgreSQL** — Haupt-Datenbank (via Supabase)
+- **PostgreSQL** — Haupt-Datenbank (lokal via Container; Compatibility-Shim für Legacy-Code)
 - **Redis** — Session + API Cache
 - **In-Memory** — Log Buffer (500 entries)
 

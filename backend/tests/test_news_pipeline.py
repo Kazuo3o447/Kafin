@@ -2,14 +2,20 @@ import pytest
 from unittest.mock import patch, MagicMock
 from backend.app.data.news_processor import _categorize_news, process_news_for_ticker
 from backend.app.data.sec_edgar import check_recent_filings
-from backend.schemas.base import NewsItem
+from typing import Any  
+
+class NewsItem:
+    def __init__(self, headline: str, summary: str, source: str):
+        self.headline = headline
+        self.summary = summary
+        self.source = source
 
 @pytest.fixture
 def mock_news():
     return [
-        NewsItem(headline="Apple reports record earnings for Q4", summary="EPS beats expectations", source="Finnhub"),
-        NewsItem(headline="SEC investigates new accounting practices", summary="Regulatory scrutiny increases", source="Yahoo"),
-        NewsItem(headline="New iPhone launched", summary="General product update", source="Finnhub")
+        NewsItem("Apple reports record earnings for Q4", "EPS beats expectations", "Finnhub"),
+        NewsItem("SEC investigates new accounting practices", "Regulatory scrutiny increases", "Yahoo"),
+        NewsItem("New iPhone launched", "General product update", "Finnhub")
     ]
 
 def test_categorize_news():

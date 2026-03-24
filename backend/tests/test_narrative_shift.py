@@ -7,7 +7,7 @@ from backend.app.analysis.scoring import calculate_opportunity_score, calculate_
 from schemas.sentiment import NewsBulletPoint
 from backend.app.config import settings
 
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 FIXTURE_PATH = os.path.join(ROOT_DIR, "fixtures", "deepseek", "narrative_variants.json")
 
 # Stelle sicher, dass Mock-Modus für DB an ist

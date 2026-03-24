@@ -4,6 +4,31 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 
 ## 🚀 Aktuelle Features (März 2026)
 
+### v7.9.1 Highlights
+- **Audit-Sammlung & Baseline**: Der Bot befindet sich jetzt in der Audit-Sammelphase. Decision Snapshots werden systematisch für die spätere Kalibrierung gesammelt.
+- **Decision Snapshots API**: `GET /api/data/decision-snapshots` und `POST /api/data/decision-snapshots` für Analyse und batch-basierte Speicherung.
+- **Lernpfade-Status**: `GET /api/data/lernpfade-stats` zeigt die Reife der Earnings- und Momentum-Pfade sowie den Kalibrierungs-Status.
+- **Fokus**: Vollständige Datennutzung und nachvollziehbare Entscheidungen, nicht aggressive Gewichtsanpassungen.
+- **Final Technical Cleanup**: Async-Fehler, Pydantic-Deprecation und UTC-Zeitstempel vollständig behoben
+- **Test-Status**: Backend-Tests sind stabil (`24 passed, 6 warnings`, keine Errors)
+- **Bot-Dokumentation**: `bot.md` ist die kanonische Referenz für Datenquellen, Scoring, Review-Flow, Snapshot-/Learning-Kurve und Explainability
+- **Decision Pipeline**: Review-/Audit-Flow nutzt jetzt die komplette Datenbasis für Earnings, Fundamentals, Technicals, Macro, Sentiment, Insider, Short Interest und Options
+
+### v7.5.0 Highlights
+- **Makro-Regime-Gate**: Risk Off (VIX > 30) degradiert Long-Empfehlungen zu Watch
+- **ATR-basierte Stops**: 1.5× ATR statt pauschal -8% mit Sicherheitsprüfung
+- **Journal-Redirect**: /journal leitet auf Performance#my_trades weiter (eine Quelle der Wahrheit)
+- **Options-Flow Boost**: Vor Earnings (≤5T) 5%→12% Gewichtung, budget-neutral
+- **Smart-Money Focus**: Unusual Options Activity vor Earnings stärker gewichtet
+
+### v7.4.0 Highlights
+- **Twelve Data Integration**: ADX Trendstärke + Stochastic Momentum + IV Percentile
+- **Enhanced Technical Scoring**: ADX und Stochastic fließen in technical_setup-Score ein (±1.5 Punkte)
+- **Research Dashboard**: Neue TD-Indikatoren sichtbar mit Trend-Badges und Kreuzungssignalen
+- **IV Percentile**: Approximation aus HV20/HV60-Ratio ersetzt hartes TODO
+- **System Diagnostics**: Twelve Data als Service #10 in API-Health-Check
+- **Budget-Optimiert**: ~30-50 Calls/Tag von 800 Free-Tier-Limit
+
 ### v7.3.1 Highlights
 - **Async Performance Overhaul**: Alle yfinance-Aufrufe non-blocking, Market Breadth wiederhergestellt
 - **Batch-Download Optimierung**: `get_market_context` nutzt jetzt parallele Downloads
@@ -35,6 +60,7 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **FMP**: Finanzkennzahlen, Earnings, Analyst-Grades
 - **Finnhub**: News, Short Interest, Insider-Transaktionen
 - **yfinance**: Kursdaten, technische Indikatoren, Fallback Earnings
+- **Twelve Data**: ADX, Stochastic, IV Percentile (Free Tier: 800/Tag)
 - **FRED**: Makro-Daten (VIX, Yield Curve, Fed Funds, etc.)
 - **Reddit Monitor**: Retail Sentiment (gecacht 1h)
 - **Fear & Greed Index**: CNN Money Makro-Kontext
@@ -144,7 +170,7 @@ docker-compose up -d kafin-frontend
 - **Logging**: RotatingFileHandler mit 10MB Limit, 5 Backups, persistente Docker-Volumes
 - **Monitoring**: Diagnostics-Endpoint mit Latenz-Tracking und isolierter Fehlerbehandlung
 
-### Frontend (Next.js 15)
+### Frontend (Next.js 16)
 - **Framework**: TypeScript, Tailwind CSS v4, App Router
 - **Design-System**: Dark Mode mit CSS-Variablen
 - **State Management**: React Hooks, Client-Side Caching
@@ -162,6 +188,7 @@ docker-compose up -d kafin-frontend
 ### Wichtige Dateien
 - `STATUS.md` - Detaillierter Projektstatus und Meilensteine
 - `ARCHITECTURE.md` - Technische Architektur
+- `bot.md` - Kanonische Bot-Dokumentation für Datenquellen, Scoring und Review-Flow
 - `database/schema.sql` - Datenbank-Schema
 - `docs/apis/` - API-Dokumentationen
 - `prompts/` - KI-Prompt-Templates
@@ -198,7 +225,7 @@ docker-compose up -d kafin-frontend
 - **API Usage Tracking**: Redis-Puffer + PostgreSQL Aggregation mit Echtzeit-Token-Countern und Call-Limits
 
 ## 🐛 Letzte Fixes (20. März 2026)
-- **Bugfix**: Report-Generierung schlug aufgrund von Timeouts (DeepSeek > 120s) und fehlenden Supabase-Spalten (`report_text`) fehl. Next.js Proxy und `httpx` Timeouts auf 300s (5min) angehoben und Insert-Schema für `audit_reports` korrigiert.
+- **Bugfix**: Report-Generierung schlug aufgrund von Timeouts (DeepSeek > 120s) und fehlenden Datenbank-Spalten (`report_text`) fehl. Next.js Proxy und `httpx` Timeouts auf 300s (5min) angehoben und Insert-Schema für `audit_reports` korrigiert.
 - **Bugfix**: 502 Bad Gateway / Timeout bei der Audit-Report Generierung behoben. Docker-Netzwerk-Routing repariert, indem `INTERNAL_API_URL` im Frontend-Container explizit auf `http://kafin-backend:8000` gesetzt wurde.
 - **Bugfix**: httpx.ReadTimeout in Finnhub Earnings-Kalender API behoben (Timeout auf 30s erhöht)
 - **Bugfix**: Dead `get_social_sentiment` Import aus Report-Generator entfernt
@@ -219,6 +246,6 @@ docker-compose up -d kafin-frontend
 
 ---
 
-**Version**: 6.2.0 - Pre/After-Market Briefing System & Signal Feed Dashboard
-**Letztes Update**: 2026-03-23
+**Version**: 7.9.1 - Final Technical Cleanup
+**Letztes Update**: 2026-03-24
 **Status**: Production Ready

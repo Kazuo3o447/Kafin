@@ -31,6 +31,7 @@ class NewsBulletPoint(BaseModel):
 class ShortInterestData(BaseModel):
     """Short-Interest-Daten."""
     ticker: str
+    short_interest: float = 0.0
     short_interest_percent: float = 0.0
     days_to_cover: float = 0.0
     short_interest_trend: str = "stable"       # "rising" | "falling" | "stable"

@@ -15,7 +15,7 @@ Was-wenn-Szenarien und Options-Setup-Empfehlungen.
 
 from fastapi import APIRouter, Query, HTTPException
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel
 
 from backend.app.logger import get_logger
@@ -318,7 +318,7 @@ DEINE AUFGABE:
         return {
             "status": "success",
             "report": report,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
             "data_used": {
                 "indices": len(index_lines),
                 "sectors": len(sector_lines),

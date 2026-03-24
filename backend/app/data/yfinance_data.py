@@ -193,8 +193,56 @@ async def get_technical_setup(ticker: str) -> TechnicalSetup:
             return TechnicalSetup(ticker=ticker, current_price=0.0)
 
     result = await asyncio.to_thread(_fetch)
+    # ── Twelve Data Enrichment ────────────────────────────────────
+    # ADX und Stochastic werden von yfinance nicht zuverlässig geliefert.
+    # TD wird als ergänzender Layer aufgerufen (async, nicht-blockierend).
+    # Fehler hier brechen nie den Haupt-Flow.
+    try:
+        from backend.app.data.twelvedata import get_td_technicals
+        td = await get_td_technicals(ticker)
+
+        adx_data  = td.get("adx")
+        stoch_data = td.get("stochastic")
+
+        if adx_data:
+            result.adx_14             = adx_data.get("adx")
+            result.adx_plus_di        = adx_data.get("plus_di")
+            result.adx_minus_di       = adx_data.get("minus_di")
+            result.adx_trend_strength = adx_data.get("trend_strength")
+
+        if stoch_data:
+            result.stoch_k      = stoch_data.get("slow_k")
+            result.stoch_d      = stoch_data.get("slow_d")
+            result.stoch_signal = stoch_data.get("signal")
+
+        # IV-Percentile Approximation:
+        # Wenn iv_percentile noch None ist (kein Mock-Daten-Modus),
+        # schätzen wir aus HV20/HV60 Ratio:
+        # HV20 >> HV60 → IV wahrscheinlich hoch → hoher Percentile
+        if result.iv_percentile is None:
+            hv20 = result.historical_volatility_20d
+            hv60 = result.historical_volatility_60d
+            if hv20 and hv60 and hv60 > 0:
+                ratio = hv20 / hv60
+                if ratio > 1.5:
+                    result.iv_percentile = round(min(95.0, 50 + (ratio - 1.0) * 45), 1)
+                elif ratio > 1.2:
+                    result.iv_percentile = round(min(80.0, 50 + (ratio - 1.0) * 30), 1)
+                elif ratio < 0.7:
+                    result.iv_percentile = round(max(5.0, 50 - (1.0 - ratio) * 45), 1)
+                else:
+                    result.iv_percentile = 50.0  # Neutral
+
+        if adx_data or stoch_data:
+            result.td_enriched = True
+
+    except Exception as e:
+        logger.debug(f"TD Enrichment {ticker} (non-critical): {e}")
+    # ── Ende TD Enrichment ─────────────────────────────────────────
+
     if result and result.current_price > 0:
-        await cache_set(cache_key, result.dict(), ttl_seconds=300)
+        await cache_set(cache_key, result.model_dump(), ttl_seconds=300)
+
     return result
 
 

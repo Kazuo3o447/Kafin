@@ -1,6 +1,7 @@
 import os
+import json
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from backend.app.logger import get_logger
 from backend.app.data.finnhub import get_company_news, get_short_interest, get_insider_transactions, get_economic_calendar
 from backend.app.data.fmp import (
@@ -684,9 +685,9 @@ async def generate_audit_report(ticker: str) -> str:
     # Assemble data context for scoring
     valuation_ctx = {}
     if metrics:
-        valuation_ctx = metrics.dict()
+        valuation_ctx = _model_to_dict(metrics)
     elif profile:
-        valuation_ctx = profile.dict()
+        valuation_ctx = _model_to_dict(profile)
     elif yf_fundamentals:
         valuation_ctx = {
             "ticker": ticker,
@@ -697,15 +698,15 @@ async def generate_audit_report(ticker: str) -> str:
         }
 
     data_ctx = {
-        "earnings_history": history.dict() if history else {},
+        "earnings_history": _model_to_dict(history),
         "valuation": valuation_ctx,
-        "short_interest": short_interest.dict() if short_interest else {},
-        "insider_activity": insiders.dict() if insiders else {},
-        "macro": macro.dict() if macro else {},
-        "technicals": technicals.dict() if technicals else {},
+        "short_interest": _model_to_dict(short_interest),
+        "insider_activity": _model_to_dict(insiders),
+        "macro": _model_to_dict(macro),
+        "technicals": _model_to_dict(technicals),
         "news_memory": news_memory if news_memory else [],
-        "options": options.dict() if options else {},
-        "social": social.dict() if social else {},
+        "options": _model_to_dict(options),
+        "social": _model_to_dict(social),
         "composite_sentiment": composite_sentiment,
         "web_sentiment_score": web_sentiment_score,
         "finbert_sentiment": finbert_sentiment,
@@ -731,7 +732,17 @@ async def generate_audit_report(ticker: str) -> str:
     # 2. Scores
     opp_score = await calculate_opportunity_score(ticker, data_ctx)
     torp_score = await calculate_torpedo_score(ticker, data_ctx)
-    rec = await get_recommendation(opp_score, torp_score)
+    
+    # 2.1 Makro-Daten für Regime-Gate
+    _macro_regime = getattr(macro, "regime", None) if macro else None
+    _vix = getattr(macro, "vix", None) if macro else None
+    
+    rec = await get_recommendation(
+        opp_score, 
+        torp_score,
+        macro_regime=_macro_regime,
+        vix=_vix,
+    )
     
     # 2.5 Langzeit-Gedächtnis laden
     lt_memory = ""
@@ -878,6 +889,7 @@ async def generate_audit_report(ticker: str) -> str:
     mismatch_score_val = None
     if metrics and all(hasattr(metrics, attr) for attr in ["debt_to_equity", "current_ratio", "free_cash_flow_yield", "pe_ratio"]):
         from backend.app.analysis.scoring import calculate_quality_score, calculate_mismatch_score
+        
         quality_score_val = calculate_quality_score(
             debt_to_equity=getattr(metrics, "debt_to_equity", None),
             current_ratio=getattr(metrics, "current_ratio", None),
@@ -1091,6 +1103,17 @@ async def generate_audit_report(ticker: str) -> str:
     # Sicherheitsnetz: alle verbleibenden unfilled Placeholders mit N/A ersetzen
     import re
     user_prompt = re.sub(r"\{\{[^}]+\}\}", "N/A", user_prompt)
+    
+    # Makro-Warnung in den Report-Kontext einbauen
+    macro_gate_note = ""
+    if rec and getattr(rec, "macro_warning", None):
+        macro_gate_note = (
+            f"\n\n⚠️ MAKRO-REGIME-GATE AKTIV:\n{rec.macro_warning}\n"
+            f"Die Empfehlung wurde automatisch angepasst. "
+            f"Erkläre dem Trader warum das Makro-Umfeld trotz "
+            f"starker Fundamentaldaten eine Absicherung erfordert.\n"
+        )
+        user_prompt = user_prompt + macro_gate_note
         
     result = await call_deepseek(sys_prompt, user_prompt, model="deepseek-reasoner")
     if "MOCK_REPORT:" in result:
@@ -1132,12 +1155,12 @@ async def generate_audit_report(ticker: str) -> str:
                 earnings_countdown = None
                 if estimates and hasattr(estimates, 'report_date') and estimates.report_date:
                     try:
-                        from datetime import date as _date_cls
+                        from datetime import date as date_type
                         earnings_date = (
                             estimates.report_date if hasattr(estimates.report_date, "toordinal")
-                            else _date_cls.fromisoformat(str(estimates.report_date))
+                            else date_type.fromisoformat(str(estimates.report_date))
                         )
-                        earnings_countdown = (earnings_date - _date_cls.today()).days
+                        earnings_countdown = (earnings_date - date_type.today()).days
                     except Exception:
                         pass
 
@@ -1150,14 +1173,14 @@ async def generate_audit_report(ticker: str) -> str:
                     report_text=mock_response,
                     raw_data={
                         "valuation": valuation_ctx,
-                        "technicals": technicals.dict() if technicals else {},
-                        "short_interest": short_interest.dict() if short_interest else {},
-                        "insiders": insiders.dict() if insiders else {},
-                        "options": options.dict() if options else {},
-                        "earnings_history": history.dict() if history else {},
+                        "technicals": _model_to_dict(technicals),
+                        "short_interest": _model_to_dict(short_interest),
+                        "insiders": _model_to_dict(insiders),
+                        "options": _model_to_dict(options),
+                        "earnings_history": _model_to_dict(history),
                         "news_memory": news_memory if news_memory else [],
-                        "social": social.dict() if social else {},
-                        "macro": macro.dict() if macro else {},
+                        "social": _model_to_dict(social),
+                        "macro": _model_to_dict(macro),
                         "chart_analysis": chart_data,
                         "relative_strength": {
                             "spy_1d_pct": spy.get("change_1d_pct"),
@@ -1181,7 +1204,10 @@ async def generate_audit_report(ticker: str) -> str:
                     earnings_countdown=earnings_countdown,
                 )
             except Exception as snap_err:
-                logger.warning(f"Decision Snapshot für {ticker} konnte nicht gespeichert werden: {snap_err}")
+                logger.error(f"Decision Snapshot für {ticker} konnte nicht gespeichert werden: {snap_err}")
+                logger.error(f"Snapshot Details - Opp: {opp_score.total_score if opp_score else 0}, Torp: {torp_score.total_score if torp_score else 0}, Rec: {rec.recommendation if rec else 'unknown'}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
             
             # Redis Cache für Research invalidieren
             try:
@@ -1191,16 +1217,9 @@ async def generate_audit_report(ticker: str) -> str:
                 logger.info(f"Research Cache für {ticker} invalidiert")
             except Exception:
                 pass
-            try:
-                await open_shadow_trade(
-                    ticker=ticker,
-                    recommendation=rec.recommendation if rec else "unknown",
-                    opportunity_score=opp_score.total_score if opp_score else 0.0,
-                    torpedo_score=torp_score.total_score if torp_score else 0.0,
-                    audit_report_id=None,
-                )
-            except Exception as shadow_err:  # noqa: BLE001
-                logger.debug(f"Shadow Trade Open (non-critical): {shadow_err}")
+            # WICHTIG: Kein automatischer Shadow-Trade mehr aus einem Research/Report-Run.
+            # Die Trade-Entscheidung wird manuell über den Review-Button ausgelöst.
+            # Die finale Entscheidungsgrundlage liegt bereits im decision_snapshots-Record.
     except Exception as e:
         logger.debug(f"Audit-Report DB-Speicher: {e}")
 
@@ -1257,17 +1276,11 @@ async def generate_weekly_summary() -> str:
     ticker_bullets = []
     for ticker in tickers:
         bullets = await get_bullet_points(ticker)
-        recent = []
-        for b in bullets:
-            try:
-                bullet_date = parse_date(str(b.get("date", "2000-01-01")))
-                if bullet_date.tzinfo:
-                    bullet_date = bullet_date.replace(tzinfo=None)
-                if bullet_date >= cutoff_dt:
-                    recent.append(b)
-            except Exception:
-                pass
-        ticker_bullets.extend(recent)
+        cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
+        recent = [b for b in bullets if b.get("date", "") >= cutoff]
+        for b in recent:
+            bp_text = " | ".join(b["bullet_points"]) if isinstance(b.get("bullet_points"), list) else str(b.get("bullet_points", ""))
+            ticker_bullets.append(f"[{ticker}] ({b.get('category', 'general')}) {bp_text}")
 
     # Sortiere NUR die Ticker-Events nach Material/Sentiment
     ticker_bullets.sort(key=lambda x: (
@@ -1328,7 +1341,7 @@ async def generate_sunday_report(tickers: list[str]) -> str:
 
     if not tickers:
         logger.warning("Keine Ticker für Audit-Reports.")
-        return "# KAFIN SONNTAGS-AUDIT\n\nKeine Ticker in der Watchlist."
+        return "# KAFIN SUNDAY REPORT / SONNTAGS-AUDIT\n\nKeine Ticker in der Watchlist."
 
     performance_summary = ""
     try:
@@ -1354,7 +1367,7 @@ async def generate_sunday_report(tickers: list[str]) -> str:
     reports = await asyncio.gather(*[_safe_audit(t) for t in tickers])
     reports = list(reports)
 
-    full_report = "# KAFIN SONNTAGS-AUDIT\n\n"
+    full_report = "# KAFIN SUNDAY REPORT / SONNTAGS-AUDIT\n\n"
     if performance_summary:
         full_report += f"📊 {performance_summary}\n\n---\n\n"
     full_report += "## AUDIT-REPORTS\n\n"
@@ -1902,8 +1915,7 @@ async def generate_after_market_report() -> str:
             indices_str += f"{sym}: ${p:.2f} ({c:+.2f}%)\n" if p and c else f"{sym}: N/A\n"
 
     # Makro-String
-    if macro and hasattr(macro, "dict"):
-        macro = macro.dict()
+    macro = _model_to_dict(macro)
     macro_str = (
         f"VIX: {macro.get('vix','?')} | "
         f"Credit Spread: {macro.get('credit_spread_bps','?')}bp | "
@@ -2012,7 +2024,7 @@ async def generate_session_plan() -> str:
     macro: dict = {}
     try:
         m = await get_macro_snapshot()
-        macro = m.dict() if hasattr(m, "dict") else (m or {})
+        macro = _model_to_dict(m)
     except Exception:
         pass
 
@@ -2231,127 +2243,571 @@ BTC Lagebericht:"""
     return result
 
 
+def _model_to_dict(value):
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    if hasattr(value, "dict"):
+        return value.dict()
+    return {"value": value}
+
+
+def _safe_float(value, default=None):
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _rank_components(components: dict, labels: dict[str, str], limit: int = 4) -> list[dict]:
+    ranked: list[dict] = []
+    for key, raw_value in components.items():
+        value = _safe_float(raw_value)
+        if value is None:
+            continue
+        ranked.append(
+            {
+                "key": key,
+                "label": labels.get(key, key.replace("_", " ").title()),
+                "value": round(value, 2),
+            }
+        )
+    ranked.sort(key=lambda item: item["value"], reverse=True)
+    return ranked[:limit]
+
+
+def _extract_json_object(text: str) -> dict | None:
+    if not text:
+        return None
+
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if len(lines) >= 3:
+            stripped = "\n".join(lines[1:-1]).strip()
+            if stripped.startswith("json"):
+                stripped = stripped[4:].strip()
+
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+
+    candidate = stripped[start:end + 1]
+    try:
+        parsed = json.loads(candidate)
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        return None
+
+
+def _normalize_review_recommendation(value: str | None, fallback: str) -> str:
+    if not value:
+        return fallback
+
+    normalized = str(value).strip().lower().replace("-", "_").replace(" ", "_")
+    alias_map = {
+        "strongbuy": "strong_buy",
+        "strong_buy": "strong_buy",
+        "buy": "buy_hedge",
+        "buy_hedge": "buy_hedge",
+        "watch": "watch",
+        "hold": "hold",
+        "ignore": "ignore",
+        "strongshort": "strong_short",
+        "strong_short": "strong_short",
+        "short": "strong_short",
+        "potentialshort": "potential_short",
+        "potential_short": "potential_short",
+    }
+    return alias_map.get(normalized, fallback)
+
+
+async def generate_trade_review_decision(ticker: str) -> dict:
+    """
+    Erstellt eine Reasoner-gestützte Trade-Review-Entscheidung für einen Ticker.
+    Die Funktion sammelt den aktuellen Research-Kontext, berechnet die internen
+    Scores und lässt DeepSeek Reasoner die finale Einschätzung mit Begründung
+    formulieren.
+    """
+    ticker = ticker.upper().strip()
+    if not ticker:
+        raise ValueError("Ticker darf nicht leer sein.")
+
+    logger.info(f"[TradeReview] Starte Trade-Review für {ticker}")
+
+    profile = await get_company_profile(ticker)
+    if not profile:
+        raise ValueError(f"Ticker '{ticker}' ist ungültig (kein Profil gefunden).")
+
+    estimates = None
+    try:
+        estimates = await get_analyst_estimates(ticker)
+    except Exception as e:
+        logger.warning(f"[TradeReview] Analyst estimates für {ticker}: {e}")
+
+    earnings_countdown = None
+    if estimates is not None:
+        try:
+            from datetime import date as date_type
+            report_date = getattr(estimates, "report_date", None)
+            if report_date:
+                parsed_date = report_date if hasattr(report_date, "toordinal") else date_type.fromisoformat(str(report_date))
+                earnings_countdown = (parsed_date - date_type.today()).days
+        except Exception as e:
+            logger.debug(f"[TradeReview] Earnings countdown für {ticker}: {e}")
+
+    audit_grades = []
+    try:
+        from backend.app.data.fmp import get_analyst_grades
+        audit_grades = await get_analyst_grades(ticker)
+    except Exception as e:
+        logger.warning(f"[TradeReview] Analyst grades für {ticker}: {e}")
+
+    history = None
+    try:
+        history = await get_earnings_history(ticker)
+    except Exception as e:
+        logger.warning(f"[TradeReview] Earnings history für {ticker}: {e}")
+
+    metrics = None
+    try:
+        metrics = await get_key_metrics(ticker)
+    except Exception as e:
+        logger.warning(f"[TradeReview] Key metrics für {ticker}: {e}")
+
+    if not metrics or not getattr(metrics, "pe_ratio", None):
+        try:
+            yf_fundamentals = await get_fundamentals_yf(ticker)
+        except Exception as e:
+            logger.warning(f"[TradeReview] yfinance Fundamentals für {ticker}: {e}")
+            yf_fundamentals = None
+    else:
+        yf_fundamentals = None
+
+    short_interest = None
+    try:
+        short_interest = await get_short_interest(ticker)
+    except Exception as e:
+        logger.warning(f"[TradeReview] Short interest für {ticker}: {e}")
+
+    if short_interest is None:
+        try:
+            from backend.app.data.yfinance_data import get_short_interest_yf
+            yf_si = await get_short_interest_yf(ticker)
+        except Exception as e:
+            logger.warning(f"[TradeReview] Short interest yfinance Fallback für {ticker}: {e}")
+            yf_si = None
+        if yf_si:
+            from schemas.sentiment import ShortInterestData
+            short_interest = ShortInterestData(
+                ticker=ticker,
+                short_interest=yf_si.get("shares_short", 0),
+                short_interest_percent=yf_si.get("short_interest_percent", 0),
+                days_to_cover=yf_si.get("short_ratio", 0),
+                trend="stable",
+                squeeze_risk="medium" if yf_si.get("short_interest_percent", 0) > 15 else "low",
+            )
+
+    insiders = None
+    try:
+        insiders = await get_insider_transactions(ticker)
+    except Exception as e:
+        logger.warning(f"[TradeReview] Insider transactions für {ticker}: {e}")
+
+    technicals = None
+    try:
+        technicals = await get_technical_setup(ticker)
+    except Exception as e:
+        logger.warning(f"[TradeReview] Technicals für {ticker}: {e}")
+
+    options = None
+    try:
+        from backend.app.data.yfinance_data import get_options_metrics
+        options = await get_options_metrics(ticker)
+    except Exception as e:
+        logger.warning(f"[TradeReview] Options für {ticker}: {e}")
+
+    from backend.app.data.market_overview import get_market_overview
+    from backend.app.analysis.chart_analyst import analyze_chart
+    from backend.app.data.fred import get_macro_snapshot
+    from backend.app.data.fear_greed import get_fear_greed_score
+    from backend.app.data.reddit_monitor import get_reddit_sentiment
+    from backend.app.memory.short_term import get_bullet_points
+
+    market_ov_result, chart_result, macro_result, fear_greed_result, reddit_result = await asyncio.gather(
+        get_market_overview(),
+        analyze_chart(ticker),
+        get_macro_snapshot(),
+        get_fear_greed_score(),
+        get_reddit_sentiment(ticker, hours=24),
+        return_exceptions=True,
+    )
+
+    def _safe_result(result, default):
+        return default if isinstance(result, Exception) else result
+
+    market_ov = _safe_result(market_ov_result, {})
+    chart_data = _safe_result(chart_result, {})
+    macro = _safe_result(macro_result, {})
+    fear_greed_data = _safe_result(fear_greed_result, {})
+    reddit_data = _safe_result(reddit_result, {})
+
+    now = datetime.now()
+    month_ago = now - timedelta(days=30)
+    news_memory = await get_bullet_points(ticker)
+    news_list = None
+    if not news_memory:
+        try:
+            news_list = await get_company_news(
+                ticker,
+                month_ago.strftime("%Y-%m-%d"),
+                now.strftime("%Y-%m-%d"),
+            )
+        except Exception as e:
+            logger.warning(f"[TradeReview] Company news für {ticker}: {e}")
+
+    valuation_ctx = {}
+    if metrics:
+        valuation_ctx = _model_to_dict(metrics)
+    elif profile:
+        valuation_ctx = _model_to_dict(profile)
+    elif yf_fundamentals:
+        valuation_ctx = {
+            "ticker": ticker,
+            "pe_ratio": yf_fundamentals.get("pe_ratio"),
+            "ps_ratio": yf_fundamentals.get("ps_ratio"),
+            "market_cap": yf_fundamentals.get("market_cap"),
+            "sector": yf_fundamentals.get("sector"),
+        }
+
+    market_indices = market_ov.get("indices", {}) if isinstance(market_ov, dict) else {}
+    spy = market_indices.get("SPY", {}) if isinstance(market_indices, dict) else {}
+    sector = (
+        getattr(profile, "sector", None)
+        or getattr(metrics, "sector", None)
+        or (yf_fundamentals.get("sector") if yf_fundamentals else None)
+        or "Unknown"
+    )
+
+    data_ctx = {
+        "earnings_history": _model_to_dict(history),
+        "valuation": valuation_ctx,
+        "short_interest": _model_to_dict(short_interest),
+        "insider_activity": _model_to_dict(insiders),
+        "macro": _model_to_dict(macro),
+        "technicals": _model_to_dict(technicals),
+        "news_memory": news_memory if news_memory else [],
+        "news_list": news_list or [],
+        "options": _model_to_dict(options),
+        "social": _model_to_dict(reddit_data),
+        "composite_sentiment": _safe_float(reddit_data.get("avg_score") if isinstance(reddit_data, dict) else None, 0.0),
+        "web_sentiment_score": 0.0,
+        "finbert_sentiment": 0.0,
+        "sentiment_divergence": False,
+        "analyst_grades": _model_to_dict(audit_grades) if isinstance(audit_grades, dict) else audit_grades or [],
+        "sector_ranking": market_ov.get("sector_ranking_5d", []) if isinstance(market_ov, dict) else [],
+        "ticker_sector": sector,
+        "reddit_sentiment": reddit_data.get("avg_score", 0.0) if isinstance(reddit_data, dict) else 0.0,
+        "reddit_mentions": reddit_data.get("mention_count", 0) if isinstance(reddit_data, dict) else 0,
+        "reddit_label": reddit_data.get("label", "keine Daten") if isinstance(reddit_data, dict) else "keine Daten",
+        "fear_greed_score": fear_greed_data.get("score", 50.0) if isinstance(fear_greed_data, dict) else 50.0,
+        "fear_greed_label": fear_greed_data.get("label", "Neutral") if isinstance(fear_greed_data, dict) else "Neutral",
+        "earnings_countdown": earnings_countdown,
+    }
+
+    opp_score = await calculate_opportunity_score(ticker, data_ctx)
+    torp_score = await calculate_torpedo_score(ticker, data_ctx)
+
+    if not isinstance(macro, dict):
+        macro = {}
+    _macro_regime = macro.get("regime")
+    _vix = _safe_float(macro.get("vix"), None)
+    _credit_spread_bps = _safe_float(macro.get("credit_spread_bps"), None)
+
+    rec = await get_recommendation(
+        opp_score,
+        torp_score,
+        macro_regime=_macro_regime,
+        vix=_vix,
+    )
+
+    opportunity_components = {
+        "earnings_momentum": opp_score.earnings_momentum,
+        "whisper_delta": opp_score.whisper_delta,
+        "valuation_regime": opp_score.valuation_regime,
+        "guidance_trend": opp_score.guidance_trend,
+        "technical_setup": opp_score.technical_setup,
+        "sector_regime": opp_score.sector_regime,
+        "short_squeeze_potential": opp_score.short_squeeze_potential,
+        "insider_activity": opp_score.insider_activity,
+        "options_flow": opp_score.options_flow,
+    }
+    torpedo_components = {
+        "valuation_downside": torp_score.valuation_downside,
+        "expectation_gap": torp_score.expectation_gap,
+        "insider_selling": torp_score.insider_selling,
+        "guidance_deceleration": torp_score.guidance_deceleration,
+        "leadership_instability": torp_score.leadership_instability,
+        "technical_downtrend": torp_score.technical_downtrend,
+        "macro_headwind": torp_score.macro_headwind,
+    }
+
+    component_labels = {
+        "earnings_momentum": "Earnings Momentum",
+        "whisper_delta": "Whisper Delta",
+        "valuation_regime": "Valuation Regime",
+        "guidance_trend": "Guidance Trend",
+        "technical_setup": "Technical Setup",
+        "sector_regime": "Sector Regime",
+        "short_squeeze_potential": "Short Squeeze Potential",
+        "insider_activity": "Insider Activity",
+        "options_flow": "Options Flow",
+    }
+    torpedo_labels = {
+        "valuation_downside": "Valuation Downside",
+        "expectation_gap": "Expectation Gap",
+        "insider_selling": "Insider Selling",
+        "guidance_deceleration": "Guidance Deceleration",
+        "leadership_instability": "Leadership Instability",
+        "technical_downtrend": "Technical Downtrend",
+        "macro_headwind": "Macro Headwind",
+    }
+
+    top_drivers = _rank_components(opportunity_components, component_labels, limit=4)
+    top_risks = _rank_components(torpedo_components, torpedo_labels, limit=4)
+
+    prompt_payload = {
+        "ticker": ticker,
+        "company": _model_to_dict(profile),
+        "scores": {
+            "opportunity_score": round(_safe_float(opp_score.total_score, 0.0), 1),
+            "torpedo_score": round(_safe_float(torp_score.total_score, 0.0), 1),
+            "base_recommendation": rec.recommendation,
+            "base_recommendation_label": rec.recommendation_label,
+            "base_reasoning": rec.reasoning,
+        },
+        "top_drivers": top_drivers,
+        "top_risks": top_risks,
+        "macro": {
+            "regime": _macro_regime,
+            "vix": _vix,
+            "credit_spread_bps": _credit_spread_bps,
+        },
+        "market_context": {
+            "spy": spy,
+            "sector": sector,
+            "sector_ranking_5d": market_ov.get("sector_ranking_5d", []) if isinstance(market_ov, dict) else [],
+        },
+        "technicals": _model_to_dict(technicals),
+        "options": _model_to_dict(options),
+        "earnings": _model_to_dict(history),
+        "valuation": valuation_ctx,
+        "insiders": _model_to_dict(insiders),
+        "short_interest": _model_to_dict(short_interest),
+        "news_memory": news_memory if news_memory else [],
+        "news_list": news_list or [],
+        "reddit": reddit_data if isinstance(reddit_data, dict) else {},
+        "fear_greed": fear_greed_data if isinstance(fear_greed_data, dict) else {},
+        "chart_analysis": chart_data if isinstance(chart_data, dict) else {},
+    }
+
+    system_prompt = (
+        "Du bist ein erfahrener Aktien-Research- und Risiko-Analyst. "
+        "Nutze die bereitgestellten Daten und gib ausschließlich gültiges JSON zurück. "
+        "Antworte konservativ, wenn Daten lückenhaft sind."
+    )
+    user_prompt = (
+        f"Erstelle für {ticker} eine Trade-Review-Entscheidung.\n\n"
+        "Gib ausschließlich dieses JSON-Schema zurück:\n"
+        "{\n"
+        '  "recommendation": "strong_buy|buy_hedge|hold|watch|ignore|strong_short|potential_short",\n'
+        '  "recommendation_label": "kurzer lesbarer Titel",\n'
+        '  "thesis": "maximal 4 Sätze",\n'
+        '  "key_bull_points": ["...", "..."],\n'
+        '  "key_risks": ["...", "..."],\n'
+        '  "execution_note": "kurze Handlungsanweisung",\n'
+        '  "confidence": 0-100\n'
+        "}\n\n"
+        "Nutze die Daten unten als Grundlage und vermeide unnötige Floskeln.\n\n"
+        f"{json.dumps(prompt_payload, ensure_ascii=False, indent=2, default=str)}"
+    )
+
+    reasoner_text = await call_deepseek(
+        system_prompt,
+        user_prompt,
+        model="deepseek-reasoner",
+        temperature=0.0,
+        max_tokens=1400,
+    )
+
+    parsed = _extract_json_object(reasoner_text)
+    final_recommendation = rec.recommendation
+    final_label = rec.recommendation_label
+    final_reasoning = rec.reasoning
+    key_bull_points: list[str] = []
+    key_risks: list[str] = []
+    execution_note = ""
+    confidence = None
+
+    if parsed:
+        final_recommendation = _normalize_review_recommendation(
+            parsed.get("recommendation"),
+            final_recommendation,
+        )
+        final_label = str(
+            parsed.get("recommendation_label")
+            or parsed.get("label")
+            or final_label
+        )
+        final_reasoning = str(
+            parsed.get("thesis")
+            or parsed.get("reasoning")
+            or parsed.get("summary")
+            or final_reasoning
+        )
+        key_bull_points = parsed.get("key_bull_points") or parsed.get("bull_points") or []
+        key_risks = parsed.get("key_risks") or parsed.get("risks") or []
+        execution_note = str(parsed.get("execution_note") or parsed.get("next_step") or "")
+        confidence = parsed.get("confidence")
+
+    if not key_bull_points:
+        key_bull_points = [item["label"] for item in top_drivers[:3]] or ["Keine klaren bullischen Treiber erkennbar."]
+    if not key_risks:
+        key_risks = [item["label"] for item in top_risks[:3]] or ["Keine klaren Hauptrisiken erkennbar."]
+
+    price_at_decision = _safe_float(getattr(technicals, "current_price", None), None)
+    rsi_at_decision = _safe_float(getattr(technicals, "rsi_14", None), None)
+    iv_atm_at_decision = _safe_float(getattr(options, "implied_volatility_atm", None), None)
+
+    earnings_date = None
+    if estimates is not None:
+        raw_earnings_date = getattr(estimates, "report_date", None)
+        if raw_earnings_date:
+            earnings_date = raw_earnings_date
+
+    raw_data = {
+        "context": prompt_payload,
+        "scores": {
+            "opportunity": _model_to_dict(opp_score),
+            "torpedo": _model_to_dict(torp_score),
+        },
+        "components": {
+            "opportunity": opportunity_components,
+            "torpedo": torpedo_components,
+        },
+        "parsed_reasoner": parsed or {},
+        "top_drivers": top_drivers,
+        "top_risks": top_risks,
+        "model_used": "deepseek-reasoner",
+        "macro_regime": _macro_regime,
+        "vix": _vix,
+        "credit_spread_bps": _credit_spread_bps,
+        "price_at_decision": price_at_decision,
+        "rsi_at_decision": rsi_at_decision,
+        "iv_atm_at_decision": iv_atm_at_decision,
+        "earnings_date": str(earnings_date) if earnings_date else None,
+        "earnings_countdown": earnings_countdown,
+    }
+
+    return {
+        "ticker": ticker,
+        "recommendation": final_recommendation,
+        "recommendation_label": final_label,
+        "reasoning": final_reasoning,
+        "confidence": confidence,
+        "opportunity_score": round(_safe_float(opp_score.total_score, 0.0), 1),
+        "torpedo_score": round(_safe_float(torp_score.total_score, 0.0), 1),
+        "prompt_text": user_prompt,
+        "decision_text": reasoner_text,
+        "model_used": "deepseek-reasoner",
+        "top_drivers": top_drivers,
+        "top_risks": top_risks,
+        "raw_data": raw_data,
+        "price_at_decision": price_at_decision,
+        "rsi_at_decision": rsi_at_decision,
+        "iv_atm_at_decision": iv_atm_at_decision,
+        "macro_regime": _macro_regime,
+        "vix": _vix,
+        "credit_spread_bps": _credit_spread_bps,
+        "earnings_date": str(earnings_date) if earnings_date else None,
+        "earnings_countdown": earnings_countdown,
+        "key_bull_points": key_bull_points,
+        "key_risks": key_risks,
+        "execution_note": execution_note,
+    }
+
+
 async def _save_decision_snapshot(
+    *,
     ticker: str,
     opportunity_score: float,
     torpedo_score: float,
     recommendation: str,
     prompt_text: str,
     report_text: str,
-    raw_data: dict,
+    raw_data: dict | None = None,
     earnings_countdown: int | None = None,
-) -> None:
-    """
-    Speichert einen Decision Snapshot für das Learning-Modul.
-    Ruft DeepSeek Chat auf, um Top-Treiber und Failure-Hypothese zu extrahieren,
-    und speichert alles in der decision_snapshots Tabelle.
-    """
-    from backend.app.database import get_pool
-    import json
+    **extra,
+) -> dict:
+    """Speichert einen unveränderlichen Decision Snapshot in der DB."""
+    from backend.app.db import get_supabase_client
 
-    logger.info(f"Speichere Decision Snapshot für {ticker}")
+    db = get_supabase_client()
+    if not db:
+        logger.warning(f"[DecisionSnapshot] DB nicht verfügbar für {ticker}")
+        return {"success": False, "reason": "db_unavailable"}
 
-    # Lernpfad bestimmen: Earnings oder Momentum?
-    # Earnings: Report wurde generiert weil Earnings ≤ 7 Tage entfernt
-    # Momentum: alles andere (Score-Threshold, Signal-Trigger, manuell außerhalb Earnings)
-    trade_type = "earnings" if (
-        earnings_countdown is not None and 0 <= earnings_countdown <= 7
-    ) else "momentum"
+    raw_data = raw_data or {}
+    model_used = extra.get("model_used") or raw_data.get("model_used") or "deepseek-reasoner"
+    price_at_decision = extra.get("price_at_decision", raw_data.get("price_at_decision"))
+    rsi_at_decision = extra.get("rsi_at_decision", raw_data.get("rsi_at_decision"))
+    iv_atm_at_decision = extra.get("iv_atm_at_decision", raw_data.get("iv_atm_at_decision"))
+    macro_regime = extra.get("macro_regime", raw_data.get("macro_regime"))
+    vix = extra.get("vix", raw_data.get("vix"))
+    credit_spread_bps = extra.get("credit_spread_bps", raw_data.get("credit_spread_bps"))
+    earnings_date = extra.get("earnings_date", raw_data.get("earnings_date"))
 
-    # 1. DeepSeek Chat: Top-Treiber extrahieren
-    top_drivers = []
+    top_drivers = extra.get("top_drivers") or raw_data.get("top_drivers") or []
+    top_risks = extra.get("top_risks") or raw_data.get("top_risks") or []
+
+    prompt_snapshot = prompt_text.strip()
+    report_snapshot = report_text.strip()
+    if report_snapshot:
+        prompt_snapshot = f"{prompt_snapshot}\n\n--- Reasoner Decision ---\n{report_snapshot}"
+
+    payload = {
+        "ticker": ticker.upper(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "opportunity_score": round(_safe_float(opportunity_score, 0.0), 1),
+        "torpedo_score": round(_safe_float(torpedo_score, 0.0), 1),
+        "recommendation": recommendation,
+        "macro_regime": macro_regime,
+        "vix": vix,
+        "credit_spread_bps": credit_spread_bps,
+        "top_drivers": top_drivers,
+        "top_risks": top_risks,
+        "price_at_decision": price_at_decision,
+        "rsi_at_decision": rsi_at_decision,
+        "iv_atm_at_decision": iv_atm_at_decision,
+        "earnings_date": earnings_date,
+        "prompt_snapshot": prompt_snapshot[:12000],
+        "model_used": model_used,
+        "trade_type": "earnings" if earnings_countdown is not None else "momentum",
+        "earnings_countdown_at_decision": earnings_countdown,
+        "data_quality_flag": raw_data.get("data_quality_flag"),
+    }
+
     try:
-        drivers_prompt = f"""Analysiere die folgenden Daten zu {ticker} und extrahiere die 3 wichtigsten Treiber für die Entscheidung.
-
-Daten:
-{json.dumps(raw_data, indent=2, default=str)[:4000]}
-
-Antworte mit einem JSON-Array von Strings, z.B.:
-["Hohe Short Interest von 15% erhöht Squeeze-Risiko", "Starkes Q4 Beat mit 23% Surprise", "RSI überbought bei 75 zeigt Konsolidierungsbedarf"]
-
-Nur die Treiber, kein zusätzlicher Text."""
-
-        drivers_response = await call_deepseek(
-            system_prompt="Du bist ein quantitativer Analyst. Extrahiere präzise, faktentreibende Entscheidungsgründe. Antworte nur mit einem JSON-Array.",
-            user_prompt=drivers_prompt,
-            model="deepseek-chat",
-            temperature=0.1,
-            max_tokens=200,
-        )
-
-        # JSON parsen
-        import re
-        json_match = re.search(r"\[.*?\]", drivers_response, re.DOTALL)
-        if json_match:
-            top_drivers = json.loads(json_match.group())
-            if isinstance(top_drivers, list):
-                top_drivers = [str(d)[:200] for d in top_drivers[:3]]  # max 3, je 200 Zeichen
-            else:
-                top_drivers = []
-        else:
-            logger.warning(f"Keine gültige JSON-Treiber-Antwort für {ticker}: {drivers_response[:100]}...")
-            top_drivers = []
-    except Exception as e:
-        logger.warning(f"DeepSeek Treiber-Extraktion für {ticker}: {e}")
-        top_drivers = []
-
-    # 2. DeepSeek Chat: Failure-Hypothese
-    failure_hypothesis = ""
-    try:
-        hypothesis_prompt = f"""Basierend auf den Daten zu {ticker}, formuliere eine präzise Failure-Hypothese.
-
-Daten:
-{json.dumps(raw_data, indent=2, default=str)[:4000]}
-
-Empfehlung: {recommendation}
-
-Antworte mit einem einzigen Satz, der erklärt, warum diese Entscheidung falsch liegen könnte.
-Beispiel: "Die These scheitert, weil die anstehenden Earnings den hohen IV nicht rechtfertigen."
-
-Nur die Hypothese, kein zusätzlicher Text."""
-
-        hypothesis_response = await call_deepseek(
-            system_prompt="Du bist ein quantitativer Analyst. Formuliere knappe, konkrete Failure-Hypothesen. Antworte nur mit einem Satz.",
-            user_prompt=hypothesis_prompt,
-            model="deepseek-chat",
-            temperature=0.2,
-            max_tokens=100,
-        )
-
-        failure_hypothesis = str(hypothesis_response).strip()
-        if len(failure_hypothesis) > 300:
-            failure_hypothesis = failure_hypothesis[:300] + "..."
-    except Exception as e:
-        logger.warning(f"DeepSeek Failure-Hypothese für {ticker}: {e}")
-        failure_hypothesis = ""
-
-    # 3. In DB speichern
-    try:
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            await conn.execute("""
-                INSERT INTO decision_snapshots (
-                    ticker, decision_date, opportunity_score, torpedo_score,
-                    recommendation, top_drivers, failure_hypothesis,
-                    prompt_text, report_text, raw_data, created_at,
-                    trade_type, earnings_countdown_at_decision
-                ) VALUES (
-                    $1, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11
-                )
-            """, 
-                ticker,
-                opportunity_score,
-                torpedo_score,
-                recommendation,
-                top_drivers,
-                failure_hypothesis,
-                prompt_text,
-                report_text,
-                json.dumps(raw_data, default=str),
-                trade_type,
-                earnings_countdown,
-            )
-        logger.info(f"Decision Snapshot für {ticker} gespeichert: {len(top_drivers)} Treiber, Hypothese={'Ja' if failure_hypothesis else 'Nein'}")
-    except Exception as e:
-        logger.error(f"Decision Snapshot DB-Speicher für {ticker}: {e}")
-        raise
+        await db.table("decision_snapshots").insert(payload).execute_async()
+        logger.info(f"[DecisionSnapshot] Gespeichert für {ticker}")
+        return {"success": True}
+    except Exception as exc:
+        msg = str(exc)
+        logger.warning(f"[DecisionSnapshot] Speichern fehlgeschlagen für {ticker}: {exc}")
+        return {"success": False, "reason": msg}

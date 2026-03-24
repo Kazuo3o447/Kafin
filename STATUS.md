@@ -2,12 +2,15 @@
 
 Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und Web-Dashboard).
 
-## 🚀 Schnellstart für neue Agents
+## Schnellstart für neue Agents
 1. Lies zuerst **Aktueller Stand** und **Wichtige Dateien / APIs**.
 2. Prüfe bei Fehlern direkt **Schnellchecks** und **Erwartetes Verhalten**.
 3. Skimme die historischen Meilensteine nur für Kontext oder Audit-Zwecke.
 
-## 🟢 Aktueller Stand
+## Aktueller Stand
+- **Signal Feed & News Pipeline v7.7.0**: Catalyst Clash Warning, Short Availability Badges, Earnings Live-Modus, bullet_points-Rendering, ETF-News-Fallback und n8n-Workflow-Fix sind live.
+- **Twelve Data v7.4.0**: ADX + Stochastic in TechnicalSetup, IV Percentile approximiert, Research-Page Anzeige, Systemdiagnostik
+- **Async Performance v7.3.1**: Alle yfinance-Aufrufe non-blocking, Market Breadth wiederhergestellt, Event Loop Protection
 - **Lernpfade v7.3.0**: Zwei Lernpfade (Earnings/Momentum), Unterseite
   in Performance, Auto-Trigger Earnings 08:10, FUTURE.md Scoring-Engines
 - **Learning Module + Alpaca v7.2.0**: Decision Snapshots automatisch bei
@@ -24,6 +27,19 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - **Markets Dashboard v2**: Marktübersicht, Marktbreite, Intermarket, Fear & Greed und Market Audit sind wieder über die API erreichbar; Frontend-Requests laufen standardmäßig relativ über `/api`.
 - **Frontend Routing Fixes**: Harte `localhost:8001`-Defaults wurden durch relative API-Requests bzw. lokale `8000`-Fallbacks ersetzt, damit Daten im Dev-Modus und im Docker-Stack zuverlässig ankommen.
 - **Visualisierung Fixes**: `VolumeProfile`, Diagnostics-Proxy und Report-Route-Handler verwenden jetzt konsistente API-Ziele.
+- **Trade Prüfen Modal v7.8.0**: Frontend-Modal für manuelle Trade-Überprüfung und Ausführung basierend auf Reasoner-Entscheidungen ist abgeschlossen.
+- **Bot Review Flow v7.9.0**: Der Review-/Audit-Flow nutzt jetzt die vollständige Datenbasis für Earnings, Fundamentals, Technicals, Macro, Sentiment, Insider, Short Interest und Options. Die kanonische Bot-Doku steht in `bot.md`.
+- **Bot-Tests**: Backend-Test-Suite ist wieder grün (`24 passed, 6 warnings`); die letzten technischen Restprobleme (Async-Fehler, Pydantic-Deprecation, UTC-Zeitstempel) sind vollständig behoben.
+- **Audit-Sammlung & Baseline v7.9.1**: Der Bot befindet sich aktuell in der Audit-Sammelphase. Decision Snapshots werden systematisch gesammelt, um eine empirische Baseline für die spätere Kalibrierung der Gewichtung und Schwellen aufzubauen. Der Fokus liegt auf vollständigen Daten und nachvollziehbaren Entscheidungen, nicht auf aggressiven Anpassungen.
+- **Decision Snapshots API**: `GET /api/data/decision-snapshots` und `POST /api/data/decision-snapshots` sind implementiert und ermöglichen die Analyse und manuelle/batch-basierte Speicherung von Audits.
+- **Lernpfade-Status**: `GET /api/data/lernpfade-stats` zeigt die Reife der Earnings- und Momentum-Pfade sowie den Kalibrierungs-Status (`calibration_ready`).
+> **Datenbankhinweis:** Kafin nutzt lokales **PostgreSQL 16** (Docker: `kafin-postgres`).
+> `get_supabase_client()` im Code ist ein Compatibility-Shim und gibt den
+> PostgreSQL-Client zurück. Es gibt keine Supabase Cloud-Verbindung mehr.
+> Historische Mentions von "Supabase" in den Meilensteinen sind Entwicklungsartefakte.
+> **Sunday Report:** Deprecated seit v7.0. Ersetzt durch tägliches
+> Pre-Market Briefing (08:00) und After-Market Report (22:15).
+> Der Endpoint `/api/reports/generate-sunday` bleibt als Fallback erhalten.
 - **Trader-Entscheidungsqualität v6.4.0**: ChartAnalysisSection auf Research-Page,
   Expected-Move-Lines, Weekly-Timeframe-Toggle (3M/6M/1J/2J-W), Position-Sizer mit
   ATR-Stop + echtem R:R + Options-Sizing + localStorage-Persistenz,
@@ -46,13 +62,14 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - **Groq Integration**: News-Extraction nutzt Groq llama-3.1-8b-instant (~200ms Latenz) mit DeepSeek-Fallback; Rate Limit auf 20/h erhöht; `GROQ_API_KEY` lokal in `.env` erforderlich.
 - **Kaskade 6**: Vollständige Migration von Supabase auf PostgreSQL 16 + pgvector; lokales Embedding-Pipeline (all-MiniLM-L6-v2) für semantische Suche (RAG) ist produktiv.
 - **Datenbank-Härtung**: Asyncpg Connection Pooling mit Lazy-Init, Locking und sauberem Shutdown-Handling; native pgvector-Codec Registrierung.
+- **Bot-Dokumentation**: `bot.md` beschreibt die Datenquellen, den Scoring-Stack, den Review-Flow und die Lernkurve als aktuelle Referenz für andere Agents.
 - **RAG-Endpoints**: Semantische Suche für News und Audits via pgvector-Similarity-Search live.
 - **Async-First**: Alle produktionsrelevanten Datenbank-Aufrufe auf `execute_async()` migriert, um Event-Loop Deadlocks zu verhindern.
 - **Status-/Settings-Seiten**: Diagnose-Responses sind stabil und nutzen die neue lokale PostgreSQL-Infrastruktur.
 - **Kaskade 5**: Reddit Retail Sentiment, Sympathy Play Radar, Shadow Trade Modal und Research-Integration sind live; v5.16.4 Self-Review abgeschlossen.
 - **v6.2.4 Critical Bug Fixes**: Torpedo Monitor Rate Limiting (1s Delay), Report Renderer Regex Fix (4+ chars), Morning Briefing Archiv (briefing_summary gespeichert), Equity Curve Stabilität verifiziert
 
-## �️ Wichtige Dateien / APIs
+## Wichtige Dateien / APIs
 | Bereich | Datei / Endpoint | Zweck |
 |---|---|---|
 | Frontend Shell | `frontend/src/app/layout.tsx` | Globale App-Shell und eingebetteter `LogViewer` |
@@ -63,6 +80,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 | Report Routes | `frontend/src/app/api/reports/generate/[ticker]/route.ts`, `frontend/src/app/api/reports/generate-morning/route.ts`, `frontend/src/app/api/reports/generate-sunday/route.ts` | Timeouts und Fallbacks für Report-Generierung |
 | Market APIs | `GET /api/data/market-overview`, `GET /api/data/market-breadth`, `GET /api/data/intermarket`, `GET /api/data/market-news-sentiment`, `GET /api/data/economic-calendar`, `GET /api/data/fear-greed` | Marktübersicht, Breite, Cross-Asset, News-Sentiment, Kalender, Fear & Greed |
 | Signal Feed APIs | `GET /api/data/signals/feed`, `GET /api/data/signal-feed-config` | Signal Feed Dashboard und Konfiguration |
+| System Health | `GET /api/n8n/status` | Separater n8n-Health-Check für Monitoring und Diagnostik |
 | Log Viewer | `frontend/src/components/LogViewer.tsx` | Suche, Filter, Export und `Ignore`-Kategorie |
 | Backend Router | `backend/app/main.py` | Minimaler Entrypoint & Router-Registrierung |
 | Routers | `backend/app/routers/` | Fachliche Endpoints (data, news, reports, watchlist, analysis, shadow, logs, system) |
@@ -77,14 +95,13 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 | Peer-Vergleich     | `GET /api/data/peer-comparison/{ticker}`          | PE/PS/RVOL/5T für Hauptticker + Peers   |
 | Korrelation        | `GET /api/data/watchlist-correlation`             | 30T-Return-Matrix, 4h Cache             |
 | AI-Chat            | `POST /api/analysis/chat/{ticker}`                | Multi-Turn DeepSeek, Kontext-aware      |
-| Trade-Journal      | `backend/app/routers/journal.py`                  | CRUD für trade_journal-Tabelle          |
-| Journal-Page       | `frontend/src/app/journal/page.tsx`               | P&L-Tracking, Entry/Exit-Erfassung     |
-| DeepSeek Multi-Turn| `backend/app/analysis/deepseek.py`               | `call_deepseek_chat()` für Chat         |
+| Meine Trades  | `GET/POST/PUT/DELETE /api/data/real-trades` | Echte Trades (Performance Tab 3) |
+| Journal-Redirect | `frontend/src/app/journal/page.tsx` | Leitet auf /performance?tab=my_trades weiter |
+| Journal Router (Legacy) | `backend/app/routers/journal.py` | Alter CRUD-Router für trade_journal — durch real_trades ersetzt |
 | Bitcoin-Seite      | `frontend/src/app/btc/page.tsx`              | Kurs, OI, Funding, L/S, KI-Lagebericht |
 | CoinGlass Client   | `backend/app/data/coinglass.py`              | OI, Funding Rate, L/S, Liquidations    |
 | Momentum-Ranking   | `GET /api/data/watchlist-momentum`           | Rel. Stärke vs. SPY, Composite Score   |
 | Alpaca Client     | `backend/app/data/alpaca.py`                | Paper Trading: Account, Positions, Orders   |
-| Real Trades       | `GET/POST/PUT/DELETE /api/data/real-trades` | Echte Trades des Traders                    |
 | Decision Snapshots| `GET /api/data/decision-snapshots`          | Entscheidungs-Kontext + Outcomes            |
 | Outcome Updater   | `POST /api/data/decision-snapshots/update-outcomes` | T+1/5/20 Returns täglich     |
 | Lernpfade Stats   | `GET /api/data/lernpfade-stats`             | Earnings vs Momentum Trefferquoten          |
@@ -94,20 +111,26 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 | BTC Report         | `POST /api/reports/generate-btc`             | DeepSeek Chat Lagebericht              |
 | Prompt Templates | `prompts/audit_report.md`, `prompts/post_earnings.md`, `prompts/morning_briefing.md` | KI-Prompts v0.4 mit vollständigen Platzhaltern |
 | API Usage Endpoint | `GET /api/admin/api-usage` | Aggregierte API Usage mit Echtzeit-Daten und Limits |
-| News Pipeline | `backend/app/data/news_processor.py` | News-Extraction mit Groq, Rate Limit 20/h |
+| News Pipeline | `backend/app/data/news_processor.py`, `backend/app/data/google_news.py` | News-Extraction mit Groq, bullet_points-Rendering, Google-News-Fallback, Rate Limit 20/h |
+| Shadow Trades | `backend/app/analysis/shadow_portfolio.py` | Shadow-Trade-Signal-Normalisierung für Prompt-Labels und Lowercase-Formate |
 | FRED Fetch | `backend/app/data/fred.py` | FRED-Abfrage mit Retry, Redaction und Fallbacks |
 | Doku | `STATUS.md`, `CHANGELOG.md`, `docs/apis/fred.md`, `docs/ROADMAP.md` | Status, Changelog, API-Details und Roadmap |
+| Frontend | `frontend/src/app/research/[ticker]/page.tsx` | 'Trade prüfen' modal for manual trade review, displaying reasoner's decision and allowing execution with error handling. |
 
 ## Schnellchecks
-- **Frontend-Logs**: `docker logs kafin-frontend`
-- **Backend-Logs**: `docker logs kafin-backend`
-- **Status-Diagnose**: `GET /api/diagnostics/full`
-- **DB-Diagnose**: `GET /api/diagnostics/db`
-- **Live-Logs**: `GET /api/logs` und `GET /api/logs/file`
-- **API Usage**: `GET /api/admin/api-usage` (Tagesverbrauch + Limits)
-- **Prompt Quality**: `GET /api/reports/generate-morning` (Fear & Greed gefüllt)
-- **FRED-Verifikation**: `backend/app/data/fred.py` und `docs/apis/fred.md`
-- **Groq-Test**: `python backend/tests/test_groq.py` (erfordert `GROQ_API_KEY` in `.env`)
+- **Backend**: `http://localhost:8002` (extern) · `http://kafin-backend:8000` (Docker intern)
+- **API-Docs**: `http://localhost:8002/docs` 
+- **Frontend**: `http://localhost:3000` 
+- **Backend-Logs**: `docker logs kafin-backend` 
+- **Frontend-Logs**: `docker logs kafin-frontend` 
+- **Status-Diagnose**: `GET http://localhost:8002/api/diagnostics/full` 
+- **DB-Diagnose**: `GET http://localhost:8002/api/diagnostics/db` 
+- **Live-Logs**: `GET http://localhost:8002/api/logs` 
+- **n8n Dashboard**: `http://localhost:5678` 
+- **Morning Briefing manuell**: `POST http://localhost:8002/api/reports/generate-morning` 
+- **News manuell triggern**: `POST http://localhost:8002/api/news/scan` 
+- **Shadow Trades prüfen**: `GET http://localhost:8002/api/shadow/portfolio` 
+- **n8n Workflows neu deployen**: `POST http://localhost:8002/api/n8n/setup`
 
 ## WICHTIG: KEINE MOCK DATEN ERLAUBT
 - **Mock-Daten sind deaktiviert**: `USE_MOCK_DATA=false`
@@ -115,12 +138,12 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - **Fehlerbehandlung**: Bei API-Ausfällen klare Fehlermeldungen statt Fakes
 - **Verbot**: Mock-Daten untergräben das Vertrauen in die Trading-Entscheidungen
 
-## ⚠️ Erwartetes Verhalten / bekannte Signale
+## Erwartetes Verhalten / bekannte Signale
 - **yfinance 404s** sind erwartetes Verhalten für delisted oder fehlerhafte Ticker und erscheinen im `Ignore`-Filter.
 - **FRED 5xx** sind als Upstream-Fehler behandelt und werden retry-/fallback-sicher verarbeitet.
 - **Diagnostics-Probleme** deuten zuerst auf Backend-Erreichbarkeit oder falsche Routen hin; direkte Proxy-Fehler im Frontend sollten nach dem Fix nicht mehr auftreten.
 
-## �️ Debugging-Sitzungen & Fehlerbehebung
+## Debugging-Sitzungen & Fehlerbehebung
 
 ### 2026-03-23 — Container Restart Issues (v6.4.0 Deployment)
 **Problem**: Beide Container (Frontend/Backend) restarteten ständig nach v6.4.0 Features Deployment
@@ -141,21 +164,22 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 4. **Indentation-Fix**: PowerShell Regex für korrekte Einrückung der Funktionen
 
 **Ergebnis**: 
-- ✅ Frontend erreichbar auf http://localhost:3000 (Status 200)
-- ✅ Backend erreichbar auf http://localhost:8000 (Status 200)
-- ✅ Alle v6.4.0 Features verfügbar (Chart-Analyse, Position-Sizing, AI-Chat, Peer-Vergleich, Korrelations-Heatmap, Trade-Journal)
+- Frontend erreichbar auf http://localhost:3000 (Status 200)
+- Backend erreichbar auf http://localhost:8002 (Status 200)
+- Alle v6.4.0 Features verfügbar (Chart-Analyse, Position-Sizing, AI-Chat, Peer-Vergleich, Korrelations-Heatmap, Trade-Journal)
 
 **Prävention für Zukunft**:
 - Nach großen Code-Changes immer `docker-compose up --build -d` durchführen
 - Async-Funktionen konsistent checken (await nur in async functions)
 - Syntax-Check mit IDE/Linter vor Commit
 
-## �📌 Hinweis zur Struktur
+## Hinweis zur Struktur
 - Oben stehen die wichtigsten Informationen für neue Agents; darunter folgt die thematische Historie.
 
-## ✅ Abgeschlossene Meilensteine
+## Abgeschlossene Meilensteine
 
-### 1. Supabase & Datenbank
+### 1. Datenbank (ursprünglich Supabase → jetzt PostgreSQL 16)
+> Migriert in Kaskade 6. Historischer Eintrag.
 *   **Schema-Validierung**: Alle Tabellen (`watchlist`, `news_articles`, `macro_data`, `system_logs`, `audit_reports`) im SQL-Schema definiert.
 *   **Konnektivität**: Verbindungserfolg via Docker-Container bestätigt.
 *   **Dokumentation**: `docs/apis/supabase.md` mit Credentials und Setup-Anweisungen finalisiert.
@@ -230,21 +254,21 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 *   **API-Layer**: Zentraler `api.ts` mit allen Endpoints, robuste Fehlerbehandlung, Next.js ISR/SSR-Caching.
 
 ### 9. Frontend UX & Design Improvements (März 2026)
-*   ✅ **Research Dashboard** (`/research/[ticker]`): Vollständige Ticker-Analyse mit Technischen Daten, Fundamentals, Earnings-History, News, Sentiment & Scores.
-*   ✅ **Ticker Resolver**: Automatische Yahoo-Suffix-Erkennung für internationale Ticker (ASX, LSE, FSE, JPX, HKEX).
-*   ✅ **Extended Indicators**: ATR, MACD, OBV, RVOL, SMA20 für alle Ticker.
-*   ✅ **Trading Visualizations**: 52W Range Bar, Volume Profile (20-Tage), PEG Ratio Gauge.
-*   ✅ **Markets Seite** (`/markets`): Trading-grade Markt-Übersicht mit:
+*   **Research Dashboard** (`/research/[ticker]`): Vollständige Ticker-Analyse mit Technischen Daten, Fundamentals, Earnings-History, News, Sentiment & Scores.
+*   **Ticker Resolver**: Automatische Yahoo-Suffix-Erkennung für internationale Ticker (ASX, LSE, FSE, JPX, HKEX).
+*   **Extended Indicators**: ATR, MACD, OBV, RVOL, SMA20 für alle Ticker.
+*   **Trading Visualizations**: 52W Range Bar, Volume Profile (20-Tage), PEG Ratio Gauge.
+*   **Markets Seite** (`/markets`): Trading-grade Markt-Übersicht mit:
     - Regime-Ampel (Risk-On/Mixed/Risk-Off) basierend auf VIX + Credit Spread + Marktbreite
     - 6 Indizes: SPY, QQQ, DIA, DAX (^GDAXI), MSCI World (URTH), IWM
     - Marktbreite: % Aktien über SMA50/200 (30-Titel-Proxy)
     - Sektor-Heatmap: 11 ETFs farbcodiert nach 5T-Performance
     - Cross-Asset Signale: VIX-Struktur (Contango/Backwardation), Risk Appetite, Credit
     - DeepSeek Markt-Audit: Regime-Einschätzung + Strategie-Empfehlung auf Knopfdruck
-*   ✅ **Performance Revolution**: Watchlist 55x schneller (2.3s statt 127s) durch yfinance + enriched Caching.
-*   ✅ **Smart Money P/C Ratio**: Put/Call Ratio basierend auf Volumen statt OI.
-*   ✅ **Sentiment Divergenz Alerts**: Automatische Erkennung von extrem negativem Sentiment + guter Qualität.
-*   ✅ **Peer Earnings Monitor**: Cross-Signal-Tracking für Earnings-Days (Vorab-Alert + Reaktions-Alert).
+*   **Performance Revolution**: Watchlist 55x schneller (2.3s statt 127s) durch yfinance + enriched Caching.
+*   **Smart Money P/C Ratio**: Put/Call Ratio basierend auf Volumen statt OI.
+*   **Sentiment Divergenz Alerts**: Automatische Erkennung von extrem negativem Sentiment + guter Qualität.
+*   **Peer Earnings Monitor**: Cross-Signal-Tracking für Earnings-Days (Vorab-Alert + Reaktions-Alert).
 
 ### 10. Phase 4D: Bug Fixes & Frontend Stabilisierung (März 2026)
 - [x] watchlist_router korrekt registriert
@@ -308,52 +332,52 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - [x] **v5.2.8**: Performance Optimizations (Batch Queries, Caching, AsyncIO Improvements)
 - [x] **v5.3.0**: Research Dashboard API (aggregierter Endpoint mit PEG, EV/EBITDA, ROE, ROA, FCF Yield)
 
-## 🚀 Aktuelle Features (Stand März 2026)
+## Aktuelle Features (Stand März 2026)
 
 ### Core Funktionalität
-- ✅ **Watchlist Management**: Hinzufügen/Entfernen von Tickern mit automatischer Datenanreicherung
-- ✅ **Real-time News**: FinBERT-gestützte Sentiment-Analyse mit Material-Event-Detection
-- ✅ **Chart Intelligence**: Interaktive Kurs-Charts mit SMA-Overlays und Event-Markern
-- ✅ **KI-Analysen**: DeepSeek-Integration für Reports und Stichpunkt-Extraktion
-- ✅ **Automatisierung**: n8n-Workflows für tägliche Briefings und wöchentliche Reports
-- ✅ **Command Palette**: Professionelles Mini-Dashboard mit Audit-Historie und lucide-react Icons
-- ✅ **Sentiment Intelligence**: Composite Sentiment (FinBERT + Web + Social) mit Divergenz-Erkennung
-- ✅ **Peer Monitoring**: Automatische Peer-Reaktion Alerts bei Earnings
-- ✅ **Web Intelligence**: Gecachte Web-Suche mit Prioritätssystem
-- ✅ **Research Dashboard**: Aggregierter Endpoint für alle Trading-Daten in einem Call
+- **Watchlist Management**: Hinzufügen/Entfernen von Tickern mit automatischer Datenanreicherung
+- **Real-time News**: FinBERT-gestützte Sentiment-Analyse mit Material-Event-Detection
+- **Chart Intelligence**: Interaktive Kurs-Charts mit SMA-Overlays und Event-Markern
+- **KI-Analysen**: DeepSeek-Integration für Reports und Stichpunkt-Extraktion
+- **Automatisierung**: n8n-Workflows für tägliche Briefings und wöchentliche Reports
+- **Command Palette**: Professionelles Mini-Dashboard mit Audit-Historie und lucide-react Icons
+- **Sentiment Intelligence**: Composite Sentiment (FinBERT + Web + Social) mit Divergenz-Erkennung
+- **Peer Monitoring**: Automatische Peer-Reaktion Alerts bei Earnings
+- **Web Intelligence**: Gecachte Web-Suche mit Prioritätssystem
+- **Research Dashboard**: Aggregierter Endpoint für alle Trading-Daten in einem Call
 
 ### Data Sources
-- ✅ **Marktdaten**: yfinance (Kurse, Volumen, Indikatoren, Optionsdaten)
-- ✅ **News**: Finnhub (Company & General News), Google News Integration
-- ✅ **Makro**: FRED (VIX, Zinsen, Rohstoffe), Finnhub Economic Calendar
-- ✅ **Regulatorisch**: SEC EDGAR (Form 8-K, 4) für Insider-Transaktionen
-- ✅ **Sentiment**: FinBERT für deutsche/englische News-Analyse
-- ✅ **Social**: Reddit/Twitter Mentions via Finnhub Social Sentiment
-- ✅ **Web Intelligence**: Gecachte Web-Suche mit DeepSeek Analyse
+- **Marktdaten**: yfinance (Kurse, Volumen, Indikatoren, Optionsdaten)
+- **News**: Finnhub (Company & General News), Google News Integration
+- **Makro**: FRED (VIX, Zinsen, Rohstoffe), Finnhub Economic Calendar
+- **Regulatorisch**: SEC EDGAR (Form 8-K, 4) für Insider-Transaktionen
+- **Sentiment**: FinBERT für deutsche/englische News-Analyse
+- **Social**: Reddit/Twitter Mentions via Finnhub Social Sentiment
+- **Web Intelligence**: Gecachte Web-Suche mit DeepSeek Analyse
 
 ### UI/UX
-- ✅ **Modern Dark Mode**: Konsistentes Design mit CSS-Variablen
-- ✅ **Command Palette**: Rich Mini-Dashboard mit lucide-react Icons
-- ✅ **2-Spalten News-Layout**: Kein Tab-Wechsel mehr nötig
-- ✅ **Automatische Charts**: Direkte Anzeige auf Ticker-Detailseiten
-- ✅ **Error Handling**: Klare Fehlermeldungen und Loading-States
-- ✅ **Responsive**: Optimiert für Desktop-Anwendung
-- ✅ **Enhanced Terminal**: Log-Filterung, Stats, Error/Warning Badges
+- **Modern Dark Mode**: Konsistentes Design mit CSS-Variablen
+- **Command Palette**: Rich Mini-Dashboard mit lucide-react Icons
+- **2-Spalten News-Layout**: Kein Tab-Wechsel mehr nötig
+- **Automatische Charts**: Direkte Anzeige auf Ticker-Detailseiten
+- **Error Handling**: Klare Fehlermeldungen und Loading-States
+- **Responsive**: Optimiert für Desktop-Anwendung
+- **Enhanced Terminal**: Log-Filterung, Stats, Error/Warning Badges
 
 ### Backend Performance
-- ✅ **Batch Processing**: Parallele Datenabfrage via asyncio.gather
-- ✅ **Smart Caching**: Redis + Supabase Cache-Layer für Web Intelligence
-- ✅ **Timeout Management**: Extended Timeouts für DeepSeek API (300s)
-- ✅ **Error Resilience**: Robustes Error Handling mit Fallbacks
-- ✅ **Schema Validation**: Korrekte Supabase Insert-Payloads
+- **Batch Processing**: Parallele Datenabfrage via asyncio.gather
+- **Smart Caching**: Redis + Supabase Cache-Layer für Web Intelligence
+- **Timeout Management**: Extended Timeouts für DeepSeek API (300s)
+- **Error Resilience**: Robustes Error Handling mit Fallbacks
+- **Schema Validation**: Korrekte Supabase Insert-Payloads
 
-## 🛠️ System-Hinweis
+## System-Hinweis
 *   **Docker**: Backend, Redis, n8n und Frontend laufen stabil im Verbund.
 *   **Repository**: Alle Updates sind nach jeder Änderung direkt nach `Kazuo3o447/Kafin` gepusht worden.
 *   **Build**: Frontend wird per `docker-compose build kafin-frontend && docker-compose up -d kafin-frontend` deployed.
-*   **Zugriff**: http://localhost:3000 für das Web-Dashboard, http://localhost:8000 für die API-Dokumentation.
+*   **Zugriff**: http://localhost:3000 für das Web-Dashboard, http://localhost:8002 für die API-Dokumentation.
 
-## 🔄 Letzte Updates (20. März 2026)
+## Letzte Updates (20. März 2026)
 ### Watchlist Data Display & Research UX
 - **Datenanzeige**: "1T % Opp Torp" jetzt sichtbar
   - **Problem**: Frontend nutzte schnelle Route ohne enrichment Daten
@@ -388,7 +412,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
   - **KI-Integration**: In Audit Reports für systemische Risikobewertung
 - **Bugfix**: Watchlist Web Prio speichert None-Werte korrekt (exclude_unset=True)
 
-## 🔍 System Health & Known Issues
+## System Health & Known Issues
 
 ### yfinance 404 Errors (Expected Behavior)
 **Symptom:** Log zeigt `HTTP Error 404: Quote not found for symbol: CEP/LVTX/PBBK/USCTF/SCS/IRRX/ZK`
@@ -399,10 +423,10 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - **Fehler-Typ:** Erwartetes Verhalten für delisted Securities
 
 **System Verhalten:**
-- ✅ **Robust**: Try-Catch Blöcke fangen 404 Fehler ab
-- ✅ **Graceful**: Scanner läuft weiter und findet valide Kandidaten
-- ✅ **Logging**: Fehler werden korrekt für Debugging geloggt
-- ✅ **No Impact**: Watchlist, Research Dashboard funktionieren normal
+- **Robust**: Try-Catch Blöcke fangen 404 Fehler ab
+- **Graceful**: Scanner läuft weiter und findet valide Kandidaten
+- **Logging**: Fehler werden korrekt für Debugging geloggt
+- **No Impact**: Watchlist, Research Dashboard funktionieren normal
 
 **Betroffene Ticker (Beispiele):**
 - CEP, LVTX, PBBK, USCTF, SCS, IRRX, ZK (alle delisted/defekte)
@@ -416,9 +440,9 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 **Ursache:** Upstream-Instabilität bei FRED oder ein kurzfristig fehlerhafter Request. Das ist kein Frontend-Problem.
 
 **System Verhalten:**
-- ✅ Backend versucht FRED-Requests jetzt bis zu 3x erneut
-- ✅ `api_key` wird in FRED-Logs redigiert
-- ✅ Wenn FRED weiter fehlschlägt, läuft der Macro-Snapshot mit `None`-Werten für die betroffene Serie weiter
+- **Backend**: FRED-Requests jetzt bis zu 3x erneut
+- **`api_key`**: wird in FRED-Logs redigiert
+- **Wenn FRED weiter fehlschlägt**: läuft der Macro-Snapshot mit `None`-Werten für die betroffene Serie weiter
 
 **Monitoring:** Falls die Fehler gehäuft auftreten, FRED-Status/Rate-Limit prüfen; ansonsten ist das ein transienter Upstream-Fehler
 
@@ -428,9 +452,9 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 **Ursache:** Die Status-/Settings-Seiten riefen `GET /api/diagnostics/full` und `GET /api/diagnostics/db` direkt über den Rewrite-Pfad auf. Bei instabiler Backend-Erreichbarkeit erzeugte das unnötige Proxy-Fehler im Frontend-Log.
 
 **System Verhalten:**
-- ✅ Frontend besitzt jetzt eigene Route-Handler für `/api/diagnostics/full` und `/api/diagnostics/db`
-- ✅ Der Handler ruft das Backend direkt auf und liefert zusätzlich ein `details`-Alias für die Settings-Seite
-- ✅ Browser-Fehler werden in einen sauberen 502/504-Response übersetzt statt Proxy-Noise im Container-Log zu erzeugen
+- **Frontend**: besitzt jetzt eigene Route-Handler für `/api/diagnostics/full` und `/api/diagnostics/db`
+- **Handler**: ruft das Backend direkt auf und liefert zusätzlich ein `details`-Alias für die Settings-Seite
+- **Browser-Fehler**: werden in einen sauberen 502/504-Response übersetzt statt Proxy-Noise im Container-Log zu erzeugen
 
 **Monitoring:** Status-/Settings-Diagnosen sollten jetzt ohne Proxy-Fehler im `kafin-frontend`-Log laufen
 
@@ -531,7 +555,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
   - Responsive Grid-Layout für Marktdaten
 - **UX**: Größere Ticker-Preis-Anzeige, klarere Status-Indikatoren, verbesserte visuelle Hierarchie
 
-## 🔄 Letzte Updates (19. März 2026)
+## Letzte Updates (19. März 2026)
 - Backend: Batch-Supabase-Query für Score-History implementiert (Performance-Boost von 2-4s auf ~500ms)
 - Backend: Earnings-Radar gefixt - report_date Feld-Mapping korrigiert, 1243 Einträge jetzt sichtbar
 - Frontend: Watchlist Race Condition behoben - sofortige Cache-Anzeige ohne Ladescreen
@@ -548,7 +572,7 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 - Frontend: Watchlist-Modal UX überarbeitet
 - Dokumentation: STATUS.md und README.md aktualisiert
 
-## 🔄 Letzte Ergänzungen (22. März 2026)
+## Letzte Ergänzungen (22. März 2026)
 - **K6-4 Meilenstein**: PostgreSQL Migration & RAG Pipeline abgeschlossen.
 - **Local Embeddings**: Integration von `sentence-transformers` (all-MiniLM-L6-v2) für lokale Vektor-Generierung ohne externe API-Kosten.
 - **Auto-Embedding**: Hintergrund-Task generiert automatisch Embeddings für neue News-Stichpunkte.
@@ -559,8 +583,8 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
   - Asyncpg-Pool Lifecycle mit Shutdown-Hook und Locking abgesichert.
 - **Admin Tools**: Backfill-Endpoint zur nachträglichen Embedding-Generierung für Bestandsdaten.
 
-## 🔄 Letzte Ergänzungen (21. März 2026)
+## Letzte Ergänzungen (21. März 2026)
 - **FRED-Härtung**: 5xx-Retries + API-Key-Redaktion im Backend
 - **Diagnostics-Fix**: `/api/diagnostics/full` und `/api/diagnostics/db` laufen über eigene Next.js-Route-Handler statt Rewrite-Proxy
-- **Log Viewer**: `Ignore`-Filter ist im Frontend sichtbar und zeigt erwartete yfinance-404s separat
+- **Log Viewer**: `Ignore`-Filter ist im Frontend sichtbar und zeigt erwartbare yfinance-404s separat
 - **Status-Seite**: Diagnose-Responses sind wieder stabil und produzieren keine Proxy-Fehler mehr im Frontend-Container

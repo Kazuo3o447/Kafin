@@ -10,10 +10,10 @@ async def test_calculate_opportunity_score():
         "insider_activity": {"cluster_assessment": "Cluster-Käufe"}
     }
     score = await calculate_opportunity_score("AAPL", data)
-    assert score.factors["earnings_momentum"] == 10.0
-    assert score.factors["regime_valuation"] == 10.0
-    assert score.factors["short_squeeze"] == 10.0
-    assert score.factors["insider_activity"] == 10.0
+    assert score.earnings_momentum == 10.0  # NEU: direkte Felder statt factors
+    assert score.valuation_regime == 10.0   # NEU
+    assert score.short_squeeze_potential == 10.0  # NEU
+    assert score.insider_activity == 10.0   # NEU
     assert score.total_score > 5.0 # Due to weights
 
 @pytest.mark.asyncio
@@ -24,20 +24,20 @@ async def test_calculate_torpedo_score():
         "macro": {"vix": 35.0}
     }
     score = await calculate_torpedo_score("AAPL", data)
-    assert score.factors["valuation_fall_height"] == 10.0
-    assert score.factors["insider_selling"] == 10.0
-    assert score.factors["macro_headwinds"] == 10.0
+    assert score.valuation_downside == 10.0     # NEU: direkte Felder statt factors
+    assert score.insider_selling == 10.0       # NEU
+    assert score.macro_headwind == 10.0         # NEU
     assert score.total_score > 3.0
 
 @pytest.mark.asyncio
 async def test_decision_matrix():
     from schemas.scores import OpportunityScore, TorpedoScore
-    opp_strong = OpportunityScore(total_score=8.0, factors={})
-    torp_low = TorpedoScore(total_score=2.0, factors={})
+    opp_strong = OpportunityScore(ticker="TEST", total_score=8.0)  # NEU: nur Pflichtfelder
+    torp_low = TorpedoScore(ticker="TEST", total_score=2.0)       # NEU
     rec1 = await get_recommendation(opp_strong, torp_low)
-    assert rec1.recommendation == "Strong Buy"
+    assert rec1.recommendation == "strong_buy"  # NEU: interne Tokens
     
-    opp_weak = OpportunityScore(total_score=2.0, factors={})
-    torp_high = TorpedoScore(total_score=8.5, factors={})
+    opp_weak = OpportunityScore(ticker="TEST", total_score=2.0)   # NEU
+    torp_high = TorpedoScore(ticker="TEST", total_score=8.5)      # NEU
     rec2 = await get_recommendation(opp_weak, torp_high)
-    assert rec2.recommendation == "Strong Short"
+    assert rec2.recommendation == "strong_short"  # NEU: interne Tokens

@@ -67,6 +67,19 @@ async def _fmp_get(endpoint: str, params: dict = None) -> list | dict | None:
 @rate_limit("fmp")
 async def get_company_profile(ticker: str) -> ValuationData | None:
     """Holt das Firmenprofil. Probiert /stable/ dann /api/v3/ als Fallback."""
+    if settings.use_mock_data:
+        return ValuationData(
+            ticker=ticker,
+            sector="Technology",
+            industry="Consumer Electronics",
+            pe_ratio=28.5,
+            market_cap=3_000_000_000_000,
+            ps_ratio=7.8,
+            debt_to_equity=1.2,
+            current_ratio=1.5,
+            free_cash_flow_yield=0.045,
+        )
+
     # Versuch 1: /stable/ mit symbol= Parameter
     data = await _fmp_get("/stable/profile", {"symbol": ticker})
 
@@ -95,6 +108,18 @@ async def get_company_profile(ticker: str) -> ValuationData | None:
 @rate_limit("fmp")
 async def get_analyst_estimates(ticker: str) -> EarningsExpectation | None:
     """Holt Analysten-Schätzungen."""
+    if settings.use_mock_data:
+        return EarningsExpectation(
+            ticker=ticker,
+            report_date=datetime.now().date(),
+            report_timing="after_hours",
+            company_name=f"Mock {ticker}",
+            report_hour="amc",
+            eps_consensus=2.35,
+            revenue_consensus=12345.0,
+            analyst_count=25,
+        )
+
     # /stable/ ohne limit (manche Plans unterstützen limit nicht)
     data = await _fmp_get("/stable/analyst-estimates", {"symbol": ticker})
 
@@ -127,6 +152,30 @@ async def get_analyst_estimates(ticker: str) -> EarningsExpectation | None:
 @rate_limit("fmp")
 async def get_earnings_history(ticker: str, limit: int = 8) -> EarningsHistorySummary | None:
     """Holt historische Earnings-Surprises aus dem Calendar (Legacy Endpoints sind deprecated)."""
+    if settings.use_mock_data:
+        return EarningsHistorySummary(
+            ticker=ticker,
+            quarters_beat=6,
+            quarters_missed=2,
+            avg_surprise_percent=8.4,
+            last_quarter=EarningsHistory(
+                ticker=ticker,
+                quarter="2025-Q4",
+                eps_actual=2.45,
+                eps_consensus=2.30,
+                eps_surprise_percent=6.52,
+            ),
+            all_quarters=[
+                EarningsHistory(
+                    ticker=ticker,
+                    quarter="2025-Q4",
+                    eps_actual=2.45,
+                    eps_consensus=2.30,
+                    eps_surprise_percent=6.52,
+                )
+            ],
+        )
+
     # Verwende Calendar statt deprecated surprises endpoint
     data = await _fmp_get("/stable/earnings-calendar")
     if not data:
@@ -196,6 +245,19 @@ async def get_earnings_history(ticker: str, limit: int = 8) -> EarningsHistorySu
 @rate_limit("fmp")
 async def get_key_metrics(ticker: str) -> ValuationData | None:
     """Holt Key Metrics (TTM)."""
+    if settings.use_mock_data:
+        return ValuationData(
+            ticker=ticker,
+            sector="Technology",
+            industry="Consumer Electronics",
+            pe_ratio=28.5,
+            ps_ratio=7.8,
+            market_cap=3_000_000_000_000,
+            debt_to_equity=1.2,
+            current_ratio=1.5,
+            free_cash_flow_yield=0.045,
+        )
+
     data = await _fmp_get("/stable/key-metrics-ttm", {"symbol": ticker})
     if data is None:
         data = await _fmp_get(f"/api/v3/key-metrics-ttm/{ticker}")
@@ -224,6 +286,13 @@ async def get_key_metrics(ticker: str) -> ValuationData | None:
 @rate_limit("fmp")
 async def get_analyst_grades(ticker: str) -> list[dict]:
     """Holt Analysten Upgrades/Downgrades."""
+    if settings.use_mock_data:
+        return [
+            {"newGrade": "buy", "previousGrade": "hold", "date": "2026-03-20"},
+            {"newGrade": "buy", "previousGrade": "hold", "date": "2026-02-15"},
+            {"newGrade": "buy", "previousGrade": "hold", "date": "2026-01-10"},
+        ]
+
     data = await _fmp_get("/stable/grades", {"symbol": ticker, "limit": 5})
     if data is None:
         data = await _fmp_get(f"/api/v3/grade/{ticker}", {"limit": 5})

@@ -13,7 +13,7 @@ import httpx
 import yaml
 import dotenv
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any
 
 from backend.app.config import settings, YAML_PATH, ENV_PATH
@@ -1465,7 +1465,7 @@ async def run_status_check(api: str = None):
     from datetime import datetime
     return {
         "status": "success",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "keys": keys,
         "api_checks": checks,
         "settings": {

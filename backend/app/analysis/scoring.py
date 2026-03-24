@@ -121,7 +121,7 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
         (val.get("pe_ratio") if isinstance(val, dict) else None)
     ) is not None)
     pe = getattr(val, "pe_ratio", None) if not isinstance(val, dict) else val.get("pe_ratio") if val else None
-    sector_pe = getattr(val, "pe_sector_median", 15.0) if not isinstance(val, dict) else val.get("pe_sector_median", 15.0) if val else 15.0
+    sector_pe = (getattr(val, "pe_sector_median", None) or 15.0) if not isinstance(val, dict) else (val.get("pe_sector_median") or 15.0) if val else 15.0
     if pe and sector_pe:
         if pe < sector_pe * 0.8: vr = 10.0
         elif pe > sector_pe * 2.0: vr = 0.0
@@ -253,6 +253,38 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
         if dist_52w is not None and dist_52w > -5.0:
             technical_setup = min(10.0, technical_setup + 1.0)  # Nahe am Hoch = Momentum
 
+        # ADX-Modifikator: Trendstärke bestätigt oder widerlegt Setup
+        adx = tech.get("adx_14") if isinstance(tech, dict) else getattr(tech, "adx_14", None)
+        adx_strength = tech.get("adx_trend_strength") if isinstance(tech, dict) else getattr(tech, "adx_trend_strength", None)
+
+        if adx is not None:
+            if adx >= 30:
+                # Starker bestätigter Trend — Setup ist valide
+                technical_setup = min(10.0, technical_setup + 1.5)
+            elif adx >= 20:
+                # Moderater Trend — leichter Bonus
+                technical_setup = min(10.0, technical_setup + 0.5)
+            elif adx < 15:
+                # Kein Trend — technisches Setup ist unsicher
+                technical_setup = max(0.0, technical_setup - 1.0)
+
+        # Stochastic-Modifikator: Momentum-Confirmation
+        stoch_k = tech.get("stoch_k") if isinstance(tech, dict) else getattr(tech, "stoch_k", None)
+        stoch_signal = tech.get("stoch_signal") if isinstance(tech, dict) else getattr(tech, "stoch_signal", None)
+
+        if stoch_signal == "bullish_cross":
+            # Stoch kreuzt aufwärts: starkes Kauf-Signal
+            technical_setup = min(10.0, technical_setup + 1.0)
+        elif stoch_signal == "oversold":
+            # Überverkauft: möglicher Bounce — kontextuell bullisch
+            technical_setup = min(10.0, technical_setup + 0.5)
+        elif stoch_signal == "bearish_cross":
+            # Stoch kreuzt abwärts: Warnung
+            technical_setup = max(0.0, technical_setup - 0.5)
+        elif stoch_signal == "overbought":
+            # Überkauft: kein guter Entry-Punkt
+            technical_setup = max(0.0, technical_setup - 1.0)
+
     # sector_regime: Sektor-ETF 5T-Performance
     # als Rücken- oder Gegenwind für den Ticker
     sector_regime = 5.0
@@ -298,7 +330,7 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     if si_data is None:
         ss = 5.0
     else:
-        si_pct = getattr(si_data, "short_interest_percent", 0.0) if not isinstance(si_data, dict) else si_data.get("short_interest_percent", 0.0) if si_data else 0.0
+        si_pct = getattr(si_data, "short_interest_percent", 0.0) if not isinstance(si_data, dict) else si_data.get("short_interest_percent", si_data.get("short_interest", 0.0)) if si_data else 0.0
         dtc = getattr(si_data, "days_to_cover", 0.0) if not isinstance(si_data, dict) else si_data.get("days_to_cover", 0.0) if si_data else 0.0
         
         if si_pct > 30 and dtc > 5: ss = 10.0
@@ -311,8 +343,12 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     ia = data.get("insider_activity")
     _track("insider_activity", ia is not None)
     assessment = getattr(ia, "assessment", "") if not isinstance(ia, dict) else ia.get("assessment", "") if ia else ""
-    if assessment == "bullish": ia_score = 10.0
-    elif assessment == "bearish": ia_score = 0.0
+    cluster_assessment = getattr(ia, "cluster_assessment", "") if not isinstance(ia, dict) else ia.get("cluster_assessment", "") if ia else ""
+    assessment_text = f"{assessment} {cluster_assessment}".strip().lower()
+    if "bullish" in assessment_text or "kauf" in assessment_text or "käuf" in assessment_text or "buy" in assessment_text:
+        ia_score = 10.0
+    elif "bearish" in assessment_text or "verkauf" in assessment_text or "verkäuf" in assessment_text or "sell" in assessment_text:
+        ia_score = 0.0
 
     # options_flow
     of_score = 5.0
@@ -322,16 +358,44 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
     if pcr > 1.2:
         of_score = min(10.0, of_score + 2.0)  # Konträr-Signal
 
+    # ── Kontextueller Options-Flow-Boost vor Earnings ─────────────
+    # Unusual Options Activity ist das früheste Smart-Money-Signal
+    # vor Earnings. 5% Standardgewicht unterschätzt das massiv.
+    # Wenn Earnings in ≤ 5 Tagen: Budget von Valuation und Technical umschichten.
+    #
+    # Budget-Neutralität: +7% auf options_flow
+    #                     −4% von valuation_regime
+    #                     −3% von technical_setup
+    # Summe aller Gewichte bleibt 1.0.
+    earnings_countdown = data.get("earnings_countdown")
+    _weights = dict(weights)  # Kopie — Original nicht mutieren
+
+    if (
+        earnings_countdown is not None
+        and isinstance(earnings_countdown, (int, float))
+        and 0 <= earnings_countdown <= 5
+    ):
+        _weights["options_flow"]     = 0.12   # statt 0.05 (+7%)
+        _weights["valuation_regime"] = 0.11   # statt 0.15 (-4%)
+        _weights["technical_setup"]  = 0.07   # statt 0.10 (-3%)
+        logger.debug(
+            f"[{ticker}] Options-Flow-Boost aktiv: Earnings in {earnings_countdown}T "
+            f"— options_flow 5%→12%, valuation 15%→11%, technical 10%→7%"
+        )
+    else:
+        _weights = weights  # Standard-Gewichte aus scoring.yaml
+    # ── Ende Options-Flow-Boost ──────────────────────────────────
+
     total_score = (
-        em * weights.get("earnings_momentum", 0) +
-        whisper_delta * weights.get("whisper_delta", 0) +
-        vr * weights.get("valuation_regime", 0) +
-        guidance_trend * weights.get("guidance_trend", 0) +
-        technical_setup * weights.get("technical_setup", 0) +
-        sector_regime * weights.get("sector_regime", 0) +
-        ss * weights.get("short_squeeze_potential", 0) +
-        ia_score * weights.get("insider_activity", 0) +
-        of_score * weights.get("options_flow", 0)
+        em * _weights.get("earnings_momentum", 0) +
+        whisper_delta * _weights.get("whisper_delta", 0) +
+        vr * _weights.get("valuation_regime", 0) +
+        guidance_trend * _weights.get("guidance_trend", 0) +
+        technical_setup * _weights.get("technical_setup", 0) +
+        sector_regime * _weights.get("sector_regime", 0) +
+        ss * _weights.get("short_squeeze_potential", 0) +
+        ia_score * _weights.get("insider_activity", 0) +
+        of_score * _weights.get("options_flow", 0)
     )
 
     logger.debug(
@@ -340,6 +404,7 @@ async def calculate_opportunity_score(ticker: str, data: dict) -> OpportunitySco
         f"guidance={guidance_trend:.1f} "
         f"sector={sector_regime:.1f} "
         f"em={em:.1f} tech={technical_setup:.1f}"
+        f"{' [Options-Boost aktiv: EC=' + str(earnings_countdown) + 'T]' if earnings_countdown is not None and 0 <= earnings_countdown <= 5 else ''}"
     )
     
     # ── Completeness berechnen ────────────────────────────────────
@@ -393,7 +458,7 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
         vd = 4.0  # Explizit: keine Bewertungsdaten = Vorsicht
     else:
         ps = getattr(val, "ps_ratio", None) if not isinstance(val, dict) else val.get("ps_ratio") if val else None
-        sector_ps = getattr(val, "ps_sector_median", 3.0) if not isinstance(val, dict) else val.get("ps_sector_median", 3.0) if val else 3.0
+        sector_ps = (getattr(val, "ps_sector_median", None) or 3.0) if not isinstance(val, dict) else (val.get("ps_sector_median") or 3.0) if val else 3.0
         if ps:
             if ps > sector_ps * 3.0: vd = 10.0
             elif ps > sector_ps * 1.5: vd = 5.0
@@ -437,7 +502,10 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
     isa_score = 0.0
     ia = data.get("insider_activity")
     assessment = getattr(ia, "assessment", "") if not isinstance(ia, dict) else ia.get("assessment", "") if ia else ""
-    if assessment == "bearish": isa_score = 10.0
+    cluster_assessment = getattr(ia, "cluster_assessment", "") if not isinstance(ia, dict) else ia.get("cluster_assessment", "") if ia else ""
+    assessment_text = f"{assessment} {cluster_assessment}".strip().lower()
+    if "bearish" in assessment_text or "verkauf" in assessment_text or "verkäuf" in assessment_text or "sell" in assessment_text:
+        isa_score = 10.0
 
     # Reddit-Verstärker: Retail gierig + Insider verkauft
     # = verstärktes Torpedo-Signal
@@ -652,7 +720,7 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
     vix = getattr(macro, "vix", None) if not isinstance(macro, dict) else macro.get("vix") if macro else None
 
     if vix is not None:
-        if vix > 35:   mh = 10.0
+        if vix >= 35:  mh = 10.0
         elif vix > 25: mh = 8.0
         elif vix > 20: mh = 6.0
         elif vix > 15: mh = 4.0
@@ -698,7 +766,12 @@ async def calculate_torpedo_score(ticker: str, data: dict) -> TorpedoScore:
         macro_headwind=round(mh, 2)
     )
 
-async def get_recommendation(opportunity: OpportunityScore, torpedo: TorpedoScore) -> AuditRecommendation:
+async def get_recommendation(
+    opportunity: OpportunityScore, 
+    torpedo: TorpedoScore,
+    macro_regime: str | None = None,   # NEU: "Risk Off" | "Risk On" | "Neutral"
+    vix: float | None = None,          # NEU: aktueller VIX-Wert
+) -> AuditRecommendation:
     """
     Kombiniert Opportunity- und Torpedo-Scores in eine finale Empfehlung (Buy, Hold, Short etc.).
     """
@@ -742,6 +815,42 @@ async def get_recommendation(opportunity: OpportunityScore, torpedo: TorpedoScor
         rec = "ignore"
         rec_label = "Ignorieren"
         reason = "Keine Signale."
+
+    # ── Makro-Regime-Gate ─────────────────────────────────────────
+    # Bei Risk-Off-Regime werden bullische Empfehlungen degradiert.
+    # Begründung: Selbst starke Einzeltitel fallen im Marktcrash.
+    # VIX > 25: erhöhte Vorsicht. "Risk Off" (VIX > 30): Schutz aktiv.
+    #
+    # Shorts bleiben — in Risk-Off ist Short-Bias oft richtig.
+    # Nur Long-Empfehlungen werden gebremst.
+    macro_warning = None
+
+    is_risk_off = (
+        (macro_regime is not None and macro_regime.lower() in ("risk off", "risk_off"))
+        or (vix is not None and vix > 30)
+    )
+    is_elevated_vix = vix is not None and 25 < vix <= 30
+
+    if is_risk_off and rec in ("strong_buy", "buy_hedge"):
+        rec = "watch"
+        rec_label = "Beobachten"
+        macro_warning = (
+            f"⚠️ Makro-Regime-Gate aktiv: Risk Off"
+            + (f" (VIX {vix:.0f})" if vix else "")
+            + f" — Long-Empfehlung auf WATCH degradiert. "
+            f"Original-Score: Opp {opp:.1f}/Torp {torp:.1f}."
+        )
+        reason = macro_warning
+
+    elif is_elevated_vix and rec == "strong_buy":
+        rec = "buy_hedge"
+        rec_label = "Buy mit Absicherung"
+        macro_warning = (
+            f"⚠️ Erhöhte Volatilität (VIX {vix:.0f}) — "
+            f"STRONG BUY zu 'Buy mit Absicherung' herabgestuft."
+        )
+        reason = f"{reason} {macro_warning}"
+    # ── Ende Makro-Regime-Gate ───────────────────────────────────
         
     return AuditRecommendation(
         ticker=opportunity.ticker,
@@ -749,7 +858,8 @@ async def get_recommendation(opportunity: OpportunityScore, torpedo: TorpedoScor
         torpedo_score=torpedo,
         recommendation=rec,
         recommendation_label=rec_label,
-        reasoning=reason
+        reasoning=reason,
+        macro_warning=macro_warning,   # NEU — None wenn kein Gate aktiv
     )
 
 
@@ -845,6 +955,7 @@ def calculate_mismatch_score(
     Returns: Score zwischen 0-100 (je höher desto stärker die Contrarian-Opportunity)
     """
     score = 0.0
+    beta = beta if beta is not None else 1.0
     
     # 1. Sentiment-Check (max 40 Punkte)
     # Je negativer das Sentiment, desto höher die Contrarian-Chance

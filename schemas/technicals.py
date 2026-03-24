@@ -39,6 +39,18 @@ class TechnicalSetup(BaseModel):
     change_1d_pct: Optional[float] = None  # 1-Tage Performance für Research
     change_5d_pct: Optional[float] = None  # 5-Tage Performance für Research
     change_1m_pct: Optional[float] = None  # 1-Monat Performance für Research
+    
+    # Twelve Data Erweiterungen
+    adx_14:            Optional[float] = None  # Average Directional Index (Trendstärke)
+    adx_plus_di:       Optional[float] = None  # +DI (bullisher Druck)
+    adx_minus_di:      Optional[float] = None  # -DI (bearisher Druck)
+    adx_trend_strength: Optional[str]  = None  # "strong" | "moderate" | "weak"
+    stoch_k:           Optional[float] = None  # Stochastic %K
+    stoch_d:           Optional[float] = None  # Stochastic %D (Signal-Linie)
+    stoch_signal:      Optional[str]  = None   # "bullish_cross"|"bearish_cross"|"oversold"|"overbought"|"neutral"
+    iv_percentile:     Optional[float] = None  # IV-Percentile (approximiert)
+    td_enriched:       bool = False            # True wenn TD-Daten eingeflossen
+    
     model_config = ConfigDict(from_attributes=True)
 
 class OptionsMetrics(BaseModel):

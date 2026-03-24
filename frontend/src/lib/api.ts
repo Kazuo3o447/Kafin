@@ -37,6 +37,7 @@ export const api = {
   generateMorningBriefing: () => fetchAPI("/api/reports/generate-morning", { method: "POST" }),
   generateSundayReport: () => fetchAPI("/api/reports/generate-sunday", { method: "POST" }),
   generateAuditReport: (ticker: string) => fetchAPI(`/api/reports/generate/${ticker}`, { method: "POST" }),
+  reviewTrade: (ticker: string) => fetchAPI(`/api/reports/review-trade/${ticker}`, { method: "POST" }),
   getLatestReport: () => fetchAPI("/api/reports/latest"),
   postEarningsReview: (ticker: string) => fetchAPI(`/api/reports/post-earnings-review/${ticker}`, { method: "POST" }),
 
@@ -70,9 +71,17 @@ export const api = {
     })()),
   updateSnapshotOutcome: (id: number, data: Record<string, unknown>) =>
     fetchAPI(`/api/data/decision-snapshots/${id}/outcome`, { method: "POST", body: JSON.stringify(data) }),
-  getShadowPortfolio: () => fetchAPI("/api/shadow-portfolio"),
-  getShadowTrades: (status = "all") => fetchAPI(`/api/shadow-portfolio/trades?status=${status}`),
-  getShadowWeeklyReport: () => fetchAPI("/api/shadow-portfolio/weekly-report"),
+  getShadowPortfolio: () => fetchAPI("/api/shadow/portfolio"),
+  getShadowTrades: (status = "all") => fetchAPI(`/api/shadow/portfolio/trades?status=${status}`),
+  getShadowWeeklyReport: () => fetchAPI("/api/shadow/portfolio/weekly-report"),
+  manualTrade: (data: {
+    ticker: string;
+    direction: "long" | "short";
+    trade_reason: string;
+    opportunity_score?: number;
+    torpedo_score?: number;
+    notes?: string | null;
+  }) => fetchAPI("/api/shadow/manual-trade", { method: "POST", body: JSON.stringify(data) }),
 
   // Actions
   runNewsScan: () => fetchAPI("/api/news/scan", { method: "POST" }),

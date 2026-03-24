@@ -9,7 +9,7 @@ Rate-Limit: max 1 Request/2s, User-Agent erforderlich.
 """
 import asyncio
 import httpx
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from backend.app.cache import cache_get, cache_set
@@ -41,7 +41,7 @@ async def get_reddit_sentiment(
     def _fetch_reddit() -> list[str]:
         """Holt Post-Titel von Reddit (sync)."""
         titles: list[str] = []
-        cutoff = datetime.utcnow() - timedelta(hours=hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         import httpx as _httpx
 
@@ -64,7 +64,7 @@ async def get_reddit_sentiment(
                     pd = post.get("data", {})
                     created = pd.get("created_utc", 0)
                     if created:
-                        post_dt = datetime.utcfromtimestamp(created)
+                        post_dt = datetime.fromtimestamp(created, tz=timezone.utc)
                         if post_dt < cutoff:
                             continue
                     title = pd.get("title", "")

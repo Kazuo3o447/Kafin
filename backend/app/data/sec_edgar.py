@@ -27,7 +27,15 @@ async def check_recent_filings(ticker: str, form_types: list[str] = None) -> lis
 
     if settings.use_mock_data:
         logger.debug(f"Mock: SEC EDGAR Check für {ticker}")
-        return []
+        return [
+            {
+                "ticker": ticker,
+                "form_type": form_types[0] if form_types else "8-K",
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "description": "Form 8-K - Current report",
+                "url": f"https://www.sec.gov/Archives/edgar/data/0000320193",
+            }
+        ]
 
     filings = []
 

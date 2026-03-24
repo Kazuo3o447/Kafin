@@ -13,7 +13,7 @@ Endpoints:
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from datetime import date
+from datetime import date, datetime, timezone
 from backend.app.database import get_supabase_client
 from backend.app.logger import get_logger
 from backend.app.cache import cache_get
@@ -113,7 +113,7 @@ async def create_journal_entry(body: JournalEntryCreate):
     if not db:
         raise HTTPException(status_code=503, detail="DB nicht verfügbar")
     try:
-        record = body.dict()
+        record = body.model_dump()
         record["ticker"] = record["ticker"].upper()
         record["entry_date"] = str(record["entry_date"])
         result = await db.table("trade_journal").insert(record).execute_async()
@@ -129,11 +129,10 @@ async def update_journal_entry(entry_id: int, body: JournalEntryUpdate):
     if not db:
         raise HTTPException(status_code=503, detail="DB nicht verfügbar")
     try:
-        from datetime import datetime as dt
-        update = {k: v for k, v in body.dict().items() if v is not None}
+        update = {k: v for k, v in body.model_dump().items() if v is not None}
         if "exit_date" in update:
             update["exit_date"] = str(update["exit_date"])
-        update["updated_at"] = dt.utcnow().isoformat()
+        update["updated_at"] = datetime.now(timezone.utc).isoformat()
         result = await db.table("trade_journal").update(update).eq("id", entry_id).execute_async()
         if not result.data:
             raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")

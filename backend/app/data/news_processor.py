@@ -31,6 +31,9 @@ def _load_torpedo_keywords() -> list[str]:
 
 TORPEDO_KEYWORDS = _load_torpedo_keywords()
 
+# Backward-compatible alias for older tests / callers
+analyze_sentiment_batch = analyze_sentiment_batch_async
+
 
 async def process_news_for_ticker(ticker: str) -> dict:
     """
@@ -100,7 +103,7 @@ async def process_news_for_ticker(ticker: str) -> dict:
 
     # STUFE 2: FinBERT-Sentiment
     headlines = [n.headline for n in new_news]
-    sentiment_scores = await analyze_sentiment_batch_async(headlines)
+    sentiment_scores = await analyze_sentiment_batch(headlines)
 
     relevance_threshold = settings.alerts.get("finbert", {}).get("relevance_threshold", 0.3)
 
@@ -191,6 +194,15 @@ async def process_news_for_ticker(ticker: str) -> dict:
         
         try:
             extracted_data = await _extract_bullet_points(ticker, news_item)
+            if isinstance(extracted_data, list):
+                extracted_data = {
+                    "bullet_points": extracted_data,
+                    "is_narrative_shift": False,
+                    "shift_type": "None",
+                    "shift_confidence": None,
+                    "shift_reasoning": "",
+                    "is_directly_relevant": True,
+                }
             is_relevant = extracted_data.get("is_directly_relevant", True)
             if not is_relevant:
                 logger.debug(f"{ticker}: News nicht direkt relevant, skip")
@@ -245,7 +257,8 @@ async def process_news_for_ticker(ticker: str) -> dict:
                 f"Sentiment: {score:.2f}\n"
                 f"Quelle: {getattr(news_item, 'source', 'N/A')}"
             )
-            # Entfernt → Signal Feed übernimmt
+            await send_telegram_alert(alert_text)
+            stats["alerts_sent"] += 1
             logger.info(f"[SIGNAL] {ticker}: {alert_text[:100]}")
         elif score > 0.5:
             alert_text = (

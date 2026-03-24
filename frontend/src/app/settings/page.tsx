@@ -21,6 +21,8 @@ type DiagnosticResult = {
   finbert?: ServiceCheck;
   telegram?: ServiceCheck;
   n8n?: ServiceCheck;
+  twelve_data?: ServiceCheck;
+  alpaca_data?: ServiceCheck;   // NEU — separater Check von Trading
 };
 
 type DbStatus = {
@@ -310,7 +312,18 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [moduleStatus, setModuleStatus] = useState<ModuleStatusResponse | null>(null);
-  const [apiDiagnostics, setApiDiagnostics] = useState<DiagnosticResult>({});
+  const [apiDiagnostics, setApiDiagnostics] = useState<DiagnosticResult>({
+  supabase: { status: "error", details: "Nicht getestet" },
+  deepseek: { status: "error", details: "Nicht getestet" },
+  finnhub: { status: "error", details: "Nicht getestet" },
+  fmp: { status: "error", details: "Nicht getestet" },
+  fred: { status: "error", details: "Nicht getestet" },
+  finbert: { status: "error", details: "Nicht getestet" },
+  telegram: { status: "error", details: "Nicht getestet" },
+  n8n: { status: "error", details: "Nicht getestet" },
+  twelve_data: { status: "error", details: "Nicht getestet" },
+  alpaca_data: { status: "error", details: "Nicht getestet" },
+});
   const [diagnostics, setDiagnostics] = useState<DiagnosticResult>({});
   const [dbStatus, setDbStatus] = useState<DbStatus | null>(null);
   const [lastSystemCheck, setLastSystemCheck] = useState<Date | null>(null);
@@ -893,6 +906,8 @@ export default function SettingsPage() {
                   { key: "finbert", label: "FinBERT" },
                   { key: "telegram", label: "Telegram" },
                   { key: "n8n", label: "n8n" },
+                  { key: "twelve_data", label: "Twelve Data" },
+                  { key: "alpaca_data", label: "Alpaca Market Data" },
                 ].map(({ key, label }) => {
                   const status = apiDiagnostics[key as keyof DiagnosticResult];
                   return (
@@ -1021,6 +1036,7 @@ export default function SettingsPage() {
               { key: "finbert", label: "FinBERT" },
               { key: "telegram", label: "Telegram" },
               { key: "n8n", label: "n8n" },
+              { key: "twelve_data", label: "Twelve Data" },
             ].map(({ key, label }) => {
               const status = apiDiagnostics[key as keyof DiagnosticResult];
               return (

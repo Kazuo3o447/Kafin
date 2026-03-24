@@ -1,7 +1,159 @@
 # KAFIN — Zukunftsvisionen & Technical Debt
 
 *Erstellt: 21. März 2026*
+*Letztes Update: 24. März 2026*
 *Prinzip: Trading-First statt Data-First*
+
+---
+
+## ✅ Aktueller Bot-Stand
+
+Der Trading-Bot nutzt inzwischen die komplette derzeit erhobene Datenbasis für Bewertungen und Reviews:
+
+- Fundamentals / Valuation
+- Earnings / Estimates / History
+- Technicals / Relative Strength
+- Macro / Regime / VIX
+- News / Web-Intelligence / Sentiment
+- Reddit / Social Sentiment
+- Insider Activity
+- Short Interest / Squeeze / FINRA
+- Options / IV / Expected Move / Max Pain
+- Langzeit- und Kurzzeit-Memory
+
+`bot.md` ist die kanonische Referenz für die aktuelle Bot-Architektur, den Review-Flow und die Lernkurve.
+
+**Aktueller Schwerpunkt:**
+
+- Audits und Decision Snapshots werden zuerst gesammelt, um eine belastbare Baseline aufzubauen.
+- Kalibrierung von Gewichtungen und Schwellen erfolgt erst nach ausreichender Outcome-Historie.
+- Explainability bleibt Pflicht: Jede spätere Anpassung muss sich gegen reale Ergebnisse prüfen lassen.
+
+**Technischer Status (24.03.2026):**
+- ✅ Backend-Tests stabil: `24 passed, 6 warnings` (keine Errors)
+- ✅ Letzte technischen Restprobleme behoben: Async-Fehler, Pydantic-Deprecation, UTC-Zeitstempel
+- ✅ Bot ist production-ready für die Kalibrierungs-Phase
+
+**Konsequenz für zukünftige Arbeit:**
+
+- Nicht mehr neue Grunddatenquellen „um jeden Preis“ hinzufügen.
+- Stattdessen zuerst die Kalibrierung, Gewichtung und Explainability verbessern.
+- Neue Datenquellen nur dann ergänzen, wenn sie einen klaren, messbaren Edge bringen.
+
+---
+
+## 🧭 Kalibrierungs-Roadmap für den Trading-Bot
+
+Der Bot ist datenreich und stabil, aber die **Gewichtung und Grenzwerte** sind noch nicht sauber empirisch kalibriert.
+Die nächste Arbeit soll deshalb nicht mehr primär Daten sammeln, sondern die vorhandenen Signale auf reale Outcomes
+zurückführen und systematisch nachschärfen.
+
+### Ziel
+
+- Höhere Trefferquote bei `earnings`- und `momentum`-Trades
+- Weniger Overfitting auf einzelne Signalgruppen
+- Bessere Trennung zwischen bullischen Chancen und echten Torpedo-Risiken
+- Verständliche Begründungen, die sich später gegen reale Outcomes prüfen lassen
+
+### Phase 1 — Baseline-Messung & Audit-Sammlung
+
+Erstmal **nichts umgewichten**. Nur messen, wie gut der aktuelle Bot wirklich ist.
+Diese Phase ist aktuell die aktive Arbeit: Audits sammeln, Decision Snapshots sichern und Outcomes später sauber nachziehen.
+
+Erfassen pro Trade / Snapshot:
+
+- `trade_type` (`earnings` / `momentum`)
+- `opportunity_score`
+- `torpedo_score`
+- finale Empfehlung
+- tatsächliches Outcome (`T+1`, `T+5`, `T+20`)
+- Max Drawdown nach Entscheidung
+- Stop-Hit / Target-Hit
+- Earnings-Überraschung / Guidance-Reaktion
+- Follow-Through bei Momentum-Setups
+
+**Zielgröße:** mindestens 15 Outcomes pro Pfad, bevor Gewichtungen überhaupt geändert werden.
+
+### Phase 2 — Faktor-Kalibrierung
+
+Für jeden Signalblock separat prüfen, ob er wirklich mit dem Outcome korreliert:
+
+- Earnings Momentum
+- Whisper Delta
+- Guidance Trend
+- Valuation Regime
+- Technical Setup
+- Sector Regime
+- Short Squeeze Potential
+- Insider Activity
+- Options Flow
+- Macro Headwind
+- Sentiment Divergence
+
+Fragen je Faktor:
+
+- Trägt er bei Earnings tatsächlich?
+- Trägt er bei Momentum tatsächlich?
+- Hat er nur visuelle Plausibilität oder echte Trefferquote?
+
+**Regel:** Ein Faktor darf nur dann angehoben werden, wenn er im jeweiligen Pfad stabil positive Wirkung zeigt.
+
+### Phase 3 — Threshold-Kalibrierung
+
+Die Empfehlungsschwellen (`strong_buy`, `buy_hedge`, `watch`, `strong_short`, `potential_short`) müssen auf reale Daten angepasst werden.
+
+Zu kalibrierende Schwellen:
+
+- Mindest-Opportunity für Longs
+- Maximaler Torpedo-Wert für Longs
+- Mindest-Torpedo für Shorts
+- Makro-Gate-Schwellen bei VIX / Risk-Off
+- Confidence-Schwellen für Review-Freigaben
+
+**Ziel:** weniger Fehlsignale bei moderaten Scores und klarere Trennung in starken Marktphasen.
+
+### Phase 4 — Explainability-Kalibrierung
+
+Die Begründung soll nicht nur „nett klingen“, sondern später mit dem Ergebnis vergleichbar sein.
+
+Prüfen:
+
+- Stimmen Top-Driver wirklich mit den späteren Bewegungen überein?
+- Wurden die wichtigsten Risiken korrekt benannt?
+- War das Makro-Gate nachvollziehbar?
+- Sind die Review-Texte konsistent mit den gespeicherten Snapshots?
+
+**Zielgröße:** Die Top-3-Begründungen sollten in einem Großteil der Fälle die spätere Richtung zumindest plausibel erklären.
+
+### Phase 5 — Gewichtungsanpassung
+
+Erst wenn genug Daten vorliegen, werden Gewichte angepasst.
+
+Leitplanken:
+
+- Änderungen nur klein und kontrolliert
+- keine radikalen Sprünge
+- zuerst Pfad-spezifisch, nicht global
+- jede Änderung mit vorher/nachher-Auswertung dokumentieren
+
+### Phase 6 — Validierungsschleife
+
+Nach jeder Anpassung:
+
+- Test gegen die letzte Datenmenge
+- Vergleich gegen Baseline
+- Drift-Check: Wird nur ein einzelner Pfad besser und der andere schlechter?
+- Review, ob die Begründungen weiterhin zur Realität passen
+
+### Definition of Done
+
+Die Kalibrierung ist erst dann „gut genug“, wenn:
+
+- Earnings- und Momentum-Pfade getrennt messbar sind
+- die Schwellen nicht mehr nur geschätzt sind
+- der Bot seine Entscheidungen mit Daten und Outcome begründen kann
+- Fehlersignale klarer werden als Zufall
+- die Lernkurve tatsächlich messbar steigt
 
 ---
 
@@ -36,6 +188,9 @@ fundamental andere Signale dominieren.
 
 - `decision_snapshots.trade_type` Feld ("earnings" | "momentum")
   wird automatisch bei jedem Audit-Report gesetzt
+- `GET /api/data/decision-snapshots` liefert die gespeicherten Snapshots für Analyse und Review
+- `POST /api/data/decision-snapshots` existiert für manuelles bzw. batch-basiertes Speichern
+- `GET /api/data/lernpfade-stats` zeigt die Lernpfad-Reife und `calibration_ready`
 - Getrennte Trefferquoten-Statistiken in Performance → Lernpfade
 - Outcomes (T+1, T+5, T+20, Stop-Hit, Target-Hit) pro Pfad separat
 
@@ -98,6 +253,22 @@ Datenbasis und kontrollierter Validierung.
 
 **Trigger für Aktivierung:** Performance → Lernpfade zeigt
 "Kalibrierung verfügbar" für beide Pfade.
+Bis dahin bleibt die Priorität: Audits sammeln, Snapshots speichern, Outcomes beobachten.
+
+---
+
+## 🗺️ ROADMAP: Batch 2 Architektur- und Trading-Erweiterungen
+
+Diese Punkte sind bewusst als Zukunftsarbeit dokumentiert und werden
+erst umgesetzt, wenn die aktuelle Basis stabil bleibt.
+
+- **WebSocket Live-Streaming** — Echtzeit-Updates für Feed, Alerts und Research ohne Polling.
+- **Async Task Model** — Entkoppelte Hintergrund-Jobs für News, Scores und Monitoring.
+- **APScheduler** — Geplante Jobs für Morning Brief, News-Scan und Health Checks.
+- **Qdrant** — Vektorsuche für News-Memory, Narratives und semantische Research-Fragen.
+- **Backtesting** — Strategie- und Signal-Backtests mit T+1/T+5/T+20-Auswertung.
+- **Portfolio Beta** — Portfolio-Risiko- und Korrelation-Tracking gegenüber SPY.
+- **Borrow Rate** — Integration von Leihkosten für Short- und Put-Setups.
 
 ---
 
@@ -874,7 +1045,26 @@ den neuen Research-Endpoint.
 
 ---
 
-## 🟢 MACD HISTOGRAM VISUALISIERUNG
+## � FEATURE: Echte IV Percentile via Twelve Data / Optionsdaten
+
+**Aktueller Stand:** IV Percentile wird aus HV20/HV60-Ratio approximiert.
+**Besser wäre:** Echter IV-Rank aus 252-Tage IV-History.
+
+**Optionen:**
+1. Kafin baut IV-History selbst auf: Tägliches Speichern der ATM-IV
+   in score_history. Nach 30 Tagen: IV Percentile berechenbar.
+   Aktivierung: `ENABLE_IV_HISTORY_COLLECTION=true` in .env.
+
+2. Twelve Data Options-Endpoint (bezahlter Plan):
+   `/options/chain` liefert historische IV-Daten.
+
+**Empfehlung:** Pfad 1 (selbst aufbauen) nach 60 Tagen Betrieb.
+Dann IV Percentile ohne zusätzliche API-Kosten, basierend auf
+Kafins eigenem Datenfundus.
+
+---
+
+## �🟢 MACD HISTOGRAM VISUALISIERUNG
 
 **Was:** MACD-Histogram als Mini-Balkendiagramm statt nur Zahl.
 Grüne Balken = bullish, rote Balken = bearish, Trend erkennbar.
@@ -883,5 +1073,23 @@ Grüne Balken = bullish, rote Balken = bearish, Trend erkennbar.
 
 ---
 
+## TRADE PRÜFEN MODAL KOMPLETT
+
+**Was:** Das 'Trade prüfen' Modal ist jetzt im Frontend implementiert und ermöglicht manuelle Überprüfung und Ausführung von Trades basierend auf Reasoner-Entscheidungen.
+
+**Status:** Abgeschlossen in v7.8.0, inklusive Fehlerbehandlung und Ladezuständen.
+
+**Zukünftige Verbesserungen:** 
+- Integration von Echtzeit-Preisdaten für präzisere Ausführung.
+- Erweiterung um benutzerdefinierte Stop-Loss/Take-Profit Einstellungen.
+
+**Aufwand:** Niedrig, da das Modal bereits funktioniert; zukünftige Updates können in separaten Sprints erfolgen.
+
 *Zuletzt aktualisiert: 22. März 2026*
 *Nächste Review: vor dem nächsten Major Feature*
+
+---
+
+## ✅ AKTUELLE FEATURES
+
+- **Trade Prüfen Modal v7.8.0**: Frontend-Modal für manuelle Trade-Überprüfung und Ausführung basierend auf Reasoner-Entscheidungen ist abgeschlossen, inklusive Fehlerbehandlung und Ladezuständen.

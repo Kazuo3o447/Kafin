@@ -91,6 +91,18 @@ type ResearchData = {
   expected_move_usd?: number | null;
   max_pain?: number | null;
   options_oi_url?: string;
+  
+  // Twelve Data Erweiterungen
+  adx_14?: number | null;
+  adx_plus_di?: number | null;
+  adx_minus_di?: number | null;
+  adx_trend_strength?: "strong" | "moderate" | "weak" | null;
+  stoch_k?: number | null;
+  stoch_d?: number | null;
+  stoch_signal?: "bullish_cross" | "bearish_cross" | "oversold" | "overbought" | "neutral" | null;
+  iv_percentile?: number | null;
+  td_enriched?: boolean;
+  
   short_interest_pct?: number | null;
   days_to_cover: number | null;
   squeeze_risk: string | null;
@@ -197,6 +209,25 @@ type ResearchData = {
   } | null;
   exchange?: string | null;
   peers?: string[];
+};
+
+type TradeReviewDecision = {
+  ticker: string;
+  recommendation: string;
+  recommendation_label?: string | null;
+  reasoning?: string | null;
+  confidence?: number | null;
+  opportunity_score?: number | null;
+  torpedo_score?: number | null;
+  prompt_text?: string | null;
+  decision_text?: string | null;
+  model_used?: string | null;
+  key_bull_points?: string[];
+  key_risks?: string[];
+  execution_note?: string | null;
+  top_drivers?: Array<{ key: string; label: string; value: number }>;
+  top_risks?: Array<{ key: string; label: string; value: number }>;
+  raw_data?: Record<string, unknown>;
 };
 
 type FilingDiffData = {
@@ -712,8 +743,7 @@ function ScoreBlock({ data, delta }: { data: ResearchData; delta?: ScoreDeltaDat
             <div className="space-y-1">
               {Object.entries(data.score_breakdown.opportunity ?? {}).map(
                 ([key, val]) => (
-                  <div key={key}
-                       className="flex justify-between text-xs">
+                  <div key={key} className="flex justify-between text-xs">
                     <span className="text-[var(--text-muted)]
                                      capitalize">
                       {key.replace(/_/g, " ")}
@@ -741,8 +771,7 @@ function ScoreBlock({ data, delta }: { data: ResearchData; delta?: ScoreDeltaDat
             <div className="space-y-1">
               {Object.entries(data.score_breakdown.torpedo ?? {}).map(
                 ([key, val]) => (
-                  <div key={key}
-                       className="flex justify-between text-xs">
+                  <div key={key} className="flex justify-between text-xs">
                     <span className="text-[var(--text-muted)]
                                      capitalize">
                       {key.replace(/_/g, " ")}
@@ -982,84 +1011,86 @@ function TradeSetupBlock({
       {(data.why_entry || data.why_stop ||
         data.trend_context ||
         data.turnaround_conditions) && (
-        <div className="mt-4 pt-3 border-t
-                         border-[var(--border)]
-                         space-y-3">
-
-          {data.trend_context && (
-            <div>
-              <p className="text-[10px] font-semibold
+        <div className="mt-4 pt-3 border-t border-[var(--border)]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-2">
+            Begründung
+          </p>
+          <div className="space-y-3">
+            {data.trend_context && (
+              <div>
+                <p className="text-[10px] font-semibold
                              text-[var(--text-muted)]
                              uppercase tracking-wider mb-1">
-                Trend-Kontext
-              </p>
-              <p className="text-xs
+                  Trend-Kontext
+                </p>
+                <p className="text-xs
                               text-[var(--text-secondary)]
                               leading-relaxed">
-                {data.trend_context}
-              </p>
-            </div>
-          )}
+                  {data.trend_context}
+                </p>
+              </div>
+            )}
 
-          {data.why_entry && (
-            <div>
-              <p className="text-[10px] font-semibold
+            {data.why_entry && (
+              <div>
+                <p className="text-[10px] font-semibold
                              text-[var(--accent-blue)]
                              uppercase tracking-wider mb-1">
-                Warum diese Entry-Zone?
-              </p>
-              <p className="text-xs
+                  Warum diese Entry-Zone?
+                </p>
+                <p className="text-xs
                               text-[var(--text-secondary)]
                               leading-relaxed">
-                {data.why_entry}
-              </p>
-            </div>
-          )}
+                  {data.why_entry}
+                </p>
+              </div>
+            )}
 
-          {data.why_stop && (
-            <div>
-              <p className="text-[10px] font-semibold
+            {data.why_stop && (
+              <div>
+                <p className="text-[10px] font-semibold
                              text-[var(--accent-red)]
                              uppercase tracking-wider mb-1">
-                Warum dieser Stop?
-              </p>
-              <p className="text-xs
+                  Warum dieser Stop?
+                </p>
+                <p className="text-xs
                               text-[var(--text-secondary)]
                               leading-relaxed">
-                {data.why_stop}
-              </p>
-            </div>
-          )}
+                  {data.why_stop}
+                </p>
+              </div>
+            )}
 
-          {data.floor_scenario && (
-            <div>
-              <p className="text-[10px] font-semibold
+            {data.floor_scenario && (
+              <div>
+                <p className="text-[10px] font-semibold
                              text-[var(--text-muted)]
                              uppercase tracking-wider mb-1">
-                Wenn Stop reisst
-              </p>
-              <p className="text-xs
+                  Wenn Stop reisst
+                </p>
+                <p className="text-xs
                               text-[var(--text-secondary)]
                               leading-relaxed">
-                {data.floor_scenario}
-              </p>
-            </div>
-          )}
+                  {data.floor_scenario}
+                </p>
+              </div>
+            )}
 
-          {data.turnaround_conditions && (
-            <div>
-              <p className="text-[10px] font-semibold
+            {data.turnaround_conditions && (
+              <div>
+                <p className="text-[10px] font-semibold
                              text-[var(--accent-green)]
                              uppercase tracking-wider mb-1">
-                Turnaround-Bedingungen
-              </p>
-              <p className="text-xs
+                  Turnaround-Bedingungen
+                </p>
+                <p className="text-xs
                               text-[var(--text-secondary)]
                               leading-relaxed">
-                {data.turnaround_conditions}
-              </p>
-            </div>
-          )}
+                  {data.turnaround_conditions}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1597,7 +1628,8 @@ function SentimentBlock({ data }: { data: ResearchData }) {
               ? "bg-[var(--accent-red)]/10"
             : "bg-[var(--bg-tertiary)]"
           }`}>
-            <p className="text-[10px] text-[var(--text-muted)] mb-1">
+            <p className="text-[10px] text-[var(--text-muted)]
+                           mb-1">
               vs. Markt
             </p>
             <p className={`text-xl font-bold font-mono ${
@@ -1659,8 +1691,9 @@ function SentimentBlock({ data }: { data: ResearchData }) {
        && Object.keys(data.market_sentiment_detail).length > 0
        && (
         <div className="pt-3 border-t border-[var(--border)]">
-          <p className="text-[10px] text-[var(--text-muted)]
-                        mb-2 uppercase tracking-wider">
+          <p className="text-[10px]
+                         text-[var(--text-muted)]
+                         uppercase tracking-wider mb-2">
             Markt-Kontext (FinBERT)
           </p>
           <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
@@ -1745,8 +1778,7 @@ function RelativeStrengthBlock({ data }: { data: ResearchData }) {
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between mb-4">
-        <p className="text-[10px] font-semibold uppercase
-                      tracking-[0.25em] text-[var(--text-muted)]">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)]">
           Relative Stärke
         </p>
         <span className={`text-xs font-semibold ${signalColor}`}>
@@ -1905,7 +1937,7 @@ function EarningsContextBanner({ data }: { data: ResearchData }) {
                   if (Number.isNaN(d.getTime())) return data.earnings_date || "—";
                   return d.toLocaleDateString("de-DE", {
                     weekday: "long",
-                    day: "2-digit",
+                    day: "numeric",
                     month: "long",
                     year: "numeric",
                   });
@@ -2234,7 +2266,7 @@ function OptionsOiBlock({
     return (
       <div className="card p-4 text-center">
         <p className="text-xs text-[var(--text-muted)]
-                       animate-pulse">
+                        animate-pulse">
           Lade Optionskette…
         </p>
       </div>
@@ -2258,16 +2290,11 @@ function OptionsOiBlock({
 
   return (
     <div className="card p-5">
-      <div className="flex items-center
-                       justify-between mb-4">
-        <h3 className="text-xs font-semibold uppercase
-                        tracking-widest
-                        text-[var(--text-muted)]">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)]">
           Options OI — {exp.expiry}
         </h3>
-        <div className="flex items-center gap-3
-                         text-[10px]
-                         text-[var(--text-muted)]">
+        <div className="flex items-center gap-3 text-[10px] text-[var(--text-muted)]">
           {exp.pcr_oi != null && (
             <span>
               PCR-OI:{" "}
@@ -2282,8 +2309,7 @@ function OptionsOiBlock({
               </span>
             </span>
           )}
-          <span className="text-[var(--accent-blue)]
-                           font-semibold">
+          <span className="text-[var(--accent-blue)] font-semibold">
             Max Pain: ${exp.max_pain.toFixed(0)}
           </span>
         </div>
@@ -2318,8 +2344,7 @@ function OptionsOiBlock({
                 }`}
               >
                 {/* Strike-Label */}
-                <div className="flex items-center
-                                 justify-between mb-1">
+                <div className="flex items-center justify-between mb-1">
                   <span className={`text-xs font-mono
                                     font-semibold ${
                     isMaxPain
@@ -2332,8 +2357,7 @@ function OptionsOiBlock({
                     {isMaxPain && " ← Max Pain"}
                     {isAtm && !isMaxPain && " ← ATM"}
                   </span>
-                  <span className="text-[10px]
-                                    text-[var(--text-muted)]">
+                  <span className="text-[10px] text-[var(--text-muted)]">
                     {(s.total_oi / 1000).toFixed(0)}K OI
                   </span>
                 </div>
@@ -2396,15 +2420,12 @@ function FilingDiffBlock({
   if (!data && !loading) {
     return (
       <div className="card p-5">
-        <div className="flex items-center
-                         justify-between mb-2">
+        <div className="flex items-center justify-between mb-2">
           <div>
-            <h3 className="text-sm font-semibold
-                             text-[var(--text-primary)]">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">
               10-Q Tonalitäts-Analyse
             </h3>
-            <p className="text-[10px]
-                            text-[var(--text-muted)] mt-0.5">
+            <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
               Vergleicht Management-Sprache
               zwischen zwei Quartalsberichten
             </p>
@@ -2439,8 +2460,7 @@ function FilingDiffBlock({
   if (!data?.available) {
     return (
       <div className="card p-5">
-        <h3 className="text-sm font-semibold
-                         text-[var(--text-primary)] mb-2">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-2">
           10-Q Analyse
         </h3>
         <p className="text-xs text-[var(--text-muted)]">
@@ -2461,31 +2481,22 @@ function FilingDiffBlock({
 
   return (
     <div className="card p-5">
-      <div className="flex items-center
-                       justify-between mb-4">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-sm font-semibold
-                           text-[var(--text-primary)]">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">
             10-Q Tonalitäts-Diff
           </h3>
-          <p className="text-[10px]
-                          text-[var(--text-muted)] mt-0.5">
+          <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
             via {data.model_used || 'DeepSeek'} · Cache 24h
           </p>
         </div>
         {data.overall_signal && (
-          <span className={`text-sm font-bold
-                             ${signalColor}`}>
+          <span className={`text-sm font-bold ${signalColor}`}>
             {data.overall_signal}
           </span>
         )}
       </div>
-      <div className="text-xs
-                       text-[var(--text-secondary)]
-                       leading-relaxed
-                       whitespace-pre-wrap
-                       max-h-[600px]
-                       overflow-y-auto">
+      <div className="text-xs text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap max-h-[600px] overflow-y-auto">
         {data.diff_text}
       </div>
     </div>
@@ -2505,6 +2516,11 @@ export default function ResearchDashboard() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [aiDate, setAiDate] = useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewDecision, setReviewDecision] = useState<TradeReviewDecision | null>(null);
+  const [executionLoading, setExecutionLoading] = useState(false);
 
   // Feature 6: 10-Q Filing Diff
   const [filingDiff, setFilingDiff] = useState<FilingDiffData | null>(null);
@@ -2549,7 +2565,7 @@ export default function ResearchDashboard() {
       setOiData(d);
     } catch {}
     finally { setOiLoading(false); }
-  }, [ticker]);
+  }, [tickerUpper]);
 
   useEffect(() => {
     setOiData(null);
@@ -2567,6 +2583,60 @@ export default function ResearchDashboard() {
     } catch {}
     finally { setFilingDiffLoading(false); }
   }, [ticker]);
+
+  const handleReviewTrade = useCallback(async () => {
+    if (reviewLoading) return;
+
+    setReviewOpen(true);
+    setReviewLoading(true);
+    setReviewError(null);
+    setReviewDecision(null);
+
+    try {
+      const result = await api.reviewTrade(tickerUpper);
+      if (!result || result.status !== "success" || !result.decision) {
+        throw new Error(result?.message || "Keine Trade-Entscheidung erhalten");
+      }
+      setReviewDecision(result.decision as TradeReviewDecision);
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [reviewLoading, tickerUpper]);
+
+  const handleExecuteReviewTrade = useCallback(async () => {
+    if (!reviewDecision) return;
+
+    const recommendation = String(reviewDecision.recommendation || "").toLowerCase();
+    const canExecute = recommendation.includes("buy") || recommendation.includes("short");
+    if (!canExecute) {
+      setReviewError("Diese Empfehlung ist nicht für eine direkte Ausführung vorgesehen.");
+      return;
+    }
+
+    const direction: "long" | "short" = recommendation.includes("short") ? "short" : "long";
+    const tradeReason = direction === "short" ? "Torpedo erkannt" : "Relative Stärke";
+
+    setExecutionLoading(true);
+    setReviewError(null);
+
+    try {
+      await api.manualTrade({
+        ticker: tickerUpper,
+        direction,
+        trade_reason: tradeReason,
+        opportunity_score: reviewDecision.opportunity_score ?? data?.opportunity_score ?? 5,
+        torpedo_score: reviewDecision.torpedo_score ?? data?.torpedo_score ?? 5,
+        notes: reviewDecision.execution_note ?? reviewDecision.reasoning ?? null,
+      });
+      setReviewOpen(false);
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExecutionLoading(false);
+    }
+  }, [data?.opportunity_score, data?.torpedo_score, reviewDecision, tickerUpper]);
 
   // Feature 3: Position Sizer
   const [accountSize, setAccountSize] = useState<number>(() => {
@@ -2857,24 +2927,18 @@ export default function ResearchDashboard() {
             value={overrideTicker}
             onChange={e => setOverrideTicker(e.target.value.toUpperCase())}
             placeholder="z.B. VOW3.DE"
-            className="flex-1 rounded-lg border border-[var(--border)]
-                       bg-[var(--bg-secondary)] px-3 py-1.5 text-sm
-                       font-mono text-[var(--text-primary)]
-                       focus:border-[var(--accent-blue)] outline-none"
+            className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-sm font-mono text-[var(--text-primary)] focus:border-[var(--accent-blue)] outline-none"
           />
           <button
             onClick={() => { setShowOverrideInput(false); loadData(true); }}
             disabled={!overrideTicker.trim()}
-            className="rounded-lg bg-[var(--accent-blue)] px-3 py-1.5
-                       text-xs font-semibold text-white
-                       hover:opacity-90 disabled:opacity-40"
+            className="rounded-lg bg-[var(--accent-blue)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40"
           >
             Laden
           </button>
           <button
             onClick={() => { setOverrideTicker(""); setShowOverrideInput(false); }}
-            className="rounded-lg border border-[var(--border)]
-                       px-3 py-1.5 text-xs text-[var(--text-muted)]"
+            className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-muted)]"
           >
             Abbrechen
           </button>
@@ -3120,8 +3184,7 @@ export default function ResearchDashboard() {
       {/* Block 3: Technisches Bild + Analyst */}
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="card p-4">
-          <p className="text-[10px] font-semibold uppercase
-                tracking-[0.25em] text-[var(--text-muted)] mb-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-3">
             Technisches Bild
           </p>
 
@@ -3266,9 +3329,7 @@ export default function ResearchDashboard() {
             <span>
               ATR (14):{" "}
               <span className="font-mono text-[var(--text-primary)]">
-                {data.atr_14 != null
-                  ? `$${data.atr_14.toFixed(2)}` 
-                  : "—"}
+                {data.atr_14 != null ? `$${data.atr_14.toFixed(2)}` : "—"}
               </span>
               {" "}— erwartete Tagesbewegung
             </span>
@@ -3287,11 +3348,87 @@ export default function ResearchDashboard() {
               </span>
             )}
           </div>
+
+          {/* TD Indikatoren */}
+          {data.adx_14 != null && (
+            <div className="flex items-center justify-between py-1.5
+                            border-b border-[var(--border)]">
+              <span className="text-xs text-[var(--text-muted)]">
+                ADX (Trendstärke)
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-semibold
+                                 text-[var(--text-primary)]">
+                  {data.adx_14.toFixed(1)}
+                </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded font-medium ${
+                  data.adx_trend_strength === "strong"
+                    ? "bg-[var(--accent-green)]/10 text-[var(--accent-green)]"
+                    : data.adx_trend_strength === "weak"
+                      ? "bg-[var(--accent-red)]/10 text-[var(--accent-red)]"
+                      : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
+                }`}>
+                  {data.adx_trend_strength === "strong"   ? "Stark"
+                    : data.adx_trend_strength === "moderate" ? "Moderat"
+                    : "Schwach"}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {data.stoch_k != null && (
+            <div className="flex items-center justify-between py-1.5
+                            border-b border-[var(--border)]">
+              <span className="text-xs text-[var(--text-muted)]">
+                Stochastic %K/%D
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-semibold
+                                 text-[var(--text-primary)]">
+                  {data.stoch_k.toFixed(0)} / {data.stoch_d?.toFixed(0) ?? "—"}
+                </span>
+                {data.stoch_signal && data.stoch_signal !== "neutral" && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-medium ${
+                    data.stoch_signal === "bullish_cross" || data.stoch_signal === "oversold"
+                      ? "bg-[var(--accent-green)]/10 text-[var(--accent-green)]"
+                      : "bg-[var(--accent-red)]/10 text-[var(--accent-red)]"
+                  }`}>
+                    {data.stoch_signal === "bullish_cross" ? "↑ Kreuz"
+                      : data.stoch_signal === "bearish_cross" ? "↓ Kreuz"
+                      : data.stoch_signal === "oversold" ? "Überverkauft"
+                      : "Überkauft"}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {data.iv_percentile != null && (
+            <div className="flex items-center justify-between py-1.5
+                            border-b border-[var(--border)]">
+              <span className="text-xs text-[var(--text-muted)]">
+                IV Percentile
+                {!data.td_enriched && (
+                  <span className="ml-1 text-[9px] text-[var(--text-muted)] opacity-60">
+                    (approximiert)
+                  </span>
+                )}
+              </span>
+              <span className={`text-xs font-mono font-semibold ${
+                data.iv_percentile > 75
+                  ? "text-[var(--accent-red)]"
+                  : data.iv_percentile < 25
+                    ? "text-[var(--accent-green)]"
+                    : "text-[var(--text-primary)]"
+              }`}>
+                {data.iv_percentile.toFixed(0)}%
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="card p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.25em]
-                text-[var(--text-muted)] mb-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-3">
             Volumen & Marktstruktur
           </p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-5">
@@ -3407,6 +3544,15 @@ export default function ResearchDashboard() {
         onLoad={loadOiData}
         loading={oiLoading}
       />
+
+      {/* Trade prüfen */}
+      <button
+        onClick={handleReviewTrade}
+        disabled={reviewLoading}
+        className="rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Trade prüfen
+      </button>
 
       {/* Block 4: Earnings-Historie + Insider */}
       <div className="grid gap-4 lg:grid-cols-2">
@@ -3658,6 +3804,102 @@ export default function ResearchDashboard() {
         )}
       </div>
 
+      {reviewOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
+          <div className="w-full max-w-3xl rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">Trade-Entscheidung</h2>
+                <p className="text-xs text-[var(--text-muted)]">Reasoner-Review für {tickerUpper}</p>
+              </div>
+              <button
+                onClick={() => setReviewOpen(false)}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              >
+                Schließen
+              </button>
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+              {reviewLoading && <p className="text-sm text-[var(--text-muted)]">Lade Entscheidung...</p>}
+
+              {reviewError && (
+                <div className="rounded-lg border border-[var(--accent-red)]/40 bg-[var(--accent-red)]/10 px-4 py-3 text-sm text-[var(--accent-red)]">
+                  {reviewError}
+                </div>
+              )}
+
+              {reviewDecision && !reviewLoading && (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl border border-[var(--border)] p-4">
+                      <p className="text-xs text-[var(--text-muted)]">Empfehlung</p>
+                      <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
+                        {(reviewDecision.recommendation_label || reviewDecision.recommendation || "—").toUpperCase()}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-[var(--border)] p-4">
+                      <p className="text-xs text-[var(--text-muted)]">Opportunity Score</p>
+                      <p className="mt-1 text-sm font-semibold text-[var(--accent-green)]">
+                        {reviewDecision.opportunity_score?.toFixed(1) ?? "—"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-[var(--border)] p-4">
+                      <p className="text-xs text-[var(--text-muted)]">Torpedo Score</p>
+                      <p className="mt-1 text-sm font-semibold text-[var(--accent-red)]">
+                        {reviewDecision.torpedo_score?.toFixed(1) ?? "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Begründung</p>
+                      <p className="mt-2 text-sm leading-6 text-[var(--text-primary)]">
+                        {reviewDecision.reasoning || reviewDecision.execution_note || reviewDecision.decision_text || "Keine Begründung verfügbar."}
+                      </p>
+                    </div>
+
+                    {reviewDecision.key_bull_points?.length ? (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Bullische Punkte</p>
+                        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--text-primary)]">
+                          {reviewDecision.key_bull_points.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {reviewDecision.key_risks?.length ? (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Risiken</p>
+                        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--text-primary)]">
+                          {reviewDecision.key_risks.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-wrap justify-end gap-3">
+                    <button
+                      onClick={() => setReviewOpen(false)}
+                      className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    >
+                      Schließen
+                    </button>
+                    <button
+                      onClick={handleExecuteReviewTrade}
+                      disabled={executionLoading || !reviewDecision || !String(reviewDecision.recommendation || "").toLowerCase().includes("buy") && !String(reviewDecision.recommendation || "").toLowerCase().includes("short")}
+                      className="rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {executionLoading ? "Ausführen..." : "Trade ausführen"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

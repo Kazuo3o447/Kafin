@@ -12,6 +12,17 @@ Config: SUPABASE_URL, SUPABASE_KEY
 API:    Supabase REST API
 """
 
+try:
+    import pytest
+
+    if __name__ != "__main__":
+        pytest.skip(
+            "Manual Supabase connectivity script - skipped during pytest collection.",
+            allow_module_level=True,
+        )
+except Exception:
+    pass
+
 import os
 from dotenv import load_dotenv
 from supabase import create_client, Client

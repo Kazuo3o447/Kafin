@@ -22,7 +22,7 @@ Dokumentation: https://docs.alpaca.markets/docs/about-market-data-api
 """
 import httpx
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from backend.app.config import settings
 from backend.app.cache import cache_get, cache_set
@@ -178,7 +178,7 @@ async def get_bars(
     if cached:
         return cached
 
-    start = (datetime.utcnow() - timedelta(days=days + 5)).strftime("%Y-%m-%d")
+    start = (datetime.now(timezone.utc) - timedelta(days=days + 5)).strftime("%Y-%m-%d")
     data = await _get(
         f"/v2/stocks/{ticker.upper()}/bars",
         {

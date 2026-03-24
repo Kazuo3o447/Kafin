@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import yfinance as yf
 import pandas as pd
 import asyncio
@@ -1763,7 +1763,7 @@ def _build_signal_entry(
         "headline": headline,
         "value": value,
         "threshold": threshold,
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "source": "watchlist",
         "_item": item,
     }
@@ -1808,9 +1808,9 @@ async def api_signals_feed(force_refresh: bool = False):
     cfg = await _load_signal_feed_config()
     watchlist = await get_watchlist()
     macro = await get_macro_snapshot()
-    macro_dict = macro.dict() if hasattr(macro, "dict") else (macro or {})
+    macro_dict = macro.model_dump() if hasattr(macro, "model_dump") else (macro or {})
     in_market = _is_market_hours()
-    generated_at = datetime.utcnow().isoformat()
+    generated_at = datetime.now(timezone.utc).isoformat()
     max_signals = int(cfg.get("feed_max_signals", 10))
     dedup_hours = int(cfg.get("dedup_hours", 24))
     quiet_days = int(cfg.get("quiet_period_pre_earnings_days", 2))
@@ -2136,7 +2136,7 @@ async def api_save_signal_feed_config(body: dict):
                 {
                     "key": key,
                     "value": row_value,
-                    "updated_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
                 on_conflict="key",
             ).execute_async()
@@ -2170,13 +2170,13 @@ async def api_btc_snapshot():
             pass
 
         snapshot["dxy"] = dxy
-        snapshot["fetched_at"] = datetime.utcnow().isoformat()
+        snapshot["fetched_at"] = datetime.now(timezone.utc).isoformat()
 
         await cache_set(cache_key, snapshot, ttl_seconds=900)
         return snapshot
     except Exception as e:
         logger.error(f"BTC snapshot: {e}")
-        return {"error": str(e), "price": {}, "fetched_at": datetime.utcnow().isoformat()}
+        return {"error": str(e), "price": {}, "fetched_at": datetime.now(timezone.utc).isoformat()}
 
 
 @router.get("/watchlist-momentum")
@@ -2273,7 +2273,7 @@ async def api_watchlist_momentum():
             "spy_1d":   spy_1d,
             "spy_5d":   spy_5d,
             "spy_20d":  spy_20d,
-            "calculated_at": datetime.utcnow().isoformat(),
+            "calculated_at": datetime.now(timezone.utc).isoformat(),
         }
         await cache_set(cache_key, result, ttl_seconds=900)
         return result
@@ -2490,7 +2490,7 @@ async def api_update_real_trade(trade_id: int, body: dict):
             update["entry_date"] = str(update["entry_date"])
         if "exit_date" in update:
             update["exit_date"] = str(update["exit_date"])
-        update["updated_at"] = datetime.utcnow().isoformat()
+        update["updated_at"] = datetime.now(timezone.utc).isoformat()
 
         result = await db.table("real_trades").update(update).eq("id", trade_id).execute_async()
         if not result.data:
@@ -2568,6 +2568,59 @@ async def api_update_snapshot_outcome(snapshot_id: int, body: dict):
         return {"success": True}
     except Exception as ex:
         logger.error(f"decision_snapshots outcome: {ex}")
+        raise HTTPException(status_code=500, detail=str(ex))
+
+
+@router.post("/decision-snapshots")
+async def api_create_decision_snapshot(body: dict):
+    """
+    Erstellt einen neuen Decision Snapshot manuell.
+    Nützlich für Tests und Batch-Sammlung.
+    """
+    from backend.app.db import get_supabase_client
+    from datetime import datetime
+    
+    logger.info(f"Manueller Decision Snapshot für {body.get('ticker')}")
+    
+    db = get_supabase_client()
+    if not db:
+        raise HTTPException(status_code=500, detail="DB nicht verfügbar")
+    
+    try:
+        # Erforderliche Felder prüfen
+        required_fields = ["ticker", "opportunity_score", "torpedo_score", "recommendation", "prompt_text", "report_text"]
+        for field in required_fields:
+            if field not in body:
+                raise HTTPException(status_code=400, detail=f"Fehlendes Feld: {field}")
+        
+        # Payload mit Defaults ergänzen
+        payload = {
+            "ticker": body["ticker"].upper(),
+            "created_at": datetime.utcnow().isoformat(),
+            "opportunity_score": float(body["opportunity_score"]),
+            "torpedo_score": float(body["torpedo_score"]),
+            "recommendation": body["recommendation"],
+            "prompt_text": body["prompt_text"],
+            "report_text": body["report_text"],
+            "macro_regime": body.get("macro_regime"),
+            "vix": body.get("vix"),
+            "price_at_decision": body.get("price_at_decision"),
+            "rsi_at_decision": body.get("rsi_at_decision"),
+            "iv_atm_at_decision": body.get("iv_atm_at_decision"),
+            "earnings_date": body.get("earnings_date"),
+            "model_used": body.get("model_used", "manual"),
+            "trade_type": body.get("trade_type", "momentum"),
+            "earnings_countdown_at_decision": body.get("earnings_countdown_at_decision"),
+            "data_quality_flag": body.get("data_quality_flag", "good"),
+        }
+        
+        result = await db.table("decision_snapshots").insert(payload).execute_async()
+        logger.info(f"Decision Snapshot für {body['ticker']} manuell gespeichert")
+        
+        return {"success": True, "id": result.data[0]["id"] if result.data else None}
+    
+    except Exception as ex:
+        logger.error(f"Manueller Decision Snapshot fehlgeschlagen: {ex}")
         raise HTTPException(status_code=500, detail=str(ex))
 
 

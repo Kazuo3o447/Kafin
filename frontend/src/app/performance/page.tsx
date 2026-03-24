@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { TrendingUp, TrendingDown, Target, Award, Loader2, Plus, RefreshCw, Trash2, Info } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { cachedFetch, cacheAge } from "@/lib/clientCache";
 import { CacheStatus } from "@/components/CacheStatus";
@@ -267,10 +268,18 @@ function EquityCurveChart({
   );
 }
 
-export default function PerformancePage() {
+function PerformancePageContent() {
+  const searchParams = useSearchParams();
   const [performance, setPerformance] = useState<PerformanceData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"track_record" | "shadow" | "my_trades" | "learning">("track_record");
+  
+  // NEU — URL-Parameter ?tab=my_trades wird ausgelesen
+  const [activeTab, setActiveTab] = useState<"track_record" | "shadow" | "my_trades" | "learning">(() => {
+    const tab = searchParams?.get("tab");
+    const validTabs: ("track_record" | "shadow" | "my_trades" | "learning")[] = ["track_record", "shadow", "my_trades", "learning"];
+    return (validTabs.includes(tab as any) ? tab : "track_record") as any;
+  });
+  
   const [shadowData, setShadowData] = useState<ShadowSummary | null>(null);
   const [loadingShadow, setLoadingShadow] = useState(false);
   const [realTrades, setRealTrades] = useState<RealTrade[]>([]);
@@ -1383,5 +1392,13 @@ export default function PerformancePage() {
 
       {renderRealTradeModal()}
     </div>
+  );
+}
+
+export default function PerformancePage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="animate-spin" /></div>}>
+      <PerformancePageContent />
+    </Suspense>
   );
 }

@@ -1,0 +1,23 @@
+{
+  "dividend_raise": {
+    "is_narrative_shift": false,
+    "shift_type": "None",
+    "shift_confidence": 0.15,
+    "shift_reasoning": "Nur Kapitalrückgabe, kein Narrativwechsel",
+    "bullet_points": ["Dividend raise announced", "No strategic change"]
+  },
+  "partnership": {
+    "is_narrative_shift": true,
+    "shift_type": "Strategic-Partnership",
+    "shift_confidence": 0.92,
+    "shift_reasoning": "Langfristige Partnerschaft mit Wachstumshebel",
+    "bullet_points": ["Strategic partnership with Microsoft", "Cloud distribution expanded"]
+  },
+  "downsizing": {
+    "is_narrative_shift": true,
+    "shift_type": "Strategic-Downsizing",
+    "shift_confidence": 0.88,
+    "shift_reasoning": "Kostensenkung signalisiert Gegenwind",
+    "bullet_points": ["Workforce reduction", "Guidance under pressure"]
+  }
+}

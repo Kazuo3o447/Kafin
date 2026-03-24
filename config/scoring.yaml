@@ -25,3 +25,17 @@ thresholds:
   strong_short_max_opportunity: 3
   strong_short_min_torpedo: 7
   watch_min_torpedo: 7
+
+macro_regime_gate:
+  # Schwellen für automatische Empfehlungs-Degradierung
+  # Risk Off: VIX > vix_risk_off → STRONG BUY wird WATCH
+  # Elevated: VIX vix_elevated bis vix_risk_off → STRONG BUY wird BUY MIT ABSICHERUNG
+  vix_risk_off:   30    # VIX > 30: Gate aktiv (Long → Watch)
+  vix_elevated:   25    # VIX 25–30: Vorsicht (Strong Buy → Buy mit Absicherung)
+  # Regime-String aus FRED (fred.py): "Risk Off", "Risk On", "Neutral"
+  gate_active_on: ["Risk Off"]
+
+shadow_portfolio:
+  atr_multiplier: 1.5   # Stop = Entry ± (ATR × Multiplier)
+  atr_min_pct:    2.0   # Mindest-Stop-Abstand in % (Fallback bei kleinem ATR)
+  fallback_pct:   8.0   # Fallback wenn kein ATR: ±8%

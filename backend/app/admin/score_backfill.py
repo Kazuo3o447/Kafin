@@ -153,9 +153,9 @@ async def _backfill_single_ticker(ticker: str, days: int, market_ov: dict) -> di
         # data_ctx aufbauen (wie in main.py)
         valuation_ctx = {}
         if metrics:
-            valuation_ctx = metrics.dict() if hasattr(metrics, 'dict') else metrics
+            valuation_ctx = metrics.model_dump() if hasattr(metrics, 'model_dump') else (metrics.dict() if hasattr(metrics, 'dict') else metrics)
         elif profile:
-            valuation_ctx = profile.dict() if hasattr(profile, 'dict') else profile
+            valuation_ctx = profile.model_dump() if hasattr(profile, 'model_dump') else (profile.dict() if hasattr(profile, 'dict') else profile)
         elif yf_fund:
             valuation_ctx = {
                 "ticker": ticker,
@@ -166,13 +166,13 @@ async def _backfill_single_ticker(ticker: str, days: int, market_ov: dict) -> di
             }
         
         data_ctx = {
-            "earnings_history": history.dict() if history else {},
+            "earnings_history": history.model_dump() if hasattr(history, 'model_dump') else (history.dict() if history else {}),
             "valuation": valuation_ctx,
-            "short_interest": short_int.dict() if short_int else {},
-            "insider_activity": insiders.dict() if insiders else {},
-            "technicals": tech.dict() if tech else {},
+            "short_interest": short_int.model_dump() if hasattr(short_int, 'model_dump') else (short_int.dict() if short_int else {}),
+            "insider_activity": insiders.model_dump() if hasattr(insiders, 'model_dump') else (insiders.dict() if insiders else {}),
+            "technicals": tech.model_dump() if hasattr(tech, 'model_dump') else (tech.dict() if tech else {}),
             "news_memory": news_mem if news_mem else [],
-            "options": options.dict() if options else {},
+            "options": options.model_dump() if hasattr(options, 'model_dump') else (options.dict() if options else {}),
             # NEU: für guidance_trend + deceleration
             "analyst_grades": analyst_grades or [],
             # NEU: für sector_regime

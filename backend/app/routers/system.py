@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import asyncio
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import httpx
 
 from backend.app.logger import get_logger
@@ -36,6 +36,26 @@ async def api_telegram_test():
     await send_telegram_alert("🧪 Kafin Systemtest: Telegram-Verbindung OK.")
     return {"status": "success", "message": "Test-Nachricht gesendet"}
 
+
+@router.get("/api/n8n/status")
+async def api_n8n_status():
+    """Prüft den n8n-Health-Endpoint separat für Monitoring und Diagnose."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://kafin-n8n:5678/healthz", timeout=5.0)
+            status = "ok" if response.status_code == 200 else "warning"
+            return {
+                "status": status,
+                "http_status": response.status_code,
+                "details": f"n8n healthz returned {response.status_code}",
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "http_status": None,
+            "details": repr(e),
+        }
+
 @router.get("/api/diagnostics/db")
 async def api_diagnostics_db():
     """Prüft den Datenstand aller Supabase-Tabellen."""
@@ -64,7 +84,7 @@ async def full_system_diagnostics():
     
     logger.info("=== Starting Full System Diagnostics ===")
     
-    results = {"status": "ok", "timestamp": datetime.utcnow().isoformat(), "services": {}}
+    results = {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat(), "services": {}}
     
     async def measure(func, *args):
         t0 = time.time()
@@ -237,6 +257,40 @@ async def full_system_diagnostics():
             "details":    repr(e),
         }
         logger.error(f"❌ CoinGlass: ERROR - {e}")
+
+    # 10. Twelve Data
+    logger.info("🔍 Testing Twelve Data API...")
+    try:
+        from backend.app.data.twelvedata import test_connection
+        td_result = await test_connection()
+        results["services"]["twelve_data"] = td_result
+        status_icon = "✅" if td_result["status"] == "ok" else "⚠️"
+        logger.info(f"{status_icon} Twelve Data: {td_result['status']} — {td_result.get('details','')}")
+    except Exception as e:
+        results["services"]["twelve_data"] = {
+            "status": "error",
+            "error_code": "TD_ERR",
+            "details": repr(e),
+        }
+        logger.error(f"❌ Twelve Data: ERROR - {e}")
+
+    # 11. Alpaca Market Data (separater Service-Check)
+    logger.info("🔍 Testing Alpaca Market Data API...")
+    try:
+        from backend.app.data.alpaca_data import test_connection as alpaca_data_test
+        ad_result = await alpaca_data_test()
+        results["services"]["alpaca_data"] = ad_result
+        icon = "✅" if ad_result["status"] == "ok" else "⚠️"
+        logger.info(
+            f"{icon} Alpaca Data: {ad_result['status']} — {ad_result.get('details', '')}"
+        )
+    except Exception as e:
+        results["services"]["alpaca_data"] = {
+            "status":     "error",
+            "error_code": "ALPACA_DATA_ERR",
+            "details":    repr(e),
+        }
+        logger.error(f"❌ Alpaca Data: ERROR - {e}")
 
     if any(s.get("status") == "error" for s in results["services"].values()):
         results["status"] = "degraded"

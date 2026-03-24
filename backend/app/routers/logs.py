@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from backend.app.logger import (
     get_recent_logs, 
     get_module_status, 
@@ -47,7 +47,7 @@ async def api_get_logs(level: str = None, limit: int = 200):
 async def api_get_logs_errors():
     """Gibt nur Log-Einträge mit level 'error' oder 'warning' der letzten 24 Stunden zurück, maximal 50."""
     logs = get_recent_logs()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=24)
     
     errors = []
@@ -211,7 +211,7 @@ async def api_cleanup_logs(days: int = 7):
     db = get_supabase_client()
     if db:
         try:
-            cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
             # Wir nehmen an es gibt eine Tabelle 'system_logs' oder ähnlich
             # await db.table("system_logs").delete().lt("created_at", cutoff).execute_async()
             return {"status": "success", "message": f"Logs older than {days} days cleaned (stub)"}

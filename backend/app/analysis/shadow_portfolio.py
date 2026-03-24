@@ -147,13 +147,13 @@ async def open_shadow_trade(
         "opportunity_score": round(opportunity_score, 2),
         "torpedo_score": round(torpedo_score, 2),
         "entry_price": entry_price,
-        "entry_date": now_mez(),  # datetime object, not string
+        "entry_date": now_mez().replace(tzinfo=None),  # naive datetime for DB
         "stop_loss_price": stop_loss,
         "position_size_usd": 10000,
         "status": "open",
         "trade_reason": trade_reason,  # NEU
         "manual_entry": manual_entry,  # NEU
-        "created_at": now_mez(),  # datetime object, not string
+        "created_at": now_mez().replace(tzinfo=None),  # naive datetime for DB
     }
 
     try:

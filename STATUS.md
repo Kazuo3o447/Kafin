@@ -8,6 +8,9 @@ Aktueller Stand der Entwicklung (Fokus auf Infrastruktur, API-Integration und We
 3. Skimme die historischen Meilensteine nur für Kontext oder Audit-Zwecke.
 
 ## Aktueller Stand
+- **Data Cleanup System v7.9.3**: Vollständiges Daten-Aufräum-System implementiert mit Massenlösch-Endpunkten, Preview-Funktion und Watchlist-Integration. Alle Szenarien erfolgreich getestet.
+- **Valid-Ticker Fallback v7.9.2**: Wenn FMP für einen gültigen Ticker kein Profil liefert, greift jetzt ein yfinance-Fallback statt die Analyse fälschlich zu blockieren.
+- **Ticker-Resolver Fix v7.9.2**: Mapping- und Suffix-Checks sind korrektiert, damit valide Ticker nicht durch Resolver-Fehler ausgebremst werden.
 - **Signal Feed & News Pipeline v7.7.0**: Catalyst Clash Warning, Short Availability Badges, Earnings Live-Modus, bullet_points-Rendering, ETF-News-Fallback und n8n-Workflow-Fix sind live.
 - **Twelve Data v7.4.0**: ADX + Stochastic in TechnicalSetup, IV Percentile approximiert, Research-Page Anzeige, Systemdiagnostik
 - **Async Performance v7.3.1**: Alle yfinance-Aufrufe non-blocking, Market Breadth wiederhergestellt, Event Loop Protection

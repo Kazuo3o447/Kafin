@@ -28,6 +28,10 @@ Wichtig:
   - Der Review-Flow erzeugt eine Entscheidungsgrundlage.
   - Die eigentliche Ausführung bleibt bewusst getrennt und kann manuell erfolgen.
 
+- **Speicher-Hygiene**
+  - Alle gespeicherten Analysen und Entscheidungen können über Cleanup-Endpunkte entfernt werden.
+  - Watchlist-Entfernen bietet optionales Massen-Cleanup aller zugehörigen Daten.
+
 - **Lokale Datenhaltung**
   - Persistenz läuft über die Container-PostgreSQL-DB.
   - Legacy-Supabase-Pfade bleiben nur als Abwärtskompatibilität erhalten.

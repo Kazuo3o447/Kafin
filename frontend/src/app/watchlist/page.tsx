@@ -900,14 +900,33 @@ export default function WatchlistPage() {
   }
 
   async function handleRemoveTicker(ticker: string) {
-    if (!confirm(`${ticker} wirklich entfernen?`)) return;
+    const cleanupData = confirm(
+      `${ticker} wirklich entfernen?\n\n` +
+      "Zusätzlich alle gespeicherten Daten löschen?\n" +
+      "(Audit Reports, Decision Snapshots, Memory, etc.)\n\n" +
+      "OK = Nur von Watchlist entfernen\n" +
+      "Abbrechen = Alle Daten löschen"
+    );
+    
     try {
-      await api.removeTicker(ticker);
+      const response = await api.removeTicker(ticker, !cleanupData);
+      
+      if (response.cleanup && response.cleanup.status === "success") {
+        const deleted = response.cleanup.total_deleted || 0;
+        alert(`${ticker} entfernt.\n${deleted} Datensätze gelöscht.`);
+      } else if (response.cleanup && response.cleanup.status === "error") {
+        alert(`${ticker} von Watchlist entfernt.\nCleanup fehlgeschlagen: ${response.cleanup.message}`);
+      } else {
+        // Nur von Watchlist entfernt
+        console.log(`${ticker} von Watchlist entfernt`);
+      }
+      
       cacheInvalidate('watchlist:enriched');
       // Optimistic: Sofort den Ticker entfernen
       setWatchlist(prev => prev.filter(item => item.ticker !== ticker));
     } catch (error) {
       console.error("Remove ticker error", error);
+      alert(`Fehler beim Entfernen von ${ticker}`);
     }
   }
 

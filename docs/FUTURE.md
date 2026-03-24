@@ -28,6 +28,15 @@ Der Trading-Bot nutzt inzwischen die komplette derzeit erhobene Datenbasis für 
 - Audits und Decision Snapshots werden zuerst gesammelt, um eine belastbare Baseline aufzubauen.
 - Kalibrierung von Gewichtungen und Schwellen erfolgt erst nach ausreichender Outcome-Historie.
 - Explainability bleibt Pflicht: Jede spätere Anpassung muss sich gegen reale Ergebnisse prüfen lassen.
+
+**Neu in v7.9.3 - Data Cleanup System:**
+
+- Vollständiges Daten-Aufräum-System implementiert, um Speicherüberlauf zu verhindern.
+- Massenlösch-Endpunkte für alle Tabellen (audit_reports, decision_snapshots, memory, etc.).
+- Preview-Endpunkte zur Sicherheit vor dem Löschen.
+- Watchlist-Integration mit optionalem Cleanup.
+- Frontend-Bestätigungsdialog mit klaren Optionen.
+- Vollständig getestet und produktionsbereit.
 - Valide Ticker dürfen nicht an fehlenden FMP-Profilen scheitern; yfinance-Fundamentals dienen als Fallback, wenn FMP temporär keine Profildaten liefert.
 - Resolver-Fehler dürfen keine korrekten US-Ticker blockieren; Mapping- und Suffix-Prüfungen sind deshalb robust zu halten.
 

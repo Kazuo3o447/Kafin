@@ -14,6 +14,7 @@ from typing import List, Dict
 
 import json
 import re
+from datetime import datetime
 
 import yfinance as yf
 
@@ -215,6 +216,7 @@ Alle Preise als Zahlen. Kein Markdown."""
                 "floor_scenario":        ai_data.get("floor_scenario", ""),
                 "turnaround_conditions": ai_data.get("turnaround_conditions", ""),
                 "falling_knife_risk":    ai_data.get("falling_knife_risk", "medium"),
+                "created_at":            datetime.utcnow().isoformat(),
                 "support": round(support_20d, 2),
                 "resistance": round(resistance_20d, 2),
                 "analysis": ai_data.get("analysis_text", ""),
@@ -255,8 +257,7 @@ Alle Preise als Zahlen. Kein Markdown."""
             "floor_scenario": "",
             "turnaround_conditions": "",
             "falling_knife_risk": "medium",
-            "support": round(support_20d, 2),
-            "resistance": round(resistance_20d, 2),
+            "created_at": datetime.utcnow().isoformat(),
             "analysis": (raw_response or "")[:500],
             "error": True,
         }

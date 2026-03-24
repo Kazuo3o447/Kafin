@@ -430,8 +430,31 @@ async def api_update_watchlist_item(ticker: str, item: WatchlistItemUpdate):
         return {"status": "error", "message": str(e)}
 
 @router.delete("/{ticker}")
-async def api_remove_watchlist_item(ticker: str):
-    logger.info(f"API Call: remove-watchlist-item {ticker}")
+async def api_remove_watchlist_item(ticker: str, cleanup_data: bool = False):
+    """
+    Entfernt einen Ticker von der Watchlist.
+    
+    Args:
+        ticker: Der zu entfernende Ticker
+        cleanup_data: Wenn True, werden alle zugehörigen Daten ebenfalls gelöscht
+    """
+    logger.info(f"API Call: remove-watchlist-item {ticker}, cleanup_data={cleanup_data}")
     await cache_invalidate("watchlist:enriched:v2")
     success = await remove_ticker(ticker)
-    return {"status": "success"} if success else {"status": "error"}
+    
+    # Optional: Complete cleanup aller Daten zum Ticker
+    cleanup_result = None
+    if cleanup_data and success:
+        try:
+            from backend.app.routers.data_cleanup import cleanup_ticker_data
+            cleanup_result = await cleanup_ticker_data(ticker)
+            logger.info(f"Watchlist-Removal mit Cleanup für {ticker}: {cleanup_result.get('total_deleted', 0)} Datensätze gelöscht")
+        except Exception as e:
+            logger.error(f"Cleanup nach Watchlist-Removal für {ticker} fehlgeschlagen: {e}")
+            cleanup_result = {"status": "error", "message": str(e)}
+    
+    response = {"status": "success"} if success else {"status": "error"}
+    if cleanup_result:
+        response["cleanup"] = cleanup_result
+    
+    return response

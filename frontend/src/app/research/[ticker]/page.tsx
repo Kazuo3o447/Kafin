@@ -312,6 +312,7 @@ type ChartAnalysisData = {
   floor_scenario?: string;
   turnaround_conditions?: string;
   falling_knife_risk?: "low" | "medium" | "high";
+  created_at?: string;
   error?: boolean;
 } | null;
 
@@ -909,9 +910,46 @@ function TradeSetupBlock({
 
   return (
     <div className="card p-4">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)] mb-3">
-        Trade Setup - {data.ticker}
-      </p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)]">
+          Trade Setup - {data.ticker}
+        </p>
+        <div className="flex items-center gap-2">
+          {data.created_at && (
+            <span className="text-[10px] text-[var(--text-muted)]">
+              <Clock size={10} className="inline mr-1" />
+              {new Date(data.created_at).toLocaleString("de-DE", { 
+                day: "2-digit", 
+                month: "2-digit", 
+                hour: "2-digit", 
+                minute: "2-digit" 
+              })}
+            </span>
+          )}
+          <button
+            onClick={onLoad}
+            disabled={loading}
+            className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+              loading
+                ? "text-[var(--text-muted)]"
+                : "bg-[var(--accent-blue)] text-white hover:opacity-90"
+            }`}
+            title="Trade Setup aktualisieren"
+          >
+            {loading ? (
+              <>
+                <RefreshCw size={12} className="inline mr-1 animate-spin" />
+                Aktualisiert...
+              </>
+            ) : (
+              <>
+                <RefreshCw size={12} className="inline mr-1" />
+                Aktualisieren
+              </>
+            )}
+          </button>
+        </div>
+      </div>
       
       {/* Falling-Knife-Warnung */}
       {data.falling_knife_risk === "high" && (

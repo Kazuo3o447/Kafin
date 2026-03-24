@@ -25,13 +25,20 @@ export const api = {
   // Watchlist
   getWatchlist: () => fetchAPI("/api/watchlist"),
   addTicker: (data: any) => fetchAPI("/api/watchlist", { method: "POST", body: JSON.stringify(data) }),
-  removeTicker: (ticker: string) => fetchAPI(`/api/watchlist/${ticker}`, { method: "DELETE" }),
+  removeTicker: (ticker: string, cleanupData?: boolean) => {
+    const url = cleanupData ? `/api/watchlist/${ticker}?cleanup_data=true` : `/api/watchlist/${ticker}`;
+    return fetchAPI(url, { method: "DELETE" });
+  },
   updateWebPrio: (ticker: string, prio: number | null) =>
     fetchAPI(`/api/watchlist/${ticker}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ web_prio: prio }),
     }),
+
+  // Data Cleanup
+  previewTickerData: (ticker: string) => fetchAPI(`/api/data/cleanup/${ticker}/preview`),
+  cleanupTickerData: (ticker: string) => fetchAPI(`/api/data/cleanup/${ticker}`, { method: "DELETE" }),
 
   // Reports
   generateMorningBriefing: () => fetchAPI("/api/reports/generate-morning", { method: "POST" }),

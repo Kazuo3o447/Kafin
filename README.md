@@ -18,6 +18,14 @@ Eine KI-gestützte Earnings-Trading-Plattform mit fortgeschrittener Signal Intel
 - **Valid-Ticker Fallback**: Wenn FMP für einen gültigen Ticker kein Profil liefert, greift jetzt ein yfinance-Fallback statt die Analyse fälschlich zu blockieren.
 - **Ticker-Resolver Fix**: Mapping- und Suffix-Checks sind korrigiert, damit valide Ticker nicht durch Resolver-Fehler ausgebremst werden.
 
+### v7.9.3 Highlights
+- **Data Cleanup System**: Vollständiges Daten-Aufräum-System implementiert, um Speicherüberlauf zu verhindern.
+- **Massenlösch-Endpunkte**: `DELETE /api/data/cleanup/{ticker}` löscht alle Daten zu einem Ticker aus allen Tabellen.
+- **Preview-Endpunkte**: `GET /api/data/cleanup/{ticker}/preview` zeigt vor dem Löschen die Anzahl der betroffenen Datensätze.
+- **Watchlist-Integration**: `DELETE /api/watchlist/{ticker}?cleanup_data=true` entfernt Ticker mit optionalem Daten-Cleanup.
+- **Frontend-UX**: Bestätigungsdialog mit klaren Optionen (nur Watchlist vs. komplettes Cleanup).
+- **Getestet & Verifiziert**: Alle Szenarien erfolgreich getestet (Preview, Cleanup, Watchlist-Integration).
+
 ### v7.5.0 Highlights
 - **Makro-Regime-Gate**: Risk Off (VIX > 30) degradiert Long-Empfehlungen zu Watch
 - **ATR-basierte Stops**: 1.5× ATR statt pauschal -8% mit Sicherheitsprüfung

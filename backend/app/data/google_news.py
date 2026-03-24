@@ -233,3 +233,29 @@ async def scan_google_news(watchlist_items: Optional[List[Dict]] = None) -> List
     )
     await cache_set(cache_key, all_news, ttl_seconds=600)
     return all_news
+
+
+async def scan_google_news_for_ticker(ticker: str, max_results: int = 5) -> list[dict]:
+    """
+    Google News RSS für einen einzelnen Ticker.
+    Fallback wenn Finnhub wenig News liefert (z.B. bei ETFs).
+    """
+    import asyncio
+    cache_key = f"google_news:ticker:{ticker.upper()}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        query = f"{ticker} stock"
+        url = _search_url(query)
+        results = await asyncio.to_thread(_parse_feed, url, max_results)
+        filtered = [
+            r for r in results
+            if _is_trusted(r.get("source", ""), r.get("url", ""))
+        ][:max_results]
+        await cache_set(cache_key, filtered, ttl_seconds=1800)  # 30 Min
+        return filtered
+    except Exception as e:
+        logger.debug(f"Google News für {ticker}: {e}")
+        return []

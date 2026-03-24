@@ -49,7 +49,7 @@ async def setup_workflows():
                 },
                 {
                     "parameters": {
-                        "url": "http://api:8000/api/news/scan",
+                        "url": "http://kafin-backend:8000/api/news/scan",
                         "method": "POST",
                         "options": {"timeout": 120000}
                     },
@@ -84,7 +84,7 @@ async def setup_workflows():
                 },
                 {
                     "parameters": {
-                        "url": "http://api:8000/api/news/scan-weekend",
+                        "url": "http://kafin-backend:8000/api/news/scan-weekend",
                         "method": "POST",
                         "options": {"timeout": 60000}
                     },
@@ -113,7 +113,7 @@ async def setup_workflows():
                 },
                 {
                     "parameters": {
-                        "url": "http://api:8000/api/news/sec-scan",
+                        "url": "http://kafin-backend:8000/api/news/sec-scan",
                         "method": "POST",
                         "options": {}
                     },
@@ -142,7 +142,7 @@ async def setup_workflows():
                 },
                 {
                     "parameters": {
-                        "url": "http://api:8000/api/reports/generate-sunday",
+                        "url": "http://kafin-backend:8000/api/reports/generate-sunday",
                         "method": "POST",
                         "options": {}
                     },

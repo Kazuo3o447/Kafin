@@ -1374,14 +1374,36 @@ async def api_research_dashboard(
     # ── News-Stichpunkte (max 10 neueste) ─────────────────────
     news_bullets = []
     for b in (news_mem or [])[:8]:
-        news_bullets.append({
-            "text": b.get("bullet_text", "") or b.get("insight", ""),
-            "sentiment": b.get("sentiment_score", 0),
-            "is_material": b.get("is_material", False),
-            "category": b.get("category", "News"),
-            "date": b.get("date", "") or b.get("created_at", ""),
-            "source": "finbert",
-        })
+        raw_bullets = b.get("bullet_points") or []
+        # Normalisierung: kann list, str oder None sein
+        if isinstance(raw_bullets, str):
+            try:
+                import json as _json
+                raw_bullets = _json.loads(raw_bullets)
+            except Exception:
+                raw_bullets = [raw_bullets]
+        if not isinstance(raw_bullets, list):
+            raw_bullets = [str(raw_bullets)] if raw_bullets else []
+
+        # Jeden Bullet als eigenen Eintrag hinzufügen
+        for bullet_text in raw_bullets[:3]:  # max 3 Bullets pro News-Item
+            if not bullet_text or not str(bullet_text).strip():
+                continue
+            news_bullets.append({
+                "text":        str(bullet_text).strip(),
+                "sentiment":   b.get("sentiment_score", 0),
+                "is_material": b.get("is_material", False),
+                "category":    b.get("category", "News"),
+                "date":        b.get("date", "") or b.get("created_at", ""),
+                "source":      b.get("source", "finbert"),
+                "url":         b.get("url", ""),
+                "is_narrative_shift": b.get("is_narrative_shift", False),
+                "shift_type":         b.get("shift_type"),
+            })
+            if len(news_bullets) >= 10:
+                break
+        if len(news_bullets) >= 10:
+            break
 
     if len(news_bullets) < 5 and news_items:
         for item in (news_items or [])[:8]:

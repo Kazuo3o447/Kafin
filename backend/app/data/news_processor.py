@@ -67,6 +67,29 @@ async def process_news_for_ticker(ticker: str) -> dict:
 
     stats["total_fetched"] = len(news_list)
 
+    # STUFE 1b: Google News als Ergänzung wenn Finnhub < 3 News liefert
+    if len(news_list) < 3:
+        try:
+            from backend.app.data.google_news import scan_google_news_for_ticker
+            google_news = await scan_google_news_for_ticker(ticker)
+            if google_news:
+                # Konvertiere zu kompatiblem Format
+                from types import SimpleNamespace
+                for gn in google_news[:5]:
+                    news_list.append(SimpleNamespace(
+                        headline=gn.get("headline", ""),
+                        summary=gn.get("summary", gn.get("headline", "")),
+                        url=gn.get("url", ""),
+                        source=gn.get("source", "google_news"),
+                        timestamp=datetime.now(),
+                    ))
+                logger.debug(
+                    f"{ticker}: Finnhub arm ({len(news_list)-len(google_news)} News) "
+                    f"→ {len(google_news)} Google News ergänzt"
+                )
+        except Exception as e:
+            logger.debug(f"Google News Fallback {ticker}: {e}")
+
     # Duplikate filtern
     existing_urls = await get_existing_urls(ticker)
     new_news = [n for n in news_list if getattr(n, "url", "") not in existing_urls]
@@ -81,12 +104,49 @@ async def process_news_for_ticker(ticker: str) -> dict:
 
     relevance_threshold = settings.alerts.get("finbert", {}).get("relevance_threshold", 0.3)
 
+    # ETFs und Indizes: neutral formulierte News sind trotzdem relevant
+    # Erkenne ETF an typischen Suffixen und Ticker-Mustern
+    _is_etf_like = (
+        ticker.upper() in {
+            "SPY", "QQQ", "IWM", "DIA", "XLK", "XLF", "XLE",
+            "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE",
+            "GLD", "SLV", "TLT", "HYG", "LQD", "EEM", "VTI",
+        }
+        or ticker.upper().startswith(("X", "I")) and len(ticker) <= 4
+    )
+    if _is_etf_like:
+        relevance_threshold = 0.1  # Breiter Filter für ETFs
+        logger.debug(f"ETF-Modus für {ticker}: FinBERT-Schwelle auf 0.1 gesenkt")
+
     relevant_news = []
     for news_item, score in zip(new_news, sentiment_scores):
         if abs(score) >= relevance_threshold:
             relevant_news.append((news_item, score))
 
     stats["passed_finbert"] = len(relevant_news)
+
+    # Nachrichten mit wichtigen Keywords IMMER durchlassen,
+    # auch wenn FinBERT-Sentiment neutral ist
+    ALWAYS_RELEVANT_KEYWORDS = [
+        "earnings", "revenue", "eps", "guidance", "outlook",
+        "fed", "rate", "fomc", "inflation", "cpi",
+        "ceo", "cfo", "acquisition", "merger", "recall",
+        "investigation", "sec", "fda", "upgrade", "downgrade",
+    ]
+    forced_relevant = []
+    for news_item, score in zip(new_news, sentiment_scores):
+        if (news_item, score) in relevant_news:
+            continue  # bereits drin
+        combined = f"{news_item.headline} {getattr(news_item,'summary','')}".lower()
+        if any(kw in combined for kw in ALWAYS_RELEVANT_KEYWORDS):
+            forced_relevant.append((news_item, score))
+
+    if forced_relevant:
+        logger.debug(
+            f"{ticker}: {len(forced_relevant)} News via Keyword-Override hinzugefügt"
+        )
+        relevant_news = relevant_news + forced_relevant
+        stats["passed_finbert"] = len(relevant_news)
 
     if not relevant_news:
         logger.debug(f"Keine relevanten News für {ticker} nach FinBERT-Filter")
@@ -202,40 +262,74 @@ async def process_news_for_ticker(ticker: str) -> dict:
 
 
 async def _extract_bullet_points(ticker: str, news_item) -> dict:
-    """Nutzt DeepSeek um Stichpunkte und Narrative Shifts aus einer Nachricht zu extrahieren."""
-    import os
-    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    PROMPT_PATH = os.path.join(ROOT_DIR, "prompts", "news_extraction.md")
-    
+    """Nutzt Groq um Stichpunkte aus einer Nachricht zu extrahieren."""
+    import os, pathlib
+
+    # Robuster Pfad: relativ zur aktuellen Datei, nicht zum cwd
+    _THIS_DIR = pathlib.Path(__file__).parent
+    PROMPT_PATH = _THIS_DIR.parent.parent.parent / "prompts" / "news_extraction.md"
+
+    system_prompt = None
+    user_tmpl = None
+
     try:
-        with open(PROMPT_PATH, "r", encoding="utf-8") as f:
-            content = f.read()
+        content = PROMPT_PATH.read_text(encoding="utf-8")
         parts = content.split("SYSTEM:")
         subparts = parts[1].split("USER_TEMPLATE:")
         system_prompt = subparts[0].strip()
         user_tmpl = subparts[1].strip()
-        user_prompt = user_tmpl.replace("{{ticker}}", ticker).replace("{{headline}}", news_item.headline).replace("{{summary}}", news_item.summary)
     except Exception as e:
-        logger.error(f"Fehler beim Laden des news_extraction Prompts: {e}")
-        return {"bullet_points": [news_item.headline]}
+        logger.warning(
+            f"news_extraction.md nicht gefunden ({PROMPT_PATH}): {e} — "
+            f"Nutze eingebetteten Fallback-Prompt"
+        )
+        # Eingebetteter Fallback — kein Datei-Abhängigkeit
+        system_prompt = (
+            "Du bist ein Finanzanalyst. Extrahiere 2-3 handlungsrelevante "
+            "Stichpunkte auf Deutsch aus der Finanznachricht. "
+            "Antworte NUR als JSON: "
+            '{"bullet_points": ["Punkt 1", "Punkt 2"], '
+            '"is_narrative_shift": false, "shift_type": "None", '
+            '"is_directly_relevant": true}'
+        )
+        user_tmpl = (
+            "Ticker: {{ticker}}\nHeadline: {{headline}}\nSummary: {{summary}}"
+        )
 
-    result = await call_groq(system_prompt, user_prompt)
+    user_prompt = (
+        user_tmpl
+        .replace("{{ticker}}", ticker)
+        .replace("{{headline}}", news_item.headline or "")
+        .replace("{{summary}}", getattr(news_item, "summary", "") or "")
+    )
 
     try:
+        result = await call_groq(system_prompt, user_prompt)
         import json
         clean = result.strip().replace("```json", "").replace("```", "").strip()
         data = json.loads(clean)
-        
         if isinstance(data, dict) and "bullet_points" in data:
-            data["bullet_points"] = data["bullet_points"][:5]
+            data["bullet_points"] = [
+                str(b) for b in data["bullet_points"][:5] if b
+            ]
             return data
         elif isinstance(data, list):
-            return {"bullet_points": data[:5]}
-            
-    except (json.JSONDecodeError, Exception) as e:
-        logger.warning(f"DeepSeek JSON-Parse-Fehler: {e}. Nutze Headline als Fallback.")
+            return {
+                "bullet_points": [str(b) for b in data[:5] if b],
+                "is_narrative_shift": False,
+                "shift_type": "None",
+                "is_directly_relevant": True,
+            }
+    except Exception as e:
+        logger.warning(f"Groq JSON-Parse-Fehler für {ticker}: {e}")
 
-    return {"bullet_points": [news_item.headline]}
+    # Letzter Fallback: Headline als Bullet
+    return {
+        "bullet_points": [news_item.headline],
+        "is_narrative_shift": False,
+        "shift_type": "None",
+        "is_directly_relevant": True,
+    }
 
 
 def _categorize_news(headline: str, summary: str) -> str:

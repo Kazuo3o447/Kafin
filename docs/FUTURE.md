@@ -679,7 +679,58 @@ und Pre-Market Kurse kostenlos.
 
 ---
 
-## 🟠 FEATURE: Post-Earnings Kontext-Alert (Telegram)
+## � FEAR & GREED INDEX (REMOVED)
+
+**Status: ❌ ENTFERNT (24.03.2026) — v6.1.6**
+
+**Problem:** Eigene Implementierung zeigte 61.2 (Greed) während CNN Index bei ~15 (Extreme Fear) lag.
+
+**Warum falsch:**
+- **Eigene Berechnung** statt CNN API
+- **Falsche Datenquellen**: FRED statt echte Marktdaten
+- **Fehlende Komponenten**: Nur 2 von 7 Indikatoren verfügbar
+  - ✅ VIX (26.15) → Score 35.4
+  - ✅ Credit Spread (3.19%) → Score 100.0  
+  - ❌ Marktbreite SMA50 = N/A
+  - ❌ SPY vs TLT (Safe Haven) = leer
+  - ❌ SPY Momentum 5T = N/A
+- **Falsche Gewichtung**: 30%/20% statt CNN-Gewichtung
+- **Coverage**: Nur 50% → Score verzerrt
+
+**CNN verwendet wirklich:**
+1. Market Momentum (SPY vs 125-Tage-Durchschnitt)
+2. Stock Strength (Advance/Decline Ratio)  
+3. Stock Breadth (New Highs/New Lows)
+4. Put/Call Ratio (CBOE Daten)
+5. Safe Haven Demand (Stocks vs Bonds)
+6. Junk Bond Demand (IG vs Junk Bonds)
+7. Market Volatility (VIX)
+
+**Implementierungsdetails:**
+- **Backend**: `backend/app/data/fear_greed.py` - Eigene Composite-Berechnung
+- **Frontend**: `frontend/src/app/markets/page.tsx` - FearGreedBlock Component
+- **API**: `GET /api/data/fear-greed` - Endpoint entfernt
+- **Gewichtung**: VIX 30%, Marktbreite 20%, Safe Haven 20%, Credit Spread 20%, Momentum 10%
+- **Cache**: 30min TTL
+
+**Entfernte Dateien/Code:**
+- FearGreedBlock Component (132 Zeilen)
+- FearGreedData Type Definition
+- fetchFearGreed Function
+- State Management (fearGreed, fearGreedTs)
+- Interval Refresh (30min)
+
+**Mögliche Lösungen (für Zukunft):**
+1. **CNN API verwenden** (falls verfügbar)
+2. **Echte Marktdaten** statt FRED
+3. **Korrekte Gewichtung** und alle 7 Indikatoren
+4. **Alternative**: CNN Fear & Greed via Web Scraping
+
+**Aufwand:** ~4h für korrekte Implementierung mit echten Daten
+
+---
+
+## �🟠 FEATURE: Post-Earnings Kontext-Alert (Telegram)
 
 **Warum:**
 "HIMS schlägt EPS um +15% aber fällt -4% AH" —

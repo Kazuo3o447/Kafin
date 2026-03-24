@@ -11,20 +11,25 @@ from backend.app.cache import cache_get, cache_set, cache_invalidate
 from backend.app.db import get_supabase_client
 from backend.app.database import get_pool
 from backend.app.data.finnhub import (
-    get_earnings_calendar, get_company_news, get_short_interest, get_insider_transactions,
+    get_company_news, get_short_interest, get_insider_transactions,
     get_economic_calendar,
 )
+# Primär yfinance, FMP als Fallback
+from backend.app.data.yfinance_data import (
+    get_risk_metrics, get_atm_implied_volatility, get_historical_volatility,
+    get_technical_setup, get_fundamentals_yf, get_options_metrics, get_options_oi_analysis,
+    get_earnings_history_yf, get_short_interest_yf, get_vwap,
+    get_analyst_estimates_yf, get_key_metrics_yf
+)
 from backend.app.data.fmp import (
-    get_company_profile, get_analyst_estimates, get_earnings_history, get_key_metrics,
+    get_company_profile as fmp_profile,
+    get_analyst_estimates as fmp_analyst_estimates, 
+    get_earnings_history as fmp_earnings_history, 
+    get_key_metrics as fmp_key_metrics,
     get_price_target_consensus, get_analyst_grades
 )
 from backend.app.data.fred import get_macro_snapshot
 from backend.app.data.fear_greed import get_fear_greed_score
-from backend.app.data.yfinance_data import (
-    get_risk_metrics, get_atm_implied_volatility, get_historical_volatility,
-    get_technical_setup, get_fundamentals_yf, get_options_metrics, get_options_oi_analysis,
-    get_earnings_history_yf, get_short_interest_yf, get_vwap
-)
 from backend.app.data.alpaca_data import (
     get_bars as alpaca_get_bars,
     get_snapshot as alpaca_get_snapshot,
@@ -83,16 +88,104 @@ async def api_insiders(ticker: str):
 @router.get("/company/{ticker}/profile", response_model=ValuationData)
 async def api_profile(ticker: str):
     logger.info(f"API Call: profile for {ticker}")
+    
+    async def get_company_profile(ticker: str):
+        """Holt Firmenprofil - primär yfinance, FMP als Fallback."""
+        # 1. Versuch: yfinance (primär)
+        try:
+            yf_fundamentals = await get_fundamentals_yf(ticker)
+            if yf_fundamentals:
+                from schemas.valuation import ValuationData
+                profile = ValuationData(
+                    ticker=ticker,
+                    sector=yf_fundamentals.get("sector"),
+                    industry=yf_fundamentals.get("industry"),
+                    pe_ratio=yf_fundamentals.get("pe_ratio") or yf_fundamentals.get("forward_pe"),
+                    ps_ratio=yf_fundamentals.get("ps_ratio"),
+                    market_cap=yf_fundamentals.get("market_cap"),
+                    debt_to_equity=yf_fundamentals.get("debt_to_equity"),
+                    current_ratio=yf_fundamentals.get("current_ratio"),
+                    free_cash_flow_yield=yf_fundamentals.get("free_cash_flow_yield"),
+                )
+                logger.info(f"[{ticker}] Profil via yfinance geladen")
+                return profile
+        except Exception as exc:
+            logger.debug(f"[{ticker}] yfinance Profil fehlgeschlagen: {exc}")
+        
+        # 2. Versuch: FMP (Fallback)
+        try:
+            profile = await fmp_profile(ticker)
+            if profile:
+                logger.info(f"[{ticker}] Profil via FMP-Fallback geladen")
+                return profile
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Profil-Fallback fehlgeschlagen: {exc}")
+        
+        return None
+    
     return await get_company_profile(ticker)
 
 @router.get("/company/{ticker}/estimates", response_model=EarningsExpectation)
 async def api_estimates(ticker: str):
     logger.info(f"API Call: estimates for {ticker}")
+    
+    async def get_analyst_estimates(ticker: str):
+        """Holt Analyst Estimates - primär yfinance, FMP als Fallback."""
+        # 1. Versuch: yfinance (primär)
+        try:
+            yf_estimates = await get_analyst_estimates_yf(ticker)
+            if yf_estimates:
+                logger.info(f"[{ticker}] Analyst Estimates via yfinance geladen")
+                return yf_estimates
+        except Exception as exc:
+            logger.debug(f"[{ticker}] yfinance Analyst Estimates fehlgeschlagen: {exc}")
+        
+        # 2. Versuch: FMP (Fallback)
+        try:
+            fmp_estimates = await fmp_analyst_estimates(ticker)
+            if fmp_estimates:
+                logger.info(f"[{ticker}] Analyst Estimates via FMP-Fallback geladen")
+                return fmp_estimates
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Analyst Estimates fehlgeschlagen: {exc}")
+        
+        return None
+    
     return await get_analyst_estimates(ticker)
 
 @router.get("/company/{ticker}/earnings-history", response_model=EarningsHistorySummary)
 async def api_earnings_history(ticker: str):
     logger.info(f"API Call: earnings-history for {ticker}")
+    
+    async def get_earnings_history(ticker: str):
+        """Holt Earnings History - primär yfinance, FMP als Fallback."""
+        # 1. Versuch: yfinance (primär)
+        try:
+            yf_hist_raw = await get_earnings_history_yf(ticker)
+            if yf_hist_raw:
+                history = EarningsHistorySummary(
+                    ticker=ticker,
+                    quarters_beat=yf_hist_raw.get("quarters_beat", 0),
+                    total_quarters=yf_hist_raw.get("total_quarters", 0),
+                    avg_surprise_percent=yf_hist_raw.get("avg_surprise_percent"),
+                    all_quarters=yf_hist_raw.get("all_quarters", []),
+                )
+                logger.info(f"[{ticker}] Earnings History via yfinance geladen")
+                return history
+        except Exception as exc:
+            logger.debug(f"[{ticker}] yfinance Earnings History fehlgeschlagen: {exc}")
+        
+        # 2. Versuch: FMP (Fallback)
+        try:
+            fmp_hist = await fmp_earnings_history(ticker)
+            if fmp_hist:
+                logger.info(f"[{ticker}] Earnings History via FMP-Fallback geladen")
+                return fmp_hist
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Earnings History fehlgeschlagen: {exc}")
+        
+        return None
+    
     return await get_earnings_history(ticker)
 
 @router.get("/macro", response_model=MacroSnapshot)

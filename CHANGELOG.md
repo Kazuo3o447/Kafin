@@ -1,3 +1,85 @@
+# Kafin Trading System - Changelog
+
+Alle wichtigen Änderungen und Features des Kafin Trading Systems.
+
+## [v1.0.0] - 2026-03-24
+
+### 🎉 Major Release - Watchlist Complete
+
+#### ✨ New Features
+- **Watchlist mit technischen Indikatoren**
+  - RSI (14-Perioden) - Überverkauft/Überkauft Analyse
+  - Trend (20-Tage SMA) - Bullish/Bearish/Neutral
+  - 5T-Change - 5-Tage Performance
+  - SMA50 - 50-Tage Durchschnitt Vergleich
+  - ATR14 - Average True Range (Volatilität)
+  - RVOL - Relative Volume (20-Tage Durchschnitt)
+
+- **Tage auf Watchlist**
+  - 📅 X Tage Anzeige im Namen-Bereich
+  - Berechnet aus `added_date` Feld
+  - Kalender-Icon für bessere Visualisierung
+
+- **Preisdaten Integration**
+  - Alpaca API (primär) für Real-time Daten
+  - yfinance Fallback für technische Indikatoren
+  - Bid/Ask Spreads, Pre/Post-Market Preise
+
+#### 🔧 Technical Improvements
+- **Async Database Handling**
+  - Fix für "attached to different loop" Fehler
+  - Thread-safe Datenbankoperationen
+  - Graceful Degradation bei API Fehlern
+
+- **Cache Optimierung**
+  - Redis Backend Cache (5 Minuten TTL)
+  - Frontend Cache (4 Minuten)
+  - Earnings Live-Modus (10 Sekunden TTL)
+
+- **Performance**
+  - Batch Processing für Alpaca Snapshots
+  - 60-Tage yfinance History für präzise Indikatoren
+  - Parallele Datenabfrage mit asyncio.gather()
+
+#### 🐛 Bug Fixes
+- **Bullet Points Async Error** - Temporär deaktiviert für Stabilität
+- **Score History Empty** - KI-Scores暂时 deaktiviert
+- **DateTime Conversion** - Timezone-aware vs naive datetime fixes
+- **Cache Invalidation** - Korrekte Cache-Leerung bei Updates
+
+#### 📱 Frontend Changes
+- **Watchlist UI Enhancements**
+  - Neue Spalten für technische Indikatoren
+  - Farbliche Hervorhebung von Signalen
+  - Responsive Design für mobile Ansicht
+  - Sortierung nach allen technischen Feldern
+
+- **TypeScript Improvements**
+  - Erweiterte WatchlistItem Type Definition
+  - Neue Felder: `days_on_watchlist`, `rsi`, `trend`, etc.
+  - Bessere Type Safety für API Responses
+
+#### 🗄️ Database Changes
+- **Watchlist Schema**
+  - `added_date` Feld für Tage-Berechnung
+  - `days_on_watchlist` Runtime Berechnung
+  - Index Optimierung für Performance
+
+#### 🚀 Deployment
+- **Docker Container Updates**
+  - Frontend Build mit neuen Features
+  - Backend Restart für API Changes
+  - Redis Cache Warming
+
+#### 📚 Documentation
+- **Watchlist System Documentation**
+  - Vollständige Architektur-Beschreibung
+  - API Endpoints und Data Flow
+  - Troubleshooting Guide
+  - Performance Optimierungen
+
+---
+
 ## [7.9.2] - 2026-03-24 - Valid-Ticker Fallback & Resolver Fix
 
 ### 🛠️ Bugfixes

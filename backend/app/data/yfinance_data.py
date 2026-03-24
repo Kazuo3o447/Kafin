@@ -878,3 +878,83 @@ async def get_earnings_history_yf(
         return await asyncio.to_thread(_fetch)
     except Exception:
         return None
+
+
+# NEU: Analyst Estimates und Key Metrics für yfinance Primär-Strategie
+async def get_analyst_estimates_yf(ticker: str) -> Optional[dict]:
+    """Holt Analyst Estimates von yfinance (als Alternative zu FMP)."""
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        
+        if not info:
+            return None
+        
+        # yfinance liefert begrenzte Analyst-Daten
+        estimates = {
+            "ticker": ticker,
+            "report_date": None,  # yfinance hat keine Earnings Dates
+            "eps_estimate_current": info.get("forwardEps"),
+            "eps_estimate_next_quarter": info.get("forwardEps"),
+            "revenue_estimate_current": None,
+            "revenue_estimate_next_quarter": None,
+            "source": "yfinance"
+        }
+        
+        # Price Target wenn verfügbar
+        if "targetMeanPrice" in info:
+            estimates["price_target"] = info.get("targetMeanPrice")
+        
+        return estimates
+    except Exception as e:
+        logger.debug(f"yfinance Analyst Estimates für {ticker}: {e}")
+        return None
+
+
+async def get_key_metrics_yf(ticker: str) -> Optional[dict]:
+    """Holt Key Metrics von yfinance (als Alternative zu FMP)."""
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        
+        if not info:
+            return None
+        
+        # Key Metrics aus yfinance info
+        metrics = {
+            "ticker": ticker,
+            "pe_ratio": info.get("trailingPE"),
+            "forward_pe": info.get("forwardPE"),
+            "ps_ratio": info.get("priceToSalesTrailing12Months"),
+            "pb_ratio": info.get("priceToBook"),
+            "market_cap": info.get("marketCap"),
+            "enterprise_value": info.get("enterpriseValue"),
+            "debt_to_equity": info.get("debtToEquity"),
+            "current_ratio": info.get("currentRatio"),
+            "quick_ratio": info.get("quickRatio"),
+            "gross_margin": info.get("grossMargins"),
+            "operating_margin": info.get("operatingMargins"),
+            "net_margin": info.get("profitMargins"),
+            "return_on_equity": info.get("returnOnEquity"),
+            "return_on_assets": info.get("returnOnAssets"),
+            "free_cash_flow_yield": None,  # Berechnen aus FCF
+            "dividend_yield": info.get("dividendYield"),
+            "beta": info.get("beta"),
+            "source": "yfinance"
+        }
+        
+        # Free Cash Flow Yield berechnen
+        try:
+            financials = stock.financials
+            if not financials.empty:
+                fcf = financials.loc["Free Cash Flow"].iloc[0] if "Free Cash Flow" in financials.index else None
+                market_cap = info.get("marketCap")
+                if fcf and market_cap and market_cap > 0:
+                    metrics["free_cash_flow_yield"] = float(fcf) / float(market_cap)
+        except:
+            pass
+        
+        return metrics
+    except Exception as e:
+        logger.debug(f"yfinance Key Metrics für {ticker}: {e}")
+        return None

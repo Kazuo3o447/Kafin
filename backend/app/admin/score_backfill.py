@@ -213,12 +213,12 @@ async def _backfill_single_ticker(ticker: str, days: int, market_ov: dict) -> di
                     "price": getattr(tech, "current_price", None) if tech else None,
                     "rsi": getattr(tech, "rsi_14", None) if tech else None,
                     "trend": getattr(tech, "trend", None) if tech else None,
-                }).eq("ticker", ticker).eq("date", date.isoformat()).execute_async()
+                }).eq("ticker", ticker).eq("date", date).execute_async()
             else:
                 # Neuer Eintrag
                 await db.table("score_history").insert({
                     "ticker": ticker,
-                    "date": date.isoformat(),
+                    "date": date,
                     "opportunity_score": opp_score.total_score,
                     "torpedo_score": torp_score.total_score,
                     "price": getattr(tech, "current_price", None) if tech else None,

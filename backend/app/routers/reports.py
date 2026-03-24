@@ -20,7 +20,7 @@ _latest_report = ""
 async def api_generate_report(ticker: str):
     """
     Generiert einen einzelnen Audit-Report für den angegebenen Ticker.
-    Der Report wird über DeepSeek erstellt und im Arbeitsspeicher gespeichert.
+    Der Report wird über DeepSeek erstellt und Scores direkt zurückgegeben.
     """
     logger.info(f"[Report] Starte Audit-Report für {ticker}...")
     global _latest_report
@@ -28,7 +28,52 @@ async def api_generate_report(ticker: str):
         report_text = await generate_audit_report(ticker)
         _latest_report = report_text
         logger.info(f"[Report] Audit-Report für {ticker} erfolgreich generiert ({len(report_text)} Zeichen).")
-        return {"status": "success", "report": report_text}
+        
+        # Scores direkt aus dem Report extrahieren (ohne DB)
+        scores = {"recommendation": None, "opportunity_score": None, "torpedo_score": None}
+        
+        # Versuche Scores aus dem Report-Text zu parsen
+        try:
+            import re
+            # Suche nach Empfehlungsmustern
+            rec_patterns = [
+                r"(?:EMPFEHLUNG|RECOMMENDATION):\s*(.*?)(?:\n|$)",
+                r"(?:STRONG\s+BUY|BUY|STRONG\s+SHORT|SHORT|HOLD|WATCH)",
+                r"^\*?\*?(STRONG\s+BUY|BUY|STRONG\s+SHORT|SHORT|HOLD|WATCH)\*?\*?\s*[:\-]?\s*(.*?)(?:\n|$)"
+            ]
+            
+            for pattern in rec_patterns:
+                match = re.search(pattern, report_text, re.IGNORECASE | re.MULTILINE)
+                if match:
+                    if "STRONG BUY" in match.group(0).upper():
+                        scores["recommendation"] = "strong_buy"
+                        break
+                    elif "STRONG SHORT" in match.group(0).upper():
+                        scores["recommendation"] = "strong_short"
+                        break
+                    elif "BUY" in match.group(0).upper():
+                        scores["recommendation"] = "buy_hedge"
+                        break
+                    elif "HOLD" in match.group(0).upper() or "WATCH" in match.group(0).upper():
+                        scores["recommendation"] = "hold"
+                        break
+            
+            # Opportunity Score aus MOCK_DATA_CHECK extrahieren
+            mock_check = re.search(r"OS:\s*([\d\.]+)", report_text)
+            if mock_check:
+                scores["opportunity_score"] = float(mock_check.group(1))
+            
+            # Torpedo Score aus MOCK_DATA_CHECK extrahieren  
+            mock_check = re.search(r"TS:\s*([\d\.]+)", report_text)
+            if mock_check:
+                scores["torpedo_score"] = float(mock_check.group(1))
+                
+            logger.info(f"[Report] Scores aus Report extrahiert: {scores}")
+            
+        except Exception as e:
+            logger.warning(f"[Report] Score-Extraktion fehlgeschlagen: {e}")
+        
+        return {"status": "success", "report": report_text, **scores}
     except Exception as e:
         logger.error(f"[Report] Fehler beim Generieren des Audit-Reports für {ticker}: {e}")
         return {"status": "error", "message": str(e)}

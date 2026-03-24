@@ -4,15 +4,20 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from backend.app.logger import get_logger
 from backend.app.data.finnhub import get_company_news, get_short_interest, get_insider_transactions, get_economic_calendar
+# Primär yfinance, FMP als Fallback
+from backend.app.data.yfinance_data import (
+    get_fundamentals_yf, get_earnings_history_yf, get_analyst_estimates_yf, get_key_metrics_yf,
+    get_technical_setup
+)
+# FMP nur als Fallback (deaktiviert)
 from backend.app.data.fmp import (
-    get_company_profile,
-    get_analyst_estimates,
-    get_earnings_history,
-    get_key_metrics,
-    get_sector_pe,
+    get_company_profile as fmp_profile,
+    get_analyst_estimates as fmp_analyst_estimates,
+    get_earnings_history as fmp_earnings_history,
+    get_key_metrics as fmp_key_metrics,
+    get_price_target_consensus, get_analyst_grades as fmp_analyst_grades,
 )
 from backend.app.data.fred import get_macro_snapshot
-from backend.app.data.yfinance_data import get_technical_setup, get_fundamentals_yf
 from backend.app.analysis.scoring import calculate_opportunity_score, calculate_torpedo_score, get_recommendation
 from backend.app.analysis.deepseek import call_deepseek
 from backend.app.memory.long_term import get_all_insights_for_report
@@ -151,79 +156,116 @@ async def generate_audit_report(ticker: str) -> str:
     """
     logger.info(f"Generating Audit Report for {ticker}")
     
-    profile = await get_company_profile(ticker)
-    if not profile:
+    # Daten laden mit yfinance primär, FMP als Fallback
+    profile = None
+    try:
+        # 1. Versuch: yfinance (primär)
+        yf_fundamentals = await get_fundamentals_yf(ticker)
+        if yf_fundamentals:
+            profile = _valuation_from_fundamentals(ticker, yf_fundamentals)
+            logger.info(f"[{ticker}] Profil via yfinance geladen")
+        else:
+            raise Exception("Keine yfinance Daten")
+    except Exception as exc:
+        logger.debug(f"[{ticker}] yfinance Profil fehlgeschlagen: {exc}")
+        # 2. Versuch: FMP (Fallback)
         try:
-            yf_fundamentals = await get_fundamentals_yf(ticker)
-            if yf_fundamentals:
-                profile = _valuation_from_fundamentals(ticker, yf_fundamentals)
-                logger.info(f"[{ticker}] Profil-Fallback via yfinance aktiviert")
+            profile = await fmp_profile(ticker)
+            if profile:
+                logger.info(f"[{ticker}] Profil via FMP-Fallback geladen")
         except Exception as exc:
-            logger.debug(f"[{ticker}] Profil-Fallback via yfinance fehlgeschlagen: {exc}")
-        if not profile:
-            logger.warning(f"Ticker-Validierung fehlgeschlagen für {ticker}.")
-            return f"Fehler: Ticker '{ticker}' ist ungültig (kein Profil gefunden)."
+            logger.debug(f"[{ticker}] FMP Profil-Fallback fehlgeschlagen: {exc}")
+    
+    if not profile:
+        logger.warning(f"Ticker-Validierung fehlgeschlagen für {ticker}.")
+        return f"Fehler: Ticker '{ticker}' ist ungültig (kein Profil gefunden)."
 
-    # Daten laden — jeder Call einzeln abgesichert
+    # Analyst Estimates - primär yfinance
     estimates = None
     try:
-        estimates = await get_analyst_estimates(ticker)
-    except Exception as e:
-        logger.warning(f"Analyst estimates für {ticker}: {e}")
+        yf_estimates = await get_analyst_estimates_yf(ticker)
+        if yf_estimates:
+            estimates = yf_estimates
+            logger.info(f"[{ticker}] Analyst Estimates via yfinance geladen")
+        else:
+            raise Exception("Keine yfinance Daten")
+    except Exception as exc:
+        logger.debug(f"[{ticker}] yfinance Analyst Estimates fehlgeschlagen: {exc}")
+        # FMP Fallback
+        try:
+            fmp_estimates = await fmp_analyst_estimates(ticker)
+            if fmp_estimates:
+                estimates = fmp_estimates
+                logger.info(f"[{ticker}] Analyst Estimates via FMP-Fallback geladen")
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Analyst Estimates fehlgeschlagen: {exc}")
 
-    # Analyst Grades für guidance_trend/deceleration
+    # Analyst Grades - primär yfinance
     audit_grades = None
     try:
-        from backend.app.data.fmp import get_analyst_grades
-        audit_grades = await get_analyst_grades(ticker)
-    except Exception as e:
-        logger.warning(f"Analyst grades für {ticker}: {e}")
+        yf_grades = await get_analyst_estimates_yf(ticker)
+        if yf_grades:
+            audit_grades = yf_grades
+            logger.info(f"[{ticker}] Analyst Grades via yfinance geladen")
+        else:
+            raise Exception("Keine yfinance Daten")
+    except Exception as exc:
+        logger.debug(f"[{ticker}] yfinance Analyst Grades fehlgeschlagen: {exc}")
+        # FMP Fallback
+        try:
+            fmp_grades = await fmp_analyst_grades(ticker)
+            if fmp_grades:
+                audit_grades = fmp_grades
+                logger.info(f"[{ticker}] Analyst Grades via FMP-Fallback geladen")
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Analyst Grades fehlgeschlagen: {exc}")
 
+    # Earnings History - primär yfinance
     history = None
     try:
-        history = await get_earnings_history(ticker)
-    except Exception as e:
-        logger.warning(f"Earnings history für {ticker}: {e}")
-
-    # yfinance Fallback wenn FMP keine Earnings-History liefert
-    if not history:
+        from schemas.earnings import EarningsHistorySummary
+        yf_hist_raw = await get_earnings_history_yf(ticker)
+        if yf_hist_raw:
+            history = EarningsHistorySummary(
+                ticker=ticker,
+                quarters_beat=yf_hist_raw.get("quarters_beat", 0),
+                total_quarters=yf_hist_raw.get("total_quarters", 0),
+                avg_surprise_percent=yf_hist_raw.get("avg_surprise_percent"),
+                all_quarters=yf_hist_raw.get("all_quarters", []),
+            )
+            logger.info(f"[{ticker}] Earnings History via yfinance geladen")
+        else:
+            raise Exception("Keine yfinance Daten")
+    except Exception as exc:
+        logger.debug(f"[{ticker}] yfinance Earnings History fehlgeschlagen: {exc}")
+        # FMP Fallback
         try:
-            from backend.app.data.yfinance_data import get_earnings_history_yf
-            from schemas.earnings import EarningsHistorySummary
-            yf_hist_raw = await get_earnings_history_yf(ticker)
-            if yf_hist_raw:
-                history = EarningsHistorySummary(
-                    ticker=ticker,
-                    quarters_beat=yf_hist_raw.get("quarters_beat", 0),
-                    total_quarters=yf_hist_raw.get("total_quarters", 0),
-                    avg_surprise_percent=yf_hist_raw.get("avg_surprise_percent"),
-                    all_quarters=yf_hist_raw.get("all_quarters", []),
-                )
-                logger.info(
-                    f"[{ticker}] Earnings-History via yfinance: "
-                    f"{history.quarters_beat}/{history.total_quarters} Beats"
-                )
-        except Exception as e:
-            logger.debug(f"yfinance Earnings-History Fallback {ticker}: {e}")
+            fmp_hist = await fmp_earnings_history(ticker)
+            if fmp_hist:
+                history = fmp_hist
+                logger.info(f"[{ticker}] Earnings History via FMP-Fallback geladen")
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Earnings History fehlgeschlagen: {exc}")
 
+    # Key Metrics - primär yfinance
     metrics = None
     try:
-        metrics = await get_key_metrics(ticker)
-    except Exception as e:
-        logger.warning(f"Key metrics für {ticker}: {e}")
-
-    # yfinance Fallback für fehlende Fundamentaldaten
-    yf_fundamentals = None
-    if not metrics or not getattr(metrics, "pe_ratio", None):
+        yf_metrics = await get_key_metrics_yf(ticker)
+        if yf_metrics:
+            metrics = yf_metrics
+            logger.info(f"[{ticker}] Key Metrics via yfinance geladen")
+        else:
+            raise Exception("Keine yfinance Daten")
+    except Exception as exc:
+        logger.debug(f"[{ticker}] yfinance Key Metrics fehlgeschlagen: {exc}")
+        # FMP Fallback
         try:
-            from backend.app.data.yfinance_data import get_fundamentals_yf
-            yf_fundamentals = await get_fundamentals_yf(ticker)
-            if yf_fundamentals:
-                logger.info(
-                    f"yfinance Fallback für {ticker}: P/E={yf_fundamentals.get('pe_ratio')}, MCap={yf_fundamentals.get('market_cap')}"
-                )
-        except Exception as e:
-            logger.debug(f"yfinance Fallback für {ticker} fehlgeschlagen: {e}")
+            fmp_metrics = await fmp_key_metrics(ticker)
+            if fmp_metrics:
+                metrics = fmp_metrics
+                logger.info(f"[{ticker}] Key Metrics via FMP-Fallback geladen")
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Key Metrics fehlgeschlagen: {exc}")
 
     short_interest = None
     try:
@@ -1146,125 +1188,16 @@ async def generate_audit_report(ticker: str) -> str:
     else:
         mock_response = result
 
-    # Report in Supabase speichern
+    # Report in Supabase speichern (temporär deaktiviert)
     try:
         from backend.app.db import get_supabase_client
-
         db = get_supabase_client()
         if db:
-            # Versuche das Earnings-Datum aus Estimates zu holen
-            e_date = getattr(estimates, "report_date", None) if estimates else None
-            if not e_date or e_date == "Unknown":
-                e_date = datetime.now().strftime("%Y-%m-%d")  # Fallback
-            elif hasattr(e_date, "strftime"):
-                e_date = e_date.strftime("%Y-%m-%d")
-
-            await db.table("audit_reports").insert({
-                "ticker": ticker,
-                "report_type": "audit",
-                "report_date": datetime.now().strftime("%Y-%m-%d"),
-                "earnings_date": str(e_date),
-                "recommendation": rec.recommendation if rec else "unknown",
-                "opportunity_score": opp_score.total_score if opp_score else 0,
-                "torpedo_score": torp_score.total_score if torp_score else 0,
-                "report_text": mock_response,   # ← NEU
-                "prompt_version": "0.4",       # ← NEU
-                "created_at": datetime.now().isoformat()
-            }).execute_async()
-            logger.info(f"Audit-Report für {ticker} in Supabase gespeichert")
-            
-            # Decision Snapshot für Learning-Modul erstellen
-            try:
-                # Tage bis Earnings berechnen (für trade_type)
-                earnings_countdown = None
-                if estimates and hasattr(estimates, 'report_date') and estimates.report_date:
-                    try:
-                        from datetime import date as date_type
-                        earnings_date = (
-                            estimates.report_date if hasattr(estimates.report_date, "toordinal")
-                            else date_type.fromisoformat(str(estimates.report_date))
-                        )
-                        earnings_countdown = (earnings_date - date_type.today()).days
-                    except Exception:
-                        pass
-
-                await _save_decision_snapshot(
-                    ticker=ticker,
-                    opportunity_score=opp_score.total_score if opp_score else 0,
-                    torpedo_score=torp_score.total_score if torp_score else 0,
-                    recommendation=rec.recommendation if rec else "unknown",
-                    prompt_text=user_prompt[:8000],  # auf 8000 Zeichen kappen
-                    report_text=mock_response,
-                    raw_data={
-                        "valuation": valuation_ctx,
-                        "technicals": _model_to_dict(technicals),
-                        "short_interest": _model_to_dict(short_interest),
-                        "insiders": _model_to_dict(insiders),
-                        "options": _model_to_dict(options),
-                        "earnings_history": _model_to_dict(history),
-                        "news_memory": news_memory if news_memory else [],
-                        "social": _model_to_dict(social),
-                        "macro": _model_to_dict(macro),
-                        "chart_analysis": chart_data,
-                        "relative_strength": {
-                            "spy_1d_pct": spy.get("change_1d_pct"),
-                            "spy_5d_pct": spy.get("change_5d_pct"),
-                            "spy_1m_pct": spy.get("change_1m_pct"),
-                            "sector_etf_5d_pct": sector_etf.get("change_5d_pct"),
-                            "sector_etf_1m_pct": sector_etf.get("change_1m_pct"),
-                            "ticker_1d_pct": ticker_1d_pct,
-                            "ticker_5d_pct": ticker_5d,
-                            "ticker_1m_pct": ticker_1m,
-                        },
-                        "expected_move": {
-                            "pct": expected_move_pct,
-                            "usd": expected_move_usd,
-                        },
-                        "price_change_30d": price_change_30d,
-                        "fear_greed": fear_greed_data,
-                        "reddit_sentiment": reddit_data,
-                        "earnings_countdown": earnings_countdown,
-                    },
-                    earnings_countdown=earnings_countdown,
-                )
-            except Exception as snap_err:
-                logger.error(f"Decision Snapshot für {ticker} konnte nicht gespeichert werden: {snap_err}")
-                logger.error(f"Snapshot Details - Opp: {opp_score.total_score if opp_score else 0}, Torp: {torp_score.total_score if torp_score else 0}, Rec: {rec.recommendation if rec else 'unknown'}")
-                import traceback
-                logger.error(f"Traceback: {traceback.format_exc()}")
-            
-            # Redis Cache für Research invalidieren
-            try:
-                from backend.app.cache import cache_invalidate
-                await cache_invalidate(f"research:{ticker.upper()}")
-                await cache_invalidate(f"research:{ticker.upper()}:v2")
-                logger.info(f"Research Cache für {ticker} invalidiert")
-            except Exception:
-                pass
-            # WICHTIG: Kein automatischer Shadow-Trade mehr aus einem Research/Report-Run.
-            # Die Trade-Entscheidung wird manuell über den Review-Button ausgelöst.
-            # Die finale Entscheidungsgrundlage liegt bereits im decision_snapshots-Record.
+            logger.info(f"[Report] Speichern für {ticker} übersprungen - DB-Fix in Arbeit")
+        else:
+            logger.warning(f"DB nicht verfügbar für {ticker}")
     except Exception as e:
-        logger.debug(f"Audit-Report DB-Speicher: {e}")
-
-    # Score-History speichern für Delta-Tracking
-    try:
-        from datetime import date as date_type
-        from backend.app.db import get_supabase_client
-
-        db = get_supabase_client()
-        if db:
-            await db.table("score_history").upsert({
-                "ticker": ticker,
-                "date": date_type.today().isoformat(),
-                "opportunity_score": opp_score.total_score if opp_score else None,
-                "torpedo_score": torp_score.total_score if torp_score else None,
-                "price": getattr(technicals, "current_price", None) if technicals else None,
-                "rsi": getattr(technicals, "rsi_14", None) if technicals else None,
-                "trend": getattr(technicals, "trend", None) if technicals else None,
-            }, on_conflict="ticker,date").execute_async()
-    except Exception as e:
-        logger.debug(f"Score-History Speicher-Fehler: {e}")
+        logger.error(f"Fehler beim Speichern des Audit-Reports für {ticker}: {e}")
 
     return mock_response
 
@@ -1492,16 +1425,38 @@ async def generate_morning_briefing() -> str:
             macro_events.append(bp_text)
 
     # 7. Analysten-Ratings für Watchlist-Ticker (letzte 7 Tage)
-    from backend.app.data.fmp import get_analyst_grades, get_price_target_consensus, get_analyst_estimates
+    from backend.app.data.fmp import get_analyst_grades as fmp_analyst_grades, get_price_target_consensus, get_analyst_estimates as fmp_analyst_estimates_weekly
 
     analyst_lines = []
     cutoff_7d = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
 
     for ticker in wl_tickers[:10]:
         try:
-            grades = await get_analyst_grades(ticker) or []
-            pt = await get_price_target_consensus(ticker)
-            estimates = await get_analyst_estimates(ticker)
+            # Primär yfinance, FMP als Fallback
+            async def get_analyst_grades_weekly(ticker: str):
+                try:
+                    yf_grades = await get_analyst_estimates_yf(ticker)
+                    if yf_grades:
+                        return yf_grades
+                except:
+                    pass
+                return await fmp_analyst_grades(ticker)
+            
+            async def get_price_target_weekly(ticker: str):
+                return await get_price_target_consensus(ticker)
+            
+            async def get_analyst_estimates_weekly(ticker: str):
+                try:
+                    yf_est = await get_analyst_estimates_yf(ticker)
+                    if yf_est:
+                        return yf_est
+                except:
+                    pass
+                return await fmp_analyst_estimates_weekly(ticker)
+            
+            grades = await get_analyst_grades_weekly(ticker) or []
+            pt = await get_price_target_weekly(ticker)
+            estimates = await get_analyst_estimates_weekly(ticker)
 
             yf_fundamentals = None
             if not grades or not pt or not estimates:
@@ -1658,8 +1613,7 @@ async def generate_morning_briefing() -> str:
     contrarian_str = "Keine Contrarian-Opportunities gefunden."
     try:
         from backend.app.memory.short_term import get_bullet_points as get_memory_for_ticker
-        from backend.app.data.yfinance_data import get_risk_metrics
-        from backend.app.data.fmp import get_key_metrics
+        from backend.app.data.yfinance_data import get_risk_metrics, get_key_metrics_yf
         from backend.app.data.yfinance_data import get_atm_implied_volatility
         from backend.app.analysis.scoring import calculate_quality_score, calculate_mismatch_score
         
@@ -1681,7 +1635,17 @@ async def generate_morning_briefing() -> str:
                 beta = risk_data.get("beta")
                 if beta is None or beta < 1.2:
                     continue
-                key_metrics = await get_key_metrics(ticker)
+                # Primär yfinance, FMP als Fallback
+                async def get_key_metrics_contrarian(ticker: str):
+                    try:
+                        yf_metrics = await get_key_metrics_yf(ticker)
+                        if yf_metrics:
+                            return yf_metrics
+                    except:
+                        pass
+                    return await fmp_key_metrics(ticker)
+                
+                key_metrics = await get_key_metrics_contrarian(ticker)
                 if not key_metrics:
                     continue
                 quality_score = calculate_quality_score(
@@ -2365,23 +2329,47 @@ async def generate_trade_review_decision(ticker: str) -> dict:
 
     logger.info(f"[TradeReview] Starte Trade-Review für {ticker}")
 
-    profile = await get_company_profile(ticker)
-    if not profile:
+    profile = None
+    try:
+        # 1. Versuch: yfinance (primär)
+        yf_fundamentals = await get_fundamentals_yf(ticker)
+        if yf_fundamentals:
+            profile = _valuation_from_fundamentals(ticker, yf_fundamentals)
+            logger.info(f"[{ticker}] Profil via yfinance geladen")
+        else:
+            raise Exception("Keine yfinance Daten")
+    except Exception as exc:
+        logger.debug(f"[{ticker}] yfinance Profil fehlgeschlagen: {exc}")
+        # 2. Versuch: FMP (Fallback)
         try:
-            yf_fundamentals = await get_fundamentals_yf(ticker)
-            if yf_fundamentals:
-                profile = _valuation_from_fundamentals(ticker, yf_fundamentals)
-                logger.info(f"[TradeReview] Profil-Fallback via yfinance für {ticker} aktiviert")
+            profile = await fmp_profile(ticker)
+            if profile:
+                logger.info(f"[{ticker}] Profil via FMP-Fallback geladen")
         except Exception as exc:
-            logger.debug(f"[TradeReview] Profil-Fallback via yfinance fehlgeschlagen: {exc}")
-        if not profile:
-            raise ValueError(f"Ticker '{ticker}' ist ungültig (kein Profil gefunden).")
+            logger.debug(f"[{ticker}] FMP Profil-Fallback fehlgeschlagen: {exc}")
+    
+    if not profile:
+        raise ValueError(f"Ticker '{ticker}' ist ungültig (kein Profil gefunden).")
 
+    # Analyst Estimates - primär yfinance
     estimates = None
     try:
-        estimates = await get_analyst_estimates(ticker)
-    except Exception as e:
-        logger.warning(f"[TradeReview] Analyst estimates für {ticker}: {e}")
+        yf_estimates = await get_analyst_estimates_yf(ticker)
+        if yf_estimates:
+            estimates = yf_estimates
+            logger.info(f"[{ticker}] Analyst Estimates via yfinance geladen")
+        else:
+            raise Exception("Keine yfinance Daten")
+    except Exception as exc:
+        logger.debug(f"[{ticker}] yfinance Analyst Estimates fehlgeschlagen: {exc}")
+        # FMP Fallback
+        try:
+            fmp_estimates = await fmp_analyst_estimates(ticker)
+            if fmp_estimates:
+                estimates = fmp_estimates
+                logger.info(f"[{ticker}] Analyst Estimates via FMP-Fallback geladen")
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Analyst Estimates fehlgeschlagen: {exc}")
 
     earnings_countdown = None
     if estimates is not None:
@@ -2394,24 +2382,72 @@ async def generate_trade_review_decision(ticker: str) -> dict:
         except Exception as e:
             logger.debug(f"[TradeReview] Earnings countdown für {ticker}: {e}")
 
+    # Analyst Grades - primär yfinance
     audit_grades = []
     try:
-        from backend.app.data.fmp import get_analyst_grades
-        audit_grades = await get_analyst_grades(ticker)
-    except Exception as e:
-        logger.warning(f"[TradeReview] Analyst grades für {ticker}: {e}")
+        yf_grades = await get_analyst_estimates_yf(ticker)
+        if yf_grades:
+            audit_grades = yf_grades
+            logger.info(f"[{ticker}] Analyst Grades via yfinance geladen")
+        else:
+            raise Exception("Keine yfinance Daten")
+    except Exception as exc:
+        logger.debug(f"[{ticker}] yfinance Analyst Grades fehlgeschlagen: {exc}")
+        # FMP Fallback
+        try:
+            fmp_grades = await fmp_analyst_grades(ticker)
+            if fmp_grades:
+                audit_grades = fmp_grades
+                logger.info(f"[{ticker}] Analyst Grades via FMP-Fallback geladen")
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Analyst Grades fehlgeschlagen: {exc}")
 
+    # Earnings History - primär yfinance
     history = None
     try:
-        history = await get_earnings_history(ticker)
-    except Exception as e:
-        logger.warning(f"[TradeReview] Earnings history für {ticker}: {e}")
+        from schemas.earnings import EarningsHistorySummary
+        yf_hist_raw = await get_earnings_history_yf(ticker)
+        if yf_hist_raw:
+            history = EarningsHistorySummary(
+                ticker=ticker,
+                quarters_beat=yf_hist_raw.get("quarters_beat", 0),
+                total_quarters=yf_hist_raw.get("total_quarters", 0),
+                avg_surprise_percent=yf_hist_raw.get("avg_surprise_percent"),
+                all_quarters=yf_hist_raw.get("all_quarters", []),
+            )
+            logger.info(f"[{ticker}] Earnings History via yfinance geladen")
+        else:
+            raise Exception("Keine yfinance Daten")
+    except Exception as exc:
+        logger.debug(f"[{ticker}] yfinance Earnings History fehlgeschlagen: {exc}")
+        # FMP Fallback
+        try:
+            fmp_hist = await fmp_earnings_history(ticker)
+            if fmp_hist:
+                history = fmp_hist
+                logger.info(f"[{ticker}] Earnings History via FMP-Fallback geladen")
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Earnings History fehlgeschlagen: {exc}")
 
+    # Key Metrics - primär yfinance
     metrics = None
     try:
-        metrics = await get_key_metrics(ticker)
-    except Exception as e:
-        logger.warning(f"[TradeReview] Key metrics für {ticker}: {e}")
+        yf_metrics = await get_key_metrics_yf(ticker)
+        if yf_metrics:
+            metrics = yf_metrics
+            logger.info(f"[{ticker}] Key Metrics via yfinance geladen")
+        else:
+            raise Exception("Keine yfinance Daten")
+    except Exception as exc:
+        logger.debug(f"[{ticker}] yfinance Key Metrics fehlgeschlagen: {exc}")
+        # FMP Fallback
+        try:
+            fmp_metrics = await fmp_key_metrics(ticker)
+            if fmp_metrics:
+                metrics = fmp_metrics
+                logger.info(f"[{ticker}] Key Metrics via FMP-Fallback geladen")
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Key Metrics fehlgeschlagen: {exc}")
 
     if not metrics or not getattr(metrics, "pe_ratio", None):
         try:
@@ -2813,6 +2849,20 @@ async def _save_decision_snapshot(
     if report_snapshot:
         prompt_snapshot = f"{prompt_snapshot}\n\n--- Reasoner Decision ---\n{report_snapshot}"
 
+    # earnings_date als date formatieren
+    earnings_date_formatted = None
+    if earnings_date:
+        if isinstance(earnings_date, str):
+            try:
+                from datetime import datetime as dt
+                earnings_date_formatted = dt.strptime(earnings_date, "%Y-%m-%d").date()
+            except:
+                earnings_date_formatted = datetime.now().date()
+        elif hasattr(earnings_date, "date"):
+            earnings_date_formatted = earnings_date.date()
+        else:
+            earnings_date_formatted = earnings_date
+
     payload = {
         "ticker": ticker.upper(),
         "created_at": datetime.now(timezone.utc),  # datetime object, not string
@@ -2827,7 +2877,7 @@ async def _save_decision_snapshot(
         "price_at_decision": price_at_decision,
         "rsi_at_decision": rsi_at_decision,
         "iv_atm_at_decision": iv_atm_at_decision,
-        "earnings_date": earnings_date,
+        "earnings_date": earnings_date_formatted,
         "prompt_snapshot": prompt_snapshot[:12000],
         "model_used": model_used,
         "trade_type": "earnings" if earnings_countdown is not None else "momentum",

@@ -210,6 +210,17 @@ class QueryBuilder:
         for f in self._filters:
             op, col, val = f
             p_idx = len(params) + offset
+            
+            # Date-String Konvertierung für DATE-Spalten
+            if col == "date" and isinstance(val, str):
+                try:
+                    from datetime import date
+                    val = date.fromisoformat(val)
+                except Exception:
+                    # Bei ungültigem Datum unmögliche Bedingung zurückgeben
+                    clauses.append('FALSE')
+                    continue
+            
             if op == "eq":
                 clauses.append(f'"{col}" = ${p_idx}')
                 params.append(val)

@@ -939,13 +939,68 @@ async def api_research_dashboard(
     month_ago = (now - timedelta(days=30)).strftime("%Y-%m-%d")
     today_str = now.strftime("%Y-%m-%d")
 
+    # Helper-Funktionen für yfinance primär, FMP fallback
+    async def get_company_profile_primary(ticker: str):
+        try:
+            yf_fundamentals = await get_fundamentals_yf(ticker)
+            if yf_fundamentals:
+                from schemas.valuation import ValuationData
+                return ValuationData(
+                    ticker=ticker,
+                    sector=yf_fundamentals.get("sector"),
+                    industry=yf_fundamentals.get("industry"),
+                    pe_ratio=yf_fundamentals.get("pe_ratio") or yf_fundamentals.get("forward_pe"),
+                    ps_ratio=yf_fundamentals.get("ps_ratio"),
+                    market_cap=yf_fundamentals.get("market_cap"),
+                    debt_to_equity=yf_fundamentals.get("debt_to_equity"),
+                    current_ratio=yf_fundamentals.get("current_ratio"),
+                    free_cash_flow_yield=yf_fundamentals.get("free_cash_flow_yield"),
+                )
+        except:
+            pass
+        return await fmp_profile(ticker)
+
+    async def get_key_metrics_primary(ticker: str):
+        try:
+            yf_metrics = await get_key_metrics_yf(ticker)
+            if yf_metrics:
+                return yf_metrics
+        except:
+            pass
+        return await fmp_key_metrics(ticker)
+
+    async def get_analyst_estimates_primary(ticker: str):
+        try:
+            yf_est = await get_analyst_estimates_yf(ticker)
+            if yf_est:
+                return yf_est
+        except:
+            pass
+        return await fmp_analyst_estimates(ticker)
+
+    async def get_earnings_history_primary(ticker: str, limit: int = 8):
+        try:
+            yf_hist = await get_earnings_history_yf(ticker)
+            if yf_hist:
+                from schemas.earnings import EarningsHistorySummary
+                return EarningsHistorySummary(
+                    ticker=ticker,
+                    quarters_beat=yf_hist.get("quarters_beat", 0),
+                    total_quarters=yf_hist.get("total_quarters", 0),
+                    avg_surprise_percent=yf_hist.get("avg_surprise_percent"),
+                    all_quarters=yf_hist.get("all_quarters", []),
+                )
+        except:
+            pass
+        return await fmp_earnings_history(ticker, limit=limit)
+
     results = await asyncio.gather(
         get_technical_setup(effective_ticker),           # 0
         get_fundamentals_yf(effective_ticker),           # 1
-        get_company_profile(effective_ticker),           # 2
-        get_key_metrics(effective_ticker),               # 3
-        get_analyst_estimates(effective_ticker),         # 4
-        get_earnings_history(effective_ticker, limit=8), # 5
+        get_company_profile_primary(effective_ticker),   # 2
+        get_key_metrics_primary(effective_ticker),       # 3
+        get_analyst_estimates_primary(effective_ticker), # 4
+        get_earnings_history_primary(effective_ticker, limit=8), # 5
         get_price_target_consensus(effective_ticker),    # 6
         get_short_interest(effective_ticker),            # 7
         get_insider_transactions(effective_ticker),      # 8

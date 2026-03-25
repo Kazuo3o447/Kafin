@@ -1,5 +1,30 @@
 # Datenstrategie - yfinance Primär, FMP Fallback
 
+## 🚢 **Docker Container Ports**
+
+| Container | Service | Host Port | Container Port | Zweck |
+|-----------|---------|-----------|----------------|-------|
+| **kafin-frontend** | Next.js | **3000** | 3000 | Web Frontend |
+| **kafin-backend** | FastAPI | **8002** | 8000 | API Backend |
+| **kafin-postgres** | PostgreSQL | **5432** | 5432 | Datenbank |
+| **kafin-redis** | Redis | **6379** | 6379 | Cache |
+| **kafin-n8n** | n8n | **5678** | 5678 | Workflows |
+
+### **⚠️ WICHTIG: Diese Ports NICHT für neue Container verwenden!**
+- ❌ 3000 (Frontend)
+- ❌ 8002 (Backend)  
+- ❌ 5432 (PostgreSQL)
+- ❌ 6379 (Redis)
+- ❌ 5678 (n8n)
+
+### **🆗 Sichere Port-Bereiche für neue Container:**
+- ✅ **8080-8099** - Web-Services
+- ✅ **9000-9099** - APIs/Microservices  
+- ✅ **5000-5099** - Development-Tools
+- ✅ **4000-4099** - Monitoring/Admin
+
+---
+
 ## 🎯 **Zusammenfassung**
 
 Die Datenstrategie wurde erfolgreich auf **yfinance als primäre Quelle** umgestellt, mit **FMP als Fallback**. Dies löst das Problem mit der gesperrten FMP API (403 Forbidden) und verbessert die Systemstabilität.

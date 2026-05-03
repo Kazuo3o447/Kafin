@@ -1,0 +1,22 @@
+{
+  "date": "2026-03-24T00:00:00",
+  "fed_funds_rate": 5.25,
+  "fed_rate": 5.25,
+  "fed_rate_date": "2026-03-20",
+  "fed_expectation": "Hold",
+  "vix": 18.4,
+  "vix_date": "2026-03-24",
+  "credit_spread_bps": 410.0,
+  "credit_spread_date": "2026-03-24",
+  "yield_curve_10y_2y": 0.42,
+  "yield_curve_date": "2026-03-24",
+  "yield_curve": "positive",
+  "dxy": 104.2,
+  "dxy_date": "2026-03-24",
+  "regime": "Neutral",
+  "index_shorts_recommended": false,
+  "instrument_suggestions": null,
+  "geopolitical_notes": null,
+  "yield_curve_10y2y": 0.42,
+  "high_yield_spread": 410.0
+}

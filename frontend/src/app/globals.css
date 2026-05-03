@@ -1,0 +1,164 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+/* ─── Design Tokens ─────────────────────────────────────── */
+:root {
+  /* Hintergründe — drei Ebenen für visuelle Tiefe */
+  --bg-primary:   #0B0F1A;   /* Seiten-Hintergrund */
+  --bg-secondary: #111827;   /* Karten, Sidebar */
+  --bg-tertiary:  #1A2235;   /* Inputs, Tabellen-Header */
+  --bg-elevated:  #1F2C42;   /* Dropdowns, Tooltips, Modals */
+
+  /* Text — drei Ebenen für Hierarchie */
+  --text-primary:   #F1F5F9;  /* Hauptinhalt, Zahlen */
+  --text-secondary: #94A3B8;  /* Labels, Beschriftungen */
+  --text-muted:     #475569;  /* Platzhalter, deaktiviert */
+
+  /* Akzentfarben */
+  --accent-green:  #10B981;  /* Positiv, Buy */
+  --accent-red:    #F43F5E;  /* Negativ, Short, Alarm */
+  --accent-amber:  #F59E0B;  /* Warnung, Torpedo */
+  --accent-blue:   #3B82F6;  /* Primär-Aktion, aktive Navigation */
+  --accent-purple: #8B5CF6;  /* Opportunity-Score */
+
+  /* Rahmen & Schatten */
+  --border:      #1E2D40;
+  --border-focus: #3B82F6;
+  --shadow-sm:   0 1px 3px 0 rgb(0 0 0 / 0.4);
+  --shadow-md:   0 4px 16px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg:   0 12px 32px -4px rgb(0 0 0 / 0.6);
+}
+
+/* ─── Basis ─────────────────────────────────────────────── */
+@theme inline {
+  --color-background: var(--bg-primary);
+  --color-foreground: var(--text-primary);
+  --font-sans: var(--font-sans), system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Zahlen immer in Mono-Font */
+code, pre, .mono,
+[data-type="number"],
+.tabular-nums {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ─── Karten ─────────────────────────────────────────────── */
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover {
+  border-color: #2A3D55;
+  box-shadow: var(--shadow-md);
+}
+
+/* Karte mit subtiler blauer Oben-Linie — für Hero-Karten */
+.card-accent {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--accent-blue);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ─── Badges ─────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-radius: 6px;
+}
+
+.badge-success { background: rgba(16,185,129,0.15);  color: #10B981; }
+.badge-danger  { background: rgba(244,63,94,0.15);   color: #F43F5E; }
+.badge-warning { background: rgba(245,158,11,0.15);  color: #F59E0B; }
+.badge-info    { background: rgba(59,130,246,0.15);  color: #3B82F6; }
+.badge-purple  { background: rgba(139,92,246,0.15);  color: #8B5CF6; }
+.badge-neutral { background: var(--bg-tertiary);     color: var(--text-secondary); }
+
+/* ─── Tabellen ───────────────────────────────────────────── */
+table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s ease;
+}
+
+table tbody tr:hover {
+  background: var(--bg-tertiary);
+}
+
+table tbody tr:last-child {
+  border-bottom: none;
+}
+
+/* ─── Inputs ─────────────────────────────────────────────── */
+input, select, textarea {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: 8px;
+  transition: border-color 0.15s ease;
+  outline: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* ─── Buttons ────────────────────────────────────────────── */
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ─── Trennlinien ────────────────────────────────────────── */
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+/* ─── Selektierter Text ──────────────────────────────────── */
+::selection {
+  background: rgba(59,130,246,0.25);
+  color: var(--text-primary);
+}

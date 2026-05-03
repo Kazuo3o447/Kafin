@@ -1,0 +1,41 @@
+# Kafin — Scoring-Gewichtungen
+opportunity_score:
+  earnings_momentum: 0.15
+  whisper_delta: 0.15
+  valuation_regime: 0.15
+  guidance_trend: 0.15
+  technical_setup: 0.10
+  sector_regime: 0.10
+  short_squeeze_potential: 0.10
+  insider_activity: 0.05
+  options_flow: 0.05
+
+torpedo_score:
+  valuation_downside: 0.20
+  expectation_gap: 0.20
+  insider_selling: 0.15
+  guidance_deceleration: 0.15
+  leadership_instability: 0.10
+  technical_downtrend: 0.10
+  macro_headwind: 0.10
+
+thresholds:
+  strong_buy_min_opportunity: 7
+  strong_buy_max_torpedo: 3
+  strong_short_max_opportunity: 3
+  strong_short_min_torpedo: 7
+  watch_min_torpedo: 7
+
+macro_regime_gate:
+  # Schwellen für automatische Empfehlungs-Degradierung
+  # Risk Off: VIX > vix_risk_off → STRONG BUY wird WATCH
+  # Elevated: VIX vix_elevated bis vix_risk_off → STRONG BUY wird BUY MIT ABSICHERUNG
+  vix_risk_off:   30    # VIX > 30: Gate aktiv (Long → Watch)
+  vix_elevated:   25    # VIX 25–30: Vorsicht (Strong Buy → Buy mit Absicherung)
+  # Regime-String aus FRED (fred.py): "Risk Off", "Risk On", "Neutral"
+  gate_active_on: ["Risk Off"]
+
+shadow_portfolio:
+  atr_multiplier: 1.5   # Stop = Entry ± (ATR × Multiplier)
+  atr_min_pct:    2.0   # Mindest-Stop-Abstand in % (Fallback bei kleinem ATR)
+  fallback_pct:   8.0   # Fallback wenn kein ATR: ±8%

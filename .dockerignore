@@ -1,0 +1,45 @@
+# VCS / IDE
+.git
+.github
+.vscode
+.idea
+
+# Python build / cache
+__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+venv/
+env/
+.pytest_cache/
+htmlcov/
+
+# Logs / runtime artifacts
+logs/
+*.log
+*.sqlite
+*.db
+
+# Node / frontend build artifacts
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/.turbo/
+frontend/dist/
+frontend/build/
+frontend/coverage/
+frontend/*.tsbuildinfo
+
+# Backend test / scripts context not needed for docker build
+backend/tests/
+backend/scripts/
+backend/.pytest_cache/
+
+# Large / non-build context
+fixtures/
+docs/
+prompts/
+config/
+README.md
+CHANGELOG.md
+STATUS.md

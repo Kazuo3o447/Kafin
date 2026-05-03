@@ -1,0 +1,35 @@
+{
+    "dividend_raise": {
+        "bullet_points": [
+            "Das Unternehmen erhöht die Quartalsdividende auf $0.50 pro Aktie.",
+            "Die Dividendenrendite steigt dadurch auf 2.1%.",
+            "Zudem wurde das Aktienrückkaufprogramm um $1 Mrd. aufgestockt."
+        ],
+        "is_narrative_shift": false,
+        "shift_type": "None",
+        "shift_confidence": 0.95,
+        "shift_reasoning": "Normale Kapitalmaßnahme ohne strategische Neuausrichtung"
+    },
+    "partnership": {
+        "bullet_points": [
+            "Exklusive Cloud-Partnerschaft mit Microsoft Azure abgeschlossen.",
+            "Azure wird präferierter Cloud-Anbieter, während das Unternehmen KI-Tools in Azure integriert.",
+            "Die Partnerschaft öffnet den Zugang zu Fortune 500 Enterprise-Kunden im Wert von Milliarden US-Dollar."
+        ],
+        "is_narrative_shift": true,
+        "shift_type": "Strategic-Partnership",
+        "shift_confidence": 0.90,
+        "shift_reasoning": "Massiver Marktzugang durch Hyperscaler-Integration"
+    },
+    "downsizing": {
+        "bullet_points": [
+            "Der Bau der geplanten $2 Mrd. Gigafactory in Europa wird auf unbestimmte Zeit verschoben.",
+            "Zudem werden 15% der R&D-Belegschaft aus dem autonomen Fahren entlassen.",
+            "Das Management begründet dies mit geringerer Nachfrage und hohem Kapitalbedarf."
+        ],
+        "is_narrative_shift": true,
+        "shift_type": "Strategic-Downsizing",
+        "shift_confidence": 0.95,
+        "shift_reasoning": "Kürzung essenzieller Capex/R&D Budsgets deutet auf Krise"
+    }
+}

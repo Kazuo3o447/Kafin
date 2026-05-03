@@ -1,0 +1,173 @@
+version: '3.8'
+
+# Kafin v7.3.0 - Lernpfade + Earnings Auto-Trigger
+# Aktuelle Features: Performance-Lernpfade, automatischer Earnings-Trigger, TypeScript-Optimierung
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: kafin-postgres
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      POSTGRES_DB:       kafin
+      POSTGRES_USER:     kafin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kafin_local_dev}
+      PGDATA:            /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - kafin-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kafin -d kafin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  kafin-backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: kafin-backend
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      - "8002:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./backend/app:/app/backend/app
+      - ./schemas:/app/schemas:ro
+      - ./config:/app/config:ro
+      - ./prompts:/app/prompts:ro
+      - ./fixtures:/app/fixtures:ro
+      - ./logs:/app/logs
+      - finbert-cache:/app/model_cache
+      - ./backups:/app/backups
+    environment:
+      - PYTHONPATH=/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - kafin-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: kafin-redis
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - kafin-net
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: kafin-n8n
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - GENERIC_TIMEZONE=Europe/Berlin
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-changeme}
+      - N8N_API_KEY=${N8N_API_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1NzY0ZDQ1YS01NDgxLTRhODMtYTBiMS1mMTBkOTQzYTgwZDEiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiODU0NTNjNDktOWU4ZS00NzhkLWE1MGItMWZhNTJkMzdlZjMyIiwiaWF0IjoxNzc0MzY4OTEwfQ.QJ-3IXLLXuDnaMA7AT7jDKe0-_GlA3KLgQtFFGw22Lw}
+    volumes:
+      - n8n-data:/home/node/.n8n
+    networks:
+      - kafin-net
+
+  # Frontend läuft als Production-Build (next start).
+  # Für lokale Entwicklung: docker compose run --rm kafin-frontend npm run dev
+  kafin-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: kafin-frontend
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8002
+      - INTERNAL_API_URL=http://kafin-backend:8000  # <-- Korrekt für internen Proxy
+    depends_on:
+      - kafin-backend
+    networks:
+      - kafin-net
+
+  kafin-backup:
+    image: postgres:16-alpine
+    container_name: kafin-backup
+    restart: "no"        # Läuft nur einmal, kein Restart
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-kafin_local_dev}
+    volumes:
+      - ./backups:/backups
+    networks:
+      - kafin-net
+    # Wird manuell oder via n8n getriggert
+    # Manuell: docker-compose run kafin-backup
+    entrypoint: >
+      sh -c "
+        BACKUP_FILE=/backups/kafin_$(date +%Y%m%d_%H%M%S).sql.gz &&
+        pg_dump -h postgres -U kafin -d kafin | gzip > $$BACKUP_FILE &&
+        echo 'Backup erstellt: '$$BACKUP_FILE &&
+        ls -lh /backups/ &&
+        find /backups -name '*.sql.gz' -mtime +7 -delete &&
+        echo 'Alte Backups (>7 Tage) bereinigt.'
+      "
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "1"
+
+volumes:
+  redis-data:
+  n8n-data:
+  postgres-data:
+  finbert-cache:    # NEU (persistiert zwischen Rebuilds)
+
+
+networks:
+  kafin-net:
+    driver: bridge

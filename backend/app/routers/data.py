@@ -1,0 +1,3013 @@
+from fastapi import APIRouter, HTTPException, Query
+from typing import List, Optional, Any
+from datetime import datetime, timedelta, timezone
+import yfinance as yf
+import pandas as pd
+import asyncio
+from types import SimpleNamespace
+
+from backend.app.logger import get_logger
+from backend.app.cache import cache_get, cache_set, cache_invalidate
+from backend.app.db import get_supabase_client
+from backend.app.database import get_pool
+from backend.app.data.finnhub import (
+    get_company_news, get_short_interest, get_insider_transactions,
+    get_economic_calendar,
+)
+# Primär yfinance, FMP als Fallback
+from backend.app.data.yfinance_data import (
+    get_risk_metrics, get_atm_implied_volatility, get_historical_volatility,
+    get_technical_setup, get_fundamentals_yf, get_options_metrics, get_options_oi_analysis,
+    get_earnings_history_yf, get_short_interest_yf, get_vwap,
+    get_analyst_estimates_yf, get_key_metrics_yf
+)
+from backend.app.data.fmp import (
+    get_company_profile as fmp_profile,
+    get_analyst_estimates as fmp_analyst_estimates, 
+    get_earnings_history as fmp_earnings_history, 
+    get_key_metrics as fmp_key_metrics,
+    get_price_target_consensus, get_analyst_grades
+)
+from backend.app.data.fred import get_macro_snapshot
+from backend.app.data.fear_greed import get_fear_greed_score
+from backend.app.data.alpaca_data import (
+    get_bars as alpaca_get_bars,
+    get_snapshot as alpaca_get_snapshot,
+)
+from backend.app.data.ticker_resolver import resolve_ticker
+from backend.app.data.finra import get_finra_short_volume
+from backend.app.data.reddit_monitor import get_reddit_sentiment
+from backend.app.data.market_overview import get_market_overview, get_market_news_for_sentiment, get_market_breadth, get_intermarket_signals
+from backend.app.memory.long_term import get_insights
+from backend.app.memory.short_term import get_bullet_points, _calc_sentiment_from_bullets, get_bullet_points_batch
+from backend.app.memory.watchlist import get_watchlist
+from backend.app.utils.timezone import now_mez
+from backend.app.utils.constants import SECTOR_TO_ETF
+
+# NEU: ETF/Index Konstanten
+ETF_TICKERS = {
+    "SPY", "QQQ", "IWM", "DIA", "VTI", "VOO", "GLD", "SLV",
+    "USO", "TLT", "HYG", "LQD", "XLF", "XLE", "XLK", "XLI",
+    "XLV", "XLP", "XLU", "XLK", "XLY", "XLB", "XLRE", "XLC"
+}
+
+INDEX_TICKERS = {
+    "^SPX", "^NDX", "^DJI", "^RUT", "^VIX", "VIX", "DXY",
+    "DX", "^TNX", "TYX", "^IRX", "^FVX", "^DJI"
+}
+
+from schemas.earnings import EarningsExpectation, EarningsHistorySummary
+from schemas.sentiment import NewsBulletPoint, ShortInterestData, InsiderActivity
+from schemas.valuation import ValuationData
+from schemas.macro import MacroSnapshot
+from schemas.options import OptionsData
+
+logger = get_logger(__name__)
+router = APIRouter(prefix="/api/data", tags=["data"])
+
+@router.get("/earnings-calendar", response_model=List[EarningsExpectation])
+async def api_earnings_calendar(from_date: str, to_date: str):
+    logger.info(f"API Call: earnings-calendar {from_date} to {to_date}")
+    return await get_earnings_calendar(from_date, to_date)
+
+@router.get("/company/{ticker}/news", response_model=List[NewsBulletPoint])
+async def api_company_news(ticker: str, from_date: str = "2026-01-01", to_date: str = "2026-12-31"):
+    logger.info(f"API Call: company-news for {ticker}")
+    return await get_company_news(ticker, from_date, to_date)
+
+@router.get("/company/{ticker}/short-interest", response_model=ShortInterestData)
+async def api_short_interest(ticker: str):
+    logger.info(f"API Call: short-interest for {ticker}")
+    return await get_short_interest(ticker)
+
+@router.get("/company/{ticker}/insiders", response_model=InsiderActivity)
+async def api_insiders(ticker: str):
+    logger.info(f"API Call: insiders for {ticker}")
+    return await get_insider_transactions(ticker)
+
+@router.get("/company/{ticker}/profile", response_model=ValuationData)
+async def api_profile(ticker: str):
+    logger.info(f"API Call: profile for {ticker}")
+    
+    async def get_company_profile(ticker: str):
+        """Holt Firmenprofil - primär yfinance, FMP als Fallback."""
+        # 1. Versuch: yfinance (primär)
+        try:
+            yf_fundamentals = await get_fundamentals_yf(ticker)
+            if yf_fundamentals:
+                from schemas.valuation import ValuationData
+                profile = ValuationData(
+                    ticker=ticker,
+                    sector=yf_fundamentals.get("sector"),
+                    industry=yf_fundamentals.get("industry"),
+                    pe_ratio=yf_fundamentals.get("pe_ratio") or yf_fundamentals.get("forward_pe"),
+                    ps_ratio=yf_fundamentals.get("ps_ratio"),
+                    market_cap=yf_fundamentals.get("market_cap"),
+                    debt_to_equity=yf_fundamentals.get("debt_to_equity"),
+                    current_ratio=yf_fundamentals.get("current_ratio"),
+                    free_cash_flow_yield=yf_fundamentals.get("free_cash_flow_yield"),
+                )
+                logger.info(f"[{ticker}] Profil via yfinance geladen")
+                return profile
+        except Exception as exc:
+            logger.debug(f"[{ticker}] yfinance Profil fehlgeschlagen: {exc}")
+        
+        # 2. Versuch: FMP (Fallback)
+        try:
+            profile = await fmp_profile(ticker)
+            if profile:
+                logger.info(f"[{ticker}] Profil via FMP-Fallback geladen")
+                return profile
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Profil-Fallback fehlgeschlagen: {exc}")
+        
+        return None
+    
+    return await get_company_profile(ticker)
+
+@router.get("/company/{ticker}/estimates", response_model=EarningsExpectation)
+async def api_estimates(ticker: str):
+    logger.info(f"API Call: estimates for {ticker}")
+    
+    async def get_analyst_estimates(ticker: str):
+        """Holt Analyst Estimates - primär yfinance, FMP als Fallback."""
+        # 1. Versuch: yfinance (primär)
+        try:
+            yf_estimates = await get_analyst_estimates_yf(ticker)
+            if yf_estimates:
+                logger.info(f"[{ticker}] Analyst Estimates via yfinance geladen")
+                return yf_estimates
+        except Exception as exc:
+            logger.debug(f"[{ticker}] yfinance Analyst Estimates fehlgeschlagen: {exc}")
+        
+        # 2. Versuch: FMP (Fallback)
+        try:
+            fmp_estimates = await fmp_analyst_estimates(ticker)
+            if fmp_estimates:
+                logger.info(f"[{ticker}] Analyst Estimates via FMP-Fallback geladen")
+                return fmp_estimates
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Analyst Estimates fehlgeschlagen: {exc}")
+        
+        return None
+    
+    return await get_analyst_estimates(ticker)
+
+@router.get("/company/{ticker}/earnings-history", response_model=EarningsHistorySummary)
+async def api_earnings_history(ticker: str):
+    logger.info(f"API Call: earnings-history for {ticker}")
+    
+    async def get_earnings_history(ticker: str):
+        """Holt Earnings History - primär yfinance, FMP als Fallback."""
+        # 1. Versuch: yfinance (primär)
+        try:
+            yf_hist_raw = await get_earnings_history_yf(ticker)
+            if yf_hist_raw:
+                history = EarningsHistorySummary(
+                    ticker=ticker,
+                    quarters_beat=yf_hist_raw.get("quarters_beat", 0),
+                    total_quarters=yf_hist_raw.get("total_quarters", 0),
+                    avg_surprise_percent=yf_hist_raw.get("avg_surprise_percent"),
+                    all_quarters=yf_hist_raw.get("all_quarters", []),
+                )
+                logger.info(f"[{ticker}] Earnings History via yfinance geladen")
+                return history
+        except Exception as exc:
+            logger.debug(f"[{ticker}] yfinance Earnings History fehlgeschlagen: {exc}")
+        
+        # 2. Versuch: FMP (Fallback)
+        try:
+            fmp_hist = await fmp_earnings_history(ticker)
+            if fmp_hist:
+                logger.info(f"[{ticker}] Earnings History via FMP-Fallback geladen")
+                return fmp_hist
+        except Exception as exc:
+            logger.debug(f"[{ticker}] FMP Earnings History fehlgeschlagen: {exc}")
+        
+        return None
+    
+    return await get_earnings_history(ticker)
+
+@router.get("/macro", response_model=MacroSnapshot)
+async def api_macro():
+    logger.info(f"API Call: macro snapshot")
+    return await get_macro_snapshot()
+
+
+@router.get("/market-overview")
+async def api_market_overview():
+    logger.info("API Call: market-overview")
+    return await get_market_overview()
+
+
+@router.get("/market-breadth")
+async def api_market_breadth():
+    logger.info("API Call: market-breadth")
+    return await get_market_breadth()
+
+
+@router.get("/intermarket")
+async def api_intermarket():
+    logger.info("API Call: intermarket")
+    return await get_intermarket_signals()
+
+
+@router.get("/market-news-sentiment")
+async def api_market_news_sentiment():
+    logger.info("API Call: market-news-sentiment")
+    return await get_market_news_for_sentiment()
+
+
+@router.get("/economic-calendar")
+async def api_economic_calendar(days_back: int = 7, days_forward: int = 7):
+    logger.info(f"API Call: economic-calendar {days_back=} {days_forward=}")
+    events = await get_economic_calendar(days_back=days_back, days_forward=days_forward)
+    return {"events": events}
+
+
+@router.get("/fear-greed")
+async def api_fear_greed():
+    logger.info("API Call: fear-greed")
+    return await get_fear_greed_score()
+
+@router.get("/long-term-memory/{ticker}")
+async def api_long_term_memory(ticker: str):
+    """Gibt das Langzeit-Gedächtnis für einen Ticker zurück."""
+    insights = await get_insights(ticker)
+    return {"ticker": ticker, "count": len(insights), "insights": insights}
+
+@router.get("/ticker-track-record/{ticker}")
+async def api_ticker_track_record(ticker: str):
+    """Aggregiert historische Trefferquote eines Tickers inkl. Audit/PER-Daten."""
+    normalized_ticker = ticker.upper()
+    cache_key = f"track_record_{normalized_ticker}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    base_response = {"ticker": normalized_ticker, "summary": None, "history": []}
+
+    db = get_supabase_client()
+    if db is None:
+        return base_response
+
+    def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
+        if not value:
+            return None
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return dt.replace(tzinfo=None)
+        except Exception:
+            return None
+
+    def _to_float(value: Optional[float]) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _derive_quarter(report_dt: Optional[datetime]) -> str:
+        if not report_dt:
+            return "—"
+        quarter = ((report_dt.month - 1) // 3) + 1
+        return f"Q{quarter}_{report_dt.year}"
+
+    try:
+        reviews_res = await (
+            db.table("earnings_reviews")
+            .select(
+                "id,ticker,quarter,pre_earnings_score_opportunity,pre_earnings_score_torpedo,"
+                "pre_earnings_recommendation,pre_earnings_report_date,actual_eps,actual_eps_consensus,"
+                "actual_surprise_percent,actual_revenue,actual_revenue_consensus,stock_price_pre,"
+                "stock_reaction_1d_percent,stock_reaction_5d_percent,prediction_correct,score_accuracy,"
+                "review_text,lessons_learned,created_at"
+            )
+            .eq("ticker", normalized_ticker)
+            .order("created_at", desc=True)
+            .limit(8)
+            .execute_async()
+        )
+        reviews = reviews_res.data or []
+    except Exception as exc:
+        logger.error(f"Track Record: earnings_reviews Fehler für {normalized_ticker}: {exc}")
+        return base_response
+
+    try:
+        audits_res = await (
+            db.table("audit_reports")
+            .select("id,ticker,report_date,earnings_date,opportunity_score,torpedo_score,recommendation,created_at")
+            .eq("ticker", normalized_ticker)
+            .order("report_date", desc=True)
+            .limit(8)
+            .execute_async()
+        )
+        audit_rows = audits_res.data or []
+    except Exception as exc:
+        logger.error(f"Track Record: audit_reports Fehler für {normalized_ticker}: {exc}")
+        audit_rows = []
+
+    audits = [dict(row, _matched=False) for row in audit_rows]
+    history: List[dict] = []
+
+    for review in reviews:
+        review_report_dt = _parse_datetime(review.get("pre_earnings_report_date"))
+        matched_audit = None
+
+        for audit in audits:
+            if audit["_matched"]:
+                continue
+            audit_dt = _parse_datetime(audit.get("report_date"))
+            if audit_dt and review_report_dt and abs((audit_dt - review_report_dt).days) < 3:
+                matched_audit = audit
+                audit["_matched"] = True
+                break
+
+        opportunity_score = (
+            _to_float(matched_audit.get("opportunity_score"))
+            if matched_audit and matched_audit.get("opportunity_score") is not None
+            else _to_float(review.get("pre_earnings_score_opportunity"))
+        )
+        torpedo_score = (
+            _to_float(matched_audit.get("torpedo_score"))
+            if matched_audit and matched_audit.get("torpedo_score") is not None
+            else _to_float(review.get("pre_earnings_score_torpedo"))
+        )
+        recommendation = (
+            matched_audit.get("recommendation")
+            if matched_audit and matched_audit.get("recommendation")
+            else review.get("pre_earnings_recommendation")
+        )
+
+        history.append(
+            {
+                "quarter": review.get("quarter") or _derive_quarter(review_report_dt),
+                "status": "reviewed",
+                "report_date": review.get("pre_earnings_report_date") or (matched_audit.get("report_date") if matched_audit else None),
+                "earnings_date": matched_audit.get("earnings_date") if matched_audit else None,
+                "opportunity_score": opportunity_score,
+                "torpedo_score": torpedo_score,
+                "recommendation": recommendation,
+                "actual_eps": _to_float(review.get("actual_eps")),
+                "actual_eps_consensus": _to_float(review.get("actual_eps_consensus")),
+                "actual_surprise_percent": _to_float(review.get("actual_surprise_percent")),
+                "actual_revenue": _to_float(review.get("actual_revenue")),
+                "actual_revenue_consensus": _to_float(review.get("actual_revenue_consensus")),
+                "stock_price_pre": _to_float(review.get("stock_price_pre")),
+                "stock_reaction_1d_percent": _to_float(review.get("stock_reaction_1d_percent")),
+                "stock_reaction_5d_percent": _to_float(review.get("stock_reaction_5d_percent")),
+                "prediction_correct": review.get("prediction_correct"),
+                "score_accuracy": review.get("score_accuracy"),
+                "review_text": review.get("review_text"),
+                "lessons_learned": review.get("lessons_learned"),
+            }
+        )
+
+    for audit in audits:
+        if audit["_matched"]:
+            continue
+        audit_dt = _parse_datetime(audit.get("report_date"))
+        history.append(
+            {
+                "quarter": _derive_quarter(audit_dt),
+                "status": "pending",
+                "report_date": audit.get("report_date"),
+                "earnings_date": audit.get("earnings_date"),
+                "opportunity_score": _to_float(audit.get("opportunity_score")),
+                "torpedo_score": _to_float(audit.get("torpedo_score")),
+                "recommendation": audit.get("recommendation"),
+                "actual_eps": None,
+                "actual_eps_consensus": None,
+                "actual_surprise_percent": None,
+                "actual_revenue": None,
+                "actual_revenue_consensus": None,
+                "stock_price_pre": None,
+                "stock_reaction_1d_percent": None,
+                "stock_reaction_5d_percent": None,
+                "prediction_correct": None,
+                "score_accuracy": None,
+                "review_text": None,
+                "lessons_learned": None,
+            }
+        )
+
+    def _sort_key(entry: dict) -> datetime:
+        return _parse_datetime(entry.get("report_date")) or _parse_datetime(entry.get("earnings_date")) or datetime.min
+
+    history.sort(key=_sort_key, reverse=True)
+
+    reviewed_entries = [entry for entry in history if entry["status"] == "reviewed"]
+    prediction_entries = [entry for entry in reviewed_entries if entry["prediction_correct"] is not None]
+
+    total_predictions = len(prediction_entries)
+    correct_predictions = len([entry for entry in prediction_entries if entry["prediction_correct"] is True])
+    wrong_predictions = len([entry for entry in prediction_entries if entry["prediction_correct"] is False])
+    win_rate_pct = round((correct_predictions / total_predictions) * 100, 1) if total_predictions else 0.0
+
+    streak = 0
+    for entry in reviewed_entries:
+        result = entry["prediction_correct"]
+        if result is None:
+            continue
+        if streak == 0:
+            streak = 1 if result else -1
+        elif result and streak > 0:
+            streak += 1
+        elif (not result) and streak < 0:
+            streak -= 1
+        else:
+            break
+
+    torpedo_warnings_total = 0
+    torpedo_warnings_correct = 0
+    for review in reviews:
+        torp_score = _to_float(review.get("pre_earnings_score_torpedo"))
+        reaction = _to_float(review.get("stock_reaction_1d_percent"))
+        if torp_score is None or reaction is None:
+            continue
+        if torp_score >= 6.0:
+            torpedo_warnings_total += 1
+            if reaction < 0:
+                torpedo_warnings_correct += 1
+
+    if torpedo_warnings_total > 0:
+        ratio = round((torpedo_warnings_correct / torpedo_warnings_total) * 100)
+        torpedo_msg = f"{torpedo_warnings_correct} von {torpedo_warnings_total} Torpedo-Warnungen korrekt ({ratio}%)"
+    else:
+        torpedo_msg = "Noch keine Torpedo-Warnungen für diesen Ticker"
+
+    summary = {
+        "total_predictions": total_predictions,
+        "correct": correct_predictions,
+        "wrong": wrong_predictions,
+        "win_rate_pct": win_rate_pct,
+        "current_streak": streak,
+        "torpedo_warnings_total": torpedo_warnings_total,
+        "torpedo_warnings_correct": torpedo_warnings_correct,
+        "torpedo_calibration_msg": torpedo_msg,
+    }
+
+    response = {"ticker": normalized_ticker, "summary": summary, "history": history}
+    await cache_set(cache_key, response, ttl_seconds=300)
+    return response
+
+@router.get("/performance")
+async def api_performance():
+    """Aggregierte Trefferquote aus Supabase."""
+    try:
+        db = get_supabase_client()
+        if db:
+            result = await db.table("performance_tracking").select("*").order("period", desc=True).execute_async()
+            return {"status": "success", "performance": result.data}
+        return {"status": "error", "message": "Supabase nicht verbunden"}
+    except Exception as e:
+        logger.error(f"Performance-Endpoint Fehler: {e}")
+        return {"status": "error", "message": str(e)}
+
+@router.get("/options/{ticker}", response_model=OptionsData)
+async def api_options_data(ticker: str):
+    """Holt Options-Daten inkl. IV ATM, Put/Call Ratio, historischer Volatilität."""
+    logger.info(f"API Call: options-data for {ticker}")
+    options_data = await get_atm_implied_volatility(ticker)
+    if options_data is None:
+        return OptionsData(ticker=ticker)
+    return options_data
+
+@router.get("/risk-metrics/{ticker}")
+async def api_risk_metrics(ticker: str):
+    """Holt Risk-Metriken: Beta, historische Volatilität."""
+    logger.info(f"API Call: risk-metrics for {ticker}")
+    
+    # Beta
+    risk_data = await get_risk_metrics(ticker)
+    beta = risk_data.get("beta")
+    
+    # Historische Volatilität (20 und 60 Tage)
+    hist_vol_20d = await get_historical_volatility(ticker, days=20)
+    hist_vol_60d = await get_historical_volatility(ticker, days=60)
+    
+    return {
+        "ticker": ticker,
+        "beta": beta,
+        "historical_volatility_20d": hist_vol_20d,
+        "historical_volatility_60d": hist_vol_60d
+    }
+
+@router.get("/score-delta/{ticker}")
+async def api_score_delta(ticker: str):
+    """Gibt aktuelle Scores und deren Veränderung vs. gestern/letzte Woche zurück."""
+    logger.info(f"API Call: score-delta for {ticker}")
+    db = get_supabase_client()
+    if not db:
+        return {"error": "Supabase nicht verfügbar"}
+
+    try:
+        result = await (
+            db.table("score_history")
+            .select("*")
+            .eq("ticker", ticker)
+            .order("date", desc=True)
+            .limit(7)
+            .execute_async()
+        )
+        history = result.data if result and result.data else []
+    except Exception as e:
+        logger.error(f"Score-Delta Fehler für {ticker}: {e}")
+        return {"error": str(e)}
+
+    if not history:
+        return {"ticker": ticker, "current": None, "delta_1d": None, "delta_7d": None, "history": []}
+
+    current = history[0]
+    yesterday = history[1] if len(history) > 1 else None
+    last_week = history[-1] if len(history) >= 5 else None
+
+    def calc_delta(current_val, prev_val):
+        if current_val is not None and prev_val is not None:
+            return round(current_val - prev_val, 2)
+        return None
+
+    def calc_price_pct(curr_price, prev_price):
+        if curr_price and prev_price:
+            try:
+                return round(((curr_price - prev_price) / prev_price) * 100, 2)
+            except ZeroDivisionError:
+                return None
+        return None
+
+    delta_1d = None
+    if yesterday:
+        delta_1d = {
+            "opportunity_score": calc_delta(current.get("opportunity_score"), yesterday.get("opportunity_score")),
+            "torpedo_score": calc_delta(current.get("torpedo_score"), yesterday.get("torpedo_score")),
+            "price_pct": calc_price_pct(current.get("price"), yesterday.get("price")),
+        }
+
+    delta_7d = None
+    if last_week:
+        delta_7d = {
+            "opportunity_score": calc_delta(current.get("opportunity_score"), last_week.get("opportunity_score")),
+            "torpedo_score": calc_delta(current.get("torpedo_score"), last_week.get("torpedo_score")),
+        }
+
+    return {
+        "ticker": ticker,
+        "current": {
+            "opportunity_score": current.get("opportunity_score"),
+            "torpedo_score": current.get("torpedo_score"),
+            "price": current.get("price"),
+            "rsi": current.get("rsi"),
+            "trend": current.get("trend"),
+            "date": current.get("date"),
+        },
+        "delta_1d": delta_1d,
+        "delta_7d": delta_7d,
+        "history": history,
+    }
+
+@router.get("/sparkline/{ticker}")
+async def api_sparkline(ticker: str, days: int = 7):
+    """Gibt den 7-Tage-Kursverlauf für Sparkline-Charts zurück."""
+    logger.info(f"API Call: sparkline for {ticker} ({days}d)")
+    cache_key = f"sparkline:{ticker.upper()}:{days}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    # ── Alpaca Bars (primär) ──────────────────────────────────────
+    try:
+        bars = await alpaca_get_bars(ticker, days=days, timeframe="1Day")
+        if bars:
+            result = {
+                "ticker": ticker.upper(),
+                "data": [{"date": b["date"], "price": b["close"]} for b in bars],
+                "source": "alpaca",
+            }
+            await cache_set(cache_key, result, ttl_seconds=300)
+            return result
+    except Exception as e:
+        logger.debug(f"Alpaca Sparkline {ticker}: {e} — Fallback auf yfinance")
+    # ── Ende Alpaca Bars ──────────────────────────────────────────
+
+    # Bestehender yfinance-Block als Fallback (unverändert):
+    try:
+        def _get_stock():
+            return yf.Ticker(ticker)
+
+        stock = await asyncio.to_thread(_get_stock)
+
+        def _get_hist():
+            return stock.history(period=f"{max(days, 2)}d")
+
+        hist = await asyncio.to_thread(_get_hist)
+        if hist.empty:
+            return {"ticker": ticker, "data": []}
+        data = []
+        for idx, price in zip(hist.index, hist["Close"]):
+            try:
+                date_value = idx.date() if hasattr(idx, "date") else idx
+            except Exception:
+                date_value = str(idx)
+            data.append({
+                "date": str(date_value),
+                "price": round(float(price), 2)
+            })
+        result = {"ticker": ticker, "data": data[-days:], "source": "yfinance"}
+        await cache_set(cache_key, result, ttl_seconds=300)
+        return result
+    except Exception as e:
+        logger.debug(f"Sparkline Fehler für {ticker}: {e}")
+        return {"ticker": ticker, "data": []}
+
+@router.get("/quick-snapshot/{ticker}")
+async def api_quick_snapshot(ticker: str):
+    ticker = ticker.upper().strip()
+    cache_key = f"quick_snapshot_{ticker}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    # ── Alpaca Quick-Snapshot (primär) ───────────────────────────
+    snap = await alpaca_get_snapshot(ticker)
+    if snap and snap.get("price"):
+        return {
+            "ticker":     ticker.upper(),
+            "price":      snap["price"],
+            "change_pct": snap.get("change_pct"),
+            "bid":        snap.get("bid"),
+            "ask":        snap.get("ask"),
+            "volume":     snap.get("volume"),
+            "source":     "alpaca",
+        }
+    # ── Fallback: yfinance ────────────────────────────────────────
+
+    try:
+        results = await asyncio.gather(
+            get_technical_setup(ticker),
+            get_analyst_estimates(ticker),
+            get_earnings_history(ticker, limit=4),
+            get_short_interest(ticker),
+            get_watchlist(),
+            return_exceptions=True,
+        )
+
+        tech = results[0] if not isinstance(results[0], Exception) else None
+        estimates = results[1] if not isinstance(results[1], Exception) else None
+        history = results[2] if not isinstance(results[2], Exception) else None
+        short_int = results[3] if not isinstance(results[3], Exception) else None
+        watchlist = results[4] if not isinstance(results[4], Exception) else []
+
+        is_on_watchlist = any(
+            w.get("ticker", "").upper() == ticker
+            for w in (watchlist if isinstance(watchlist, list) else [])
+        )
+
+        last_surprise = None
+        last_beat = None
+        avg_surprise = None
+        beats_of_8 = None
+        if history and not isinstance(history, Exception):
+            avg_surprise = getattr(history, "avg_surprise_percent", None)
+            beats_of_8 = getattr(history, "quarters_beat", None)
+            last_q = getattr(history, "last_quarter", None)
+            if last_q:
+                last_surprise = getattr(last_q, "eps_surprise_percent", None)
+                if last_surprise is not None:
+                    last_beat = last_surprise > 0
+
+        iv_rank = None
+        try:
+            def _get_stock():
+                return yf.Ticker(ticker)
+
+            stock = await asyncio.to_thread(_get_stock)
+            opts = stock.options
+            if opts:
+                nearest_exp = opts[0]
+                chain = stock.option_chain(nearest_exp)
+                calls = chain.calls
+                if not calls.empty and "impliedVolatility" in calls.columns:
+                    atm_iv = float(calls["impliedVolatility"].median()) * 100
+                    iv_rank = round(atm_iv, 1)
+        except Exception:
+            pass
+
+        expected_move_pct = None
+        expected_move_usd = None
+        try:
+            import math
+            from datetime import date as _date
+            iv = iv_rank / 100 if iv_rank else None
+            if estimates and iv and iv > 0:
+                report_date = getattr(estimates, "report_date", None)
+                days_to = 1
+                if report_date:
+                    try:
+                        d = _date.fromisoformat(str(report_date))
+                        days_to = max(1, (d - _date.today()).days)
+                    except Exception:
+                        pass
+                price_val = getattr(tech, "current_price", None)
+                if price_val and price_val > 0:
+                    expected_move_pct = round(
+                        iv * math.sqrt(days_to / 365) * 100, 1
+                    )
+                    expected_move_usd = round(
+                        price_val * iv * math.sqrt(days_to / 365), 2
+                    )
+        except Exception:
+            pass
+
+        price_change_30d = None
+        try:
+            def _fetch_30d():
+                hist = yf.Ticker(ticker).history(period="35d")
+                if len(hist) >= 22:
+                    c = float(hist["Close"].iloc[-1])
+                    o = float(hist["Close"].iloc[-22])
+                    return round(((c - o) / o) * 100, 1)
+                return None
+            price_change_30d = await asyncio.to_thread(_fetch_30d)
+        except Exception:
+            pass
+
+        latest_audit = None
+        try:
+            db = get_supabase_client()
+            if db:
+                audit_res = (
+                    await db.table("audit_reports")
+                    .select("report_date, recommendation, opportunity_score, torpedo_score")
+                    .eq("ticker", ticker)
+                    .order("report_date", desc=True)
+                    .limit(1)
+                    .execute_async()
+                )
+                if audit_res and audit_res.data:
+                    latest_audit = audit_res.data[0]
+        except Exception as e:
+            logger.debug(f"Fehler beim Laden des letzten Audits für {ticker}: {e}")
+
+        snapshot = {
+            "ticker": ticker,
+            "is_on_watchlist": is_on_watchlist,
+            "price": round(tech.current_price, 2) if tech and tech.current_price else None,
+            "change_pct": None,
+            "rsi": round(tech.rsi_14, 1) if tech and tech.rsi_14 else None,
+            "trend": tech.trend if tech else None,
+            "sma_50": round(tech.sma_50, 2) if tech and tech.sma_50 else None,
+            "sma_200": round(tech.sma_200, 2) if tech and tech.sma_200 else None,
+            "high_52w": round(tech.high_52w, 2) if tech and getattr(tech, "high_52w", None) else None,
+            "low_52w": round(tech.low_52w, 2) if tech and getattr(tech, "low_52w", None) else None,
+            "next_earnings_date": str(estimates.report_date) if estimates and estimates.report_date else None,
+            "report_timing": getattr(estimates, "report_timing", None) if estimates else None,
+            "eps_consensus": estimates.eps_consensus if estimates else None,
+            "revenue_consensus": estimates.revenue_consensus if estimates else None,
+            "last_eps_surprise_pct": round(last_surprise, 1) if last_surprise is not None else None,
+            "last_beat": last_beat,
+            "avg_surprise_pct": round(avg_surprise, 1) if avg_surprise is not None else None,
+            "beats_of_8": beats_of_8,
+            "short_interest_pct": getattr(short_int, "short_interest_percent", None) if short_int else None,
+            "days_to_cover": getattr(short_int, "days_to_cover", None) if short_int else None,
+            "iv_approx": iv_rank,
+            "latest_audit": latest_audit,
+            "expected_move_pct": expected_move_pct,
+            "expected_move_usd": expected_move_usd,
+            "price_change_30d":  price_change_30d,
+            "current_price":     getattr(tech, "current_price", None),
+        }
+
+        if snapshot["next_earnings_date"]:
+            try:
+                from datetime import date
+                earnings_dt = date.fromisoformat(snapshot["next_earnings_date"])
+                days_until = (earnings_dt - date.today()).days
+                snapshot["earnings_countdown_days"] = days_until
+                snapshot["earnings_today"] = days_until == 0
+                snapshot["earnings_this_week"] = 0 <= days_until <= 7
+            except Exception:
+                snapshot["earnings_countdown_days"] = None
+                snapshot["earnings_today"] = False
+                snapshot["earnings_this_week"] = False
+
+        await cache_set(cache_key, snapshot, ttl_seconds=300)
+        return snapshot
+    except Exception as e:
+        return {"ticker": ticker, "error": str(e), "price": None}
+
+@router.get("/volume-profile/{ticker}")
+async def api_volume_profile(ticker: str):
+    """Holt 20-Tage Volumen-Profil für Visualisierung."""
+    ticker = ticker.upper().strip()
+    days = 20
+    try:
+        def _fetch_volume_data():
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period=f"{days}d")
+            if hist.empty or len(hist) < 2:
+                return []
+            hist["change_pct"] = hist["Close"].pct_change() * 100
+            result = []
+            for idx, row in hist.iterrows():
+                try:
+                    date_value = idx.date() if hasattr(idx, "date") else idx
+                except Exception:
+                    date_value = str(idx)
+                result.append({
+                    "date": str(date_value),
+                    "volume": int(row["Volume"]),
+                    "close": round(float(row["Close"]), 2),
+                    "change_pct": round(float(row["change_pct"]), 2) if not pd.isna(row["change_pct"]) else 0,
+                    "color": "green" if row["change_pct"] > 0 else "red" if row["change_pct"] < 0 else "gray"
+                })
+            return result[-20:]
+        data = await asyncio.to_thread(_fetch_volume_data)
+        avg_volume = sum(d["volume"] for d in data) / len(data) if data else 0
+        return {"ticker": ticker, "data": data, "avg_volume": int(avg_volume)}
+    except Exception as e:
+        logger.error(f"Volume Profile Fehler für {ticker}: {e}")
+        return {"ticker": ticker, "data": [], "avg_volume": 0}
+
+@router.get("/peer-comparison/{ticker}")
+async def api_peer_comparison(ticker: str):
+    """
+    Liefert Bewertungs- und Momentum-Kennzahlen für den Hauptticker
+    und seine Peers (max 5). Nutzt yfinance + bestehende Hilfsfunktionen.
+    Cache: 2h TTL.
+    """
+    ticker = ticker.upper().strip()
+    cache_key = f"peer_comparison:{ticker}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    try:
+        from backend.app.data.fmp import get_company_profile
+        profile = await get_company_profile(ticker)
+        raw_peers = getattr(profile, "peers", None) or []
+        peers = [str(p).upper() for p in raw_peers[:5]]
+    except Exception:
+        peers = []
+
+    all_tickers = [ticker] + peers
+
+    def _fetch_one_sync(t: str) -> dict:
+        try:
+            stock = yf.Ticker(t)
+            info = stock.info or {}
+            hist = stock.history(period="5d")
+            change_5d = None
+            if len(hist) >= 2:
+                change_5d = round(
+                    (float(hist["Close"].iloc[-1]) - float(hist["Close"].iloc[0]))
+                    / float(hist["Close"].iloc[0]) * 100, 2
+                )
+            avg_vol = float(hist["Volume"].mean()) if not hist.empty else None
+            last_vol = float(hist["Volume"].iloc[-1]) if not hist.empty else None
+            rvol = round(last_vol / avg_vol, 2) if avg_vol and avg_vol > 0 else None
+
+            return {
+                "ticker": t,
+                "name": (info.get("shortName") or info.get("longName") or t)[:22],
+                "price": round(float(info.get("currentPrice") or info.get("regularMarketPrice") or 0), 2),
+                "change_5d_pct": change_5d,
+                "pe_ratio": round(float(info["trailingPE"]), 1) if info.get("trailingPE") else None,
+                "forward_pe": round(float(info["forwardPE"]), 1) if info.get("forwardPE") else None,
+                "ps_ratio": round(float(info["priceToSalesTrailing12Months"]), 1) if info.get("priceToSalesTrailing12Months") else None,
+                "market_cap_b": round(float(info["marketCap"]) / 1e9, 1) if info.get("marketCap") else None,
+                "rvol": rvol,
+            }
+        except Exception as e:
+            logger.warning(f"peer_comparison fetch failed for {t}: {e}")
+            return {"ticker": t, "name": t, "price": None, "change_5d_pct": None,
+                    "pe_ratio": None, "forward_pe": None, "ps_ratio": None,
+                    "market_cap_b": None, "rvol": None}
+
+    results = await asyncio.gather(*[asyncio.to_thread(_fetch_one_sync, t) for t in all_tickers])
+    response = {"main": ticker, "peers": list(results)}
+    await cache_set(cache_key, response, ttl_seconds=7200)
+    return response
+
+@router.get("/research/{ticker}")
+async def api_research_dashboard(
+    ticker: str,
+    force_refresh: bool = False,
+    override_ticker: Optional[str] = None,
+):
+    """
+    Aggregierter Research-Endpoint für das Trading-Dashboard.
+    Liefert alle Daten für einen Ticker in einem Call.
+
+    Cache-Strategie:
+    - Technicals (Kurs, RSI, SMA):  15 Minuten
+    - Fundamentals (P/E, PEG etc.): 24 Stunden
+    - Earnings-History:             6 Stunden
+    - News-Memory:                  1 Stunde
+    - Gesamtantwort Cache:          10 Minuten
+
+    force_refresh=True überspringt den Cache.
+    """
+    ticker = ticker.upper().strip()
+    cache_key = f"research_dashboard_{ticker}"
+
+    # ── Ticker Resolver ────────────────────────────────────────
+    # override_ticker: User hat manuell einen anderen Ticker angegeben
+    if override_ticker:
+        effective_ticker = override_ticker.upper().strip()
+        resolution = {
+            "resolved_ticker": effective_ticker,
+            "original_ticker": ticker,
+            "was_resolved": effective_ticker != ticker,
+            "resolution_note": f"Manuell überschrieben: {effective_ticker}",
+            "data_quality": "unknown",
+            "available_fields": 0,
+        }
+    else:
+        resolution = await resolve_ticker(ticker)
+        effective_ticker = resolution["resolved_ticker"]
+
+    if not force_refresh:
+        cached = await cache_get(cache_key)
+        if cached:
+            return cached
+
+    logger.info(f"Research Dashboard: Lade Daten für {ticker}")
+
+    # ── Alle Daten parallel laden ──────────────────────────────
+    now = now_mez()
+    month_ago = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+    today_str = now.strftime("%Y-%m-%d")
+
+    # Helper-Funktionen für yfinance primär, FMP fallback
+    async def get_company_profile_primary(ticker: str):
+        try:
+            yf_fundamentals = await get_fundamentals_yf(ticker)
+            if yf_fundamentals:
+                from schemas.valuation import ValuationData
+                return ValuationData(
+                    ticker=ticker,
+                    sector=yf_fundamentals.get("sector"),
+                    industry=yf_fundamentals.get("industry"),
+                    pe_ratio=yf_fundamentals.get("pe_ratio") or yf_fundamentals.get("forward_pe"),
+                    ps_ratio=yf_fundamentals.get("ps_ratio"),
+                    market_cap=yf_fundamentals.get("market_cap"),
+                    debt_to_equity=yf_fundamentals.get("debt_to_equity"),
+                    current_ratio=yf_fundamentals.get("current_ratio"),
+                    free_cash_flow_yield=yf_fundamentals.get("free_cash_flow_yield"),
+                )
+        except:
+            pass
+        return await fmp_profile(ticker)
+
+    async def get_key_metrics_primary(ticker: str):
+        try:
+            yf_metrics = await get_key_metrics_yf(ticker)
+            if yf_metrics:
+                return yf_metrics
+        except:
+            pass
+        return await fmp_key_metrics(ticker)
+
+    async def get_analyst_estimates_primary(ticker: str):
+        try:
+            yf_est = await get_analyst_estimates_yf(ticker)
+            if yf_est:
+                return yf_est
+        except:
+            pass
+        return await fmp_analyst_estimates(ticker)
+
+    async def get_earnings_history_primary(ticker: str, limit: int = 8):
+        try:
+            yf_hist = await get_earnings_history_yf(ticker)
+            if yf_hist:
+                from schemas.earnings import EarningsHistorySummary
+                return EarningsHistorySummary(
+                    ticker=ticker,
+                    quarters_beat=yf_hist.get("quarters_beat", 0),
+                    total_quarters=yf_hist.get("total_quarters", 0),
+                    avg_surprise_percent=yf_hist.get("avg_surprise_percent"),
+                    all_quarters=yf_hist.get("all_quarters", []),
+                )
+        except:
+            pass
+        return await fmp_earnings_history(ticker, limit=limit)
+
+    results = await asyncio.gather(
+        get_technical_setup(effective_ticker),           # 0
+        get_fundamentals_yf(effective_ticker),           # 1
+        get_company_profile_primary(effective_ticker),   # 2
+        get_key_metrics_primary(effective_ticker),       # 3
+        get_analyst_estimates_primary(effective_ticker), # 4
+        get_earnings_history_primary(effective_ticker, limit=8), # 5
+        get_price_target_consensus(effective_ticker),    # 6
+        get_short_interest(effective_ticker),            # 7
+        get_insider_transactions(effective_ticker),      # 8
+        get_bullet_points(effective_ticker),             # 9
+        get_watchlist(),                       # 10
+        get_options_metrics(effective_ticker),           # 11
+        get_company_news(effective_ticker, month_ago, today_str),  # 12
+        get_market_overview(),                           # 13 - NEW for relative strength
+        get_analyst_grades(effective_ticker),           # 14 - NEW for guidance_trend
+        get_market_news_for_sentiment(),                 # 15 - NEW for market sentiment context
+        get_options_oi_analysis(effective_ticker),       # 16 - NEW for Max Pain
+        get_finra_short_volume(effective_ticker),        # 17 - NEW for FINRA Short Volume
+        get_reddit_sentiment(effective_ticker),          # 18 - NEW for Reddit sentiment
+        get_fear_greed_score(),                          # 19 - NEW for Fear & Greed
+        return_exceptions=True,
+    )
+
+    def safe(idx):
+        r = results[idx]
+        return None if isinstance(r, Exception) else r
+
+    tech       = safe(0)
+    yf_fund    = safe(1)
+    profile    = safe(2)
+    metrics    = safe(3)
+    estimates  = safe(4)
+    history    = safe(5)
+
+    # ── Earnings-Fallback yfinance ───────────────────────────────
+    if (not history
+        or not getattr(history, "all_quarters", None)):
+        yf_history = await get_earnings_history_yf(
+            effective_ticker
+        )
+        if yf_history:
+            # Konvertiere yfinance Daten zu EarningsHistorySummary Struktur
+            quarters = []
+            for q in yf_history.get("all_quarters", []):
+                quarters.append(SimpleNamespace(
+                    quarter=q.get("quarter", ""),
+                    eps_actual=q.get("eps_actual"),
+                    eps_consensus=q.get("eps_consensus"),
+                    eps_surprise_percent=q.get("eps_surprise_percent"),
+                    stock_reaction_1d=None,  # yfinance hat keine Reaktionsdaten
+                ))
+            
+            history = SimpleNamespace(
+                quarters_beat=yf_history["quarters_beat"],
+                avg_surprise_percent=yf_history["avg_surprise_percent"],
+                all_quarters=quarters,
+                last_quarter=quarters[0] if quarters else None,
+                source="yfinance",
+            )
+            logger.info(
+                f"Earnings-Fallback yfinance für {ticker} - {len(quarters)} quarters loaded"
+            )
+
+    price_tgt  = safe(6)
+    short_int  = safe(7)
+    insiders   = safe(8)
+    news_mem   = safe(9) or []
+    watchlist  = safe(10) or []
+    options    = safe(11)
+    news_items = safe(12) or []
+    market_ov  = safe(13)
+    analyst_grades = safe(14) or []
+    market_sent_data = safe(15) or {}
+    oi_data = safe(16)
+    finra_data = safe(17)
+    reddit_data = safe(18)
+    fg = safe(19)
+
+    # ── Watchlist-Status ───────────────────────────────────────
+    is_watchlist = any(
+        w.get("ticker", "").upper() == ticker
+        for w in (watchlist if isinstance(watchlist, list) else [])
+    )
+    watchlist_item = next(
+        (w for w in watchlist if w.get("ticker", "").upper() == ticker),
+        None
+    )
+
+    # ── Preis & Technicals ─────────────────────────────────────
+    price = None
+    change_pct = None
+    try:
+        if tech and not isinstance(tech, Exception):
+            price = getattr(tech, "current_price", None)
+            change_pct = getattr(tech, "change_1d_pct", None)
+    except Exception:
+        pass
+
+    # Fallback: yf_fund wenn tech kein Preis hat
+    if price is None and isinstance(yf_fund, dict):
+        price = yf_fund.get("price")
+        if change_pct is None:
+            change_pct = yf_fund.get("change_pct")
+
+    # Pre/Post-Market Preis
+    pre_market_price = None
+    post_market_price = None
+    pre_market_change = None
+    try:
+        def _fetch_extended():
+            fi = yf.Ticker(effective_ticker).fast_info
+            pre  = getattr(fi, "pre_market_price", None)
+            post = getattr(fi, "post_market_price", None)
+            reg  = getattr(fi, "last_price", None)
+            return (
+                round(float(pre), 2) if pre else None,
+                round(float(post), 2) if post else None,
+                round(float(reg), 2) if reg else None,
+            )
+        pre_p, post_p, reg_p = await asyncio.to_thread(_fetch_extended)
+        pre_market_price  = pre_p
+        post_market_price = post_p
+        # Pre-Market Change vs. letztem Schlusskurs
+        if pre_p and reg_p and reg_p > 0:
+            pre_market_change = round(
+                (pre_p - reg_p) / reg_p * 100, 2
+            )
+        elif post_p and reg_p and reg_p > 0:
+            pre_market_change = round(
+                (post_p - reg_p) / reg_p * 100, 2
+            )
+    except Exception:
+        pass
+
+    # Letzter Fallback: fast_info (nur wenn beide fehlen)
+    if price is None:
+        try:
+            def _fetch_price_fallback():
+                fi = yf.Ticker(effective_ticker).fast_info
+                p = getattr(fi, "last_price", None)
+                c = getattr(fi, "regular_market_day_change_percent", None)
+                return (
+                    round(float(p), 2) if p is not None else None,
+                    round(float(c) * 100, 2) if c is not None else None,
+                )
+            price, change_pct = await asyncio.to_thread(
+                _fetch_price_fallback
+            )
+        except Exception:
+            pass
+
+    # ── Fundamentals zusammenführen (FMP > yfinance) ───────────
+    pe_ratio = None
+    forward_pe = None
+    ps_ratio = None
+    peg_ratio = None
+    ev_ebitda = None
+    debt_equity = None
+    fcf_yield = None
+    current_ratio = None
+    market_cap = None
+    beta = None
+    dividend_yield = None
+    revenue_ttm = None
+    eps_ttm = None
+    sector = None
+    industry = None
+    company_name = None
+    fifty_two_week_high = None
+    fifty_two_week_low = None
+    analyst_target = None
+    analyst_recommendation = None
+    number_of_analysts = None
+
+    # FMP Key Metrics (Priorität)
+    if metrics:
+        pe_ratio    = getattr(metrics, "pe_ratio", None)
+        ps_ratio    = getattr(metrics, "ps_ratio", None)
+        market_cap  = getattr(metrics, "market_cap", None)
+        debt_equity = getattr(metrics, "debt_to_equity", None)
+        fcf_yield   = getattr(metrics, "free_cash_flow_yield", None)
+        current_ratio = getattr(metrics, "current_ratio", None)
+        sector      = getattr(metrics, "sector", None)
+        industry    = getattr(metrics, "industry", None)
+
+    # yfinance Fallback + Ergänzungen
+    if yf_fund:
+        pe_ratio        = pe_ratio or yf_fund.get("pe_ratio")
+        forward_pe      = yf_fund.get("forward_pe")
+        ps_ratio        = ps_ratio or yf_fund.get("ps_ratio")
+        market_cap      = market_cap or yf_fund.get("market_cap")
+        beta            = yf_fund.get("beta")
+        dividend_yield  = yf_fund.get("dividend_yield")
+        revenue_ttm     = yf_fund.get("revenue_ttm")
+        eps_ttm         = yf_fund.get("eps_ttm")
+        sector          = sector or yf_fund.get("sector")
+        industry        = industry or yf_fund.get("industry")
+        fifty_two_week_high = yf_fund.get("fifty_two_week_high")
+        fifty_two_week_low  = yf_fund.get("fifty_two_week_low")
+        analyst_target        = yf_fund.get("analyst_target")
+        analyst_recommendation = yf_fund.get("analyst_recommendation")
+        number_of_analysts    = yf_fund.get("number_of_analysts")
+
+    # FMP Profil
+    ceo = None
+    employees = None
+    description = None
+    website = None
+    ipo_date = None
+    country = None
+    exchange = None
+    peers_list: list[str] = []
+    
+    if profile:
+        company_name = getattr(profile, "company_name", None)
+        sector   = sector or getattr(profile, "sector", None)
+        industry = industry or getattr(profile, "industry", None)
+
+        # Company Profile Details for P1c
+        ceo           = getattr(profile, "ceo", None)
+        employees     = getattr(profile, "fullTimeEmployees", None) \
+                        or getattr(profile, "employees", None)
+        description   = getattr(profile, "description", None)
+        website       = getattr(profile, "website", None)
+        ipo_date      = getattr(profile, "ipoDate", None) \
+                        or getattr(profile, "ipo_date", None)
+        country       = getattr(profile, "country", None)
+        exchange      = getattr(profile, "exchange", None)
+
+        # Peers aus FMP (falls vorhanden)
+        try:
+            raw_peers = getattr(profile, "peers", None)
+            if isinstance(raw_peers, list):
+                peers_list = [
+                    str(p).upper() for p in raw_peers[:5]
+                ]
+        except Exception:
+            pass
+
+    # Sektor-Peers mit Earnings nächste 14T
+    sector_earnings: list[dict] = []
+    try:
+        from datetime import date
+        sector_norm = str(sector or "").strip().lower()
+        if sector_norm:
+            today = date.today()
+            in_14 = today + timedelta(days=14)
+            cal = await get_earnings_calendar(
+                from_date=today.isoformat(),
+                to_date=in_14.isoformat(),
+            )
+            if cal:
+                cal_by_ticker = {}
+                for item in (cal if isinstance(cal, list) else []):
+                    item_ticker = (
+                        getattr(item, "ticker", None)
+                        or getattr(item, "symbol", None)
+                        or ""
+                    ).upper()
+                    if item_ticker:
+                        cal_by_ticker[item_ticker] = item
+
+                for w in (watchlist if isinstance(watchlist, list) else []):
+                    item_ticker = str(w.get("ticker", "")).upper()
+                    if not item_ticker or item_ticker == ticker.upper():
+                        continue
+
+                    item_sector = str(w.get("sector", "")).strip().lower()
+                    if item_sector != sector_norm:
+                        continue
+
+                    cal_item = cal_by_ticker.get(item_ticker)
+                    if not cal_item:
+                        continue
+
+                    sector_earnings.append({
+                        "ticker": item_ticker,
+                        "date": getattr(cal_item, "report_date", None),
+                        "timing": getattr(cal_item, "report_timing", None)
+                        or getattr(cal_item, "hour", None),
+                    })
+    except Exception as e:
+        logger.debug(f"Sektor-Kalender Fehler: {e}")
+
+    # PEG berechnen: PE / EPS_Growth (aus FMP key-metrics wenn vorhanden)
+    try:
+        from backend.app.data.fmp import _fmp_get
+        raw_metrics = await _fmp_get(
+            "/stable/key-metrics-ttm", {"symbol": ticker}
+        )
+        if raw_metrics and isinstance(raw_metrics, list) and raw_metrics:
+            raw = raw_metrics[0]
+            peg_ratio = raw.get("priceEarningsToGrowthRatioTTM") or \
+                        raw.get("pegRatioTTM")
+            ev_ebitda = raw.get("enterpriseValueOverEBITDATTM") or \
+                        raw.get("evToEbitdaTTM")
+            # ROE und ROA ergänzen
+            roe = raw.get("returnOnEquityTTM")
+            roa = raw.get("returnOnAssetsTTM")
+        else:
+            roe = roa = None
+    except Exception:
+        roe = roa = None
+
+    # ── Expected Move berechnen ────────────────────────────────
+    expected_move_pct = None
+    expected_move_usd = None
+    try:
+        import math
+        from datetime import date as _date
+        iv = getattr(options, "implied_volatility_atm", None) if options else None
+        earnings_dt = getattr(estimates, "report_date", None) if estimates else None
+        days_to_earnings = 1
+        if earnings_dt:
+            try:
+                if hasattr(earnings_dt, "toordinal"):
+                    days_to_earnings = max(1, (earnings_dt - _date.today()).days)
+                else:
+                    days_to_earnings = max(
+                        1, (_date.fromisoformat(str(earnings_dt)) - _date.today()).days
+                    )
+            except Exception:
+                days_to_earnings = 1
+        if iv is not None and iv > 0 and price is not None and price > 0:
+            expected_move_pct = round(iv * math.sqrt(days_to_earnings / 365) * 100, 1)
+            expected_move_usd = round(price * iv * math.sqrt(days_to_earnings / 365), 2)
+    except Exception:
+        pass
+
+    # ── Earnings-Daten ─────────────────────────────────────────
+    earnings_date = None
+    report_timing = None
+    eps_consensus = None
+    revenue_consensus = None
+    beats_of_8 = None
+    avg_surprise = None
+    last_surprise_pct = None
+    last_beat = None
+    quarterly_history = []
+
+    if estimates:
+        earnings_date     = str(getattr(estimates, "report_date", None) or "")
+        report_timing     = getattr(estimates, "report_timing", None)
+        eps_consensus     = getattr(estimates, "eps_consensus", None)
+        revenue_consensus = getattr(estimates, "revenue_consensus", None)
+
+    if history:
+        beats_of_8   = getattr(history, "quarters_beat", None)
+        avg_surprise = getattr(history, "avg_surprise_percent", None)
+        last_q = getattr(history, "last_quarter", None)
+        if last_q:
+            last_surprise_pct = getattr(last_q, "eps_surprise_percent", None)
+            last_surprise_pct = (
+                float(last_surprise_pct)
+                if last_surprise_pct is not None else None
+            )
+            last_beat = bool((last_surprise_pct or 0) > 0)
+        if beats_of_8 is not None:
+            try:
+                beats_of_8 = int(beats_of_8)
+            except Exception:
+                pass
+        if avg_surprise is not None:
+            try:
+                avg_surprise = float(avg_surprise)
+            except Exception:
+                pass
+        # Letzte 8 Quartale für Tabelle
+        all_q = getattr(history, "all_quarters", [])
+        for q in all_q[:8]:
+            eps_act = getattr(q, "eps_actual", None)
+            eps_cons = getattr(q, "eps_consensus", None)
+            surp_pct = getattr(q, "eps_surprise_percent", None)
+            reac_1d = getattr(q, "stock_reaction_1d", None)
+            quarterly_history.append({
+                "quarter": getattr(q, "quarter", ""),
+                "eps_actual": float(eps_act) if eps_act is not None else None,
+                "eps_consensus": float(eps_cons) if eps_cons is not None else None,
+                "surprise_pct": float(surp_pct) if surp_pct is not None else None,
+                "reaction_1d": float(reac_1d) if reac_1d is not None else None,
+            })
+
+    # ── Tage bis Earnings ──────────────────────────────────────
+    earnings_countdown = None
+    earnings_today = False
+    if earnings_date:
+        try:
+            from datetime import date as _date2
+            ed = _date2.fromisoformat(earnings_date)
+            earnings_countdown = (ed - _date2.today()).days
+            earnings_today = earnings_countdown == 0
+        except Exception:
+            pass
+
+    # ── 30-Tage Kursperformance ────────────────────────────────
+    price_change_30d = None
+    try:
+        if tech and not isinstance(tech, Exception):
+            price_change_30d = getattr(tech, "change_1m_pct", None)
+            if price_change_30d is None:
+                price_change_30d = (
+                    yf_fund.get("change_1m_pct")
+                    if isinstance(yf_fund, dict) else None
+                )
+    except Exception:
+        price_change_30d = None
+
+    # ── Relative Stärke berechnen ───────────────────────────────
+    market_ov = market_ov or {}
+    indices_data = market_ov.get("indices", {})
+    sector_ranking_map = {
+        s["symbol"]: s
+        for s in market_ov.get("sector_ranking_5d", [])
+    }
+
+    spy_data = indices_data.get("SPY", {})
+
+    # Sektor-ETF für diesen Ticker
+    sector_etf_symbol = SECTOR_TO_ETF.get(sector or "", None)
+    sector_etf_data = (
+        sector_ranking_map.get(sector_etf_symbol, {})
+        if sector_etf_symbol else {}
+    )
+    sector_etf_full = indices_data.get(sector_etf_symbol, {})
+
+    def relative_strength(ticker_pct, bench_pct):
+        if ticker_pct is None or bench_pct is None:
+            return None
+        return round(ticker_pct - bench_pct, 2)
+
+    # 5-Tage Performance für den Ticker
+    price_change_5d = None
+    try:
+        if tech and not isinstance(tech, Exception):
+            price_change_5d = getattr(tech, "change_5d_pct", None)
+            if price_change_5d is None:
+                price_change_5d = (
+                    yf_fund.get("change_5d_pct")
+                    if isinstance(yf_fund, dict) else None
+                )
+    except Exception:
+        price_change_5d = None
+
+    rel_strength = {
+        "vs_spy_1d": relative_strength(
+            change_pct, spy_data.get("change_1d_pct")
+        ),
+        "vs_spy_5d": relative_strength(
+            price_change_5d, spy_data.get("change_5d_pct")
+        ),
+        "vs_spy_1m": relative_strength(
+            price_change_30d, spy_data.get("change_1m_pct")
+        ),
+        "vs_sector_1d": relative_strength(
+            change_pct, sector_etf_full.get("change_1d_pct")
+        ),
+        "vs_sector_5d": relative_strength(
+            price_change_5d,
+            sector_etf_full.get("change_5d_pct")
+            or sector_etf_data.get("perf_5d")
+        ),
+        "vs_sector_1m": relative_strength(
+            price_change_30d, sector_etf_full.get("change_1m_pct")
+        ),
+        "spy_1d": spy_data.get("change_1d_pct"),
+        "spy_5d": spy_data.get("change_5d_pct"),
+        "spy_1m": spy_data.get("change_1m_pct"),
+        "sector_etf": sector_etf_symbol,
+        "sector_1d": sector_etf_full.get("change_1d_pct"),
+        "sector_5d": sector_etf_full.get("change_5d_pct")
+                     or sector_etf_data.get("perf_5d"),
+        "sector_1m": sector_etf_full.get("change_1m_pct"),
+    }
+
+    # Einordnung
+    outperf_count = sum(1 for v in [
+        rel_strength["vs_spy_1d"],
+        rel_strength["vs_spy_5d"],
+        rel_strength["vs_sector_5d"],
+    ] if v is not None and v > 0)
+
+    if outperf_count >= 3:
+        rel_strength["label"] = "Stark outperformend"
+        rel_strength["signal"] = "bullish"
+    elif outperf_count >= 2:
+        rel_strength["label"] = "Leicht outperformend"
+        rel_strength["signal"] = "neutral"
+    elif outperf_count == 1:
+        rel_strength["label"] = "Leicht underperformend"
+        rel_strength["signal"] = "neutral"
+    else:
+        rel_strength["label"] = "Underperformend"
+        rel_strength["signal"] = "bearish"
+
+    # ── Short Interest & Insider ───────────────────────────────
+    short_interest_pct = None
+    days_to_cover = None
+    squeeze_risk = None
+    if short_int:
+        short_interest_pct = getattr(short_int, "short_interest_percent", None)
+        days_to_cover      = getattr(short_int, "days_to_cover", None)
+        squeeze_risk       = getattr(short_int, "squeeze_risk", None)
+
+    if not short_interest_pct:
+        try:
+            yf_si = await get_short_interest_yf(effective_ticker)
+            if yf_si:
+                short_interest_pct = yf_si.get("short_interest_percent")
+                days_to_cover      = yf_si.get("short_ratio") or days_to_cover
+        except Exception:
+            pass
+
+    insider_buys = 0
+    insider_sells = 0
+    insider_buy_value = 0.0
+    insider_sell_value = 0.0
+    insider_assessment = "normal"
+    if insiders:
+        insider_buys      = getattr(insiders, "total_buys", 0) or 0
+        insider_sells     = getattr(insiders, "total_sells", 0) or 0
+        insider_buy_value  = getattr(insiders, "total_buy_value", 0.0) or 0.0
+        insider_sell_value = getattr(insiders, "total_sell_value", 0.0) or 0.0
+        insider_assessment = getattr(insiders, "assessment", "normal") or "normal"
+
+    # ── News-Stichpunkte (max 10 neueste) ─────────────────────
+    news_bullets = []
+    for b in (news_mem or [])[:8]:
+        raw_bullets = b.get("bullet_points") or []
+        # Normalisierung: kann list, str oder None sein
+        if isinstance(raw_bullets, str):
+            try:
+                import json as _json
+                raw_bullets = _json.loads(raw_bullets)
+            except Exception:
+                raw_bullets = [raw_bullets]
+        if not isinstance(raw_bullets, list):
+            raw_bullets = [str(raw_bullets)] if raw_bullets else []
+
+        # Jeden Bullet als eigenen Eintrag hinzufügen
+        for bullet_text in raw_bullets[:3]:  # max 3 Bullets pro News-Item
+            if not bullet_text or not str(bullet_text).strip():
+                continue
+            news_bullets.append({
+                "text":        str(bullet_text).strip(),
+                "sentiment":   b.get("sentiment_score", 0),
+                "is_material": b.get("is_material", False),
+                "category":    b.get("category", "News"),
+                "date":        b.get("date", "") or b.get("created_at", ""),
+                "source":      b.get("source", "finbert"),
+                "url":         b.get("url", ""),
+                "is_narrative_shift": b.get("is_narrative_shift", False),
+                "shift_type":         b.get("shift_type"),
+            })
+            if len(news_bullets) >= 10:
+                break
+        if len(news_bullets) >= 10:
+            break
+
+    if len(news_bullets) < 5 and news_items:
+        for item in (news_items or [])[:8]:
+            headline = item.get("headline", "") if isinstance(item, dict) else ""
+            if not headline:
+                continue
+            published = item.get("datetime", 0)
+            date_str = (
+                datetime.fromtimestamp(published).strftime("%Y-%m-%d")
+                if published else ""
+            )
+            news_bullets.append({
+                "text": headline,
+                "sentiment": 0,
+                "is_material": False,
+                "category": item.get("category", "News"),
+                "date": date_str,
+                "source": "finnhub",
+                "url": item.get("url", ""),
+            })
+
+    # ── Price Target ───────────────────────────────────────────
+    price_target_high = None
+    price_target_low  = None
+    price_target_avg = None
+    if price_tgt:
+        price_target_high = price_tgt.get("targetHigh") or price_tgt.get("targetHighPrice")
+        price_target_low  = price_tgt.get("targetLow") or price_tgt.get("targetLowPrice")
+        price_target_avg  = price_tgt.get("targetConsensus") or price_tgt.get("targetMeanPrice")
+    if not price_target_avg and analyst_target:
+        price_target_avg = analyst_target
+
+    # ── Technicals zusammenführen ──────────────────────────────
+    rsi = trend = sma_50 = sma_200 = above_sma50 = above_sma200 = None
+    sma50_distance = sma200_distance = support = resistance = distance_52w_high = None
+    sma_20 = atr_14 = macd = macd_signal_val = macd_histogram = macd_bullish = None
+    obv = obv_trend = rvol = float_shares = avg_volume = bid_ask_spread = None
+
+    if tech:
+        rsi          = getattr(tech, "rsi_14", None)
+        trend        = getattr(tech, "trend", None)
+        sma_50       = getattr(tech, "sma_50", None)
+        sma_200      = getattr(tech, "sma_200", None)
+        above_sma50  = getattr(tech, "above_sma50", None)
+        above_sma200 = getattr(tech, "above_sma200", None)
+        sma50_distance  = getattr(tech, "sma50_distance_pct", None)
+        sma200_distance = getattr(tech, "sma200_distance_pct", None)
+        support     = getattr(tech, "support_level", None)
+        resistance  = getattr(tech, "resistance_level", None)
+        distance_52w_high = getattr(tech, "distance_to_52w_high_percent", None)
+        sma_20            = getattr(tech, "sma_20", None)
+        atr_14            = getattr(tech, "atr_14", None)
+        macd              = getattr(tech, "macd", None)
+        macd_signal_val   = getattr(tech, "macd_signal", None)
+        macd_histogram    = getattr(tech, "macd_histogram", None)
+        macd_bullish      = getattr(tech, "macd_bullish", None)
+        obv               = getattr(tech, "obv", None)
+        obv_trend         = getattr(tech, "obv_trend", None)
+        rvol              = getattr(tech, "rvol", None)
+        float_shares      = getattr(tech, "float_shares", None)
+        avg_volume        = getattr(tech, "avg_volume", None)
+        bid_ask_spread    = getattr(tech, "bid_ask_spread", None)
+
+    # ── Letzter Audit aus Supabase ─────────────────────────────
+    last_audit = None
+    try:
+        db = get_supabase_client()
+        if db:
+            res = (
+                await db.table("audit_reports")
+                .select("report_date, recommendation, opportunity_score, torpedo_score, report_text")
+                .eq("ticker", ticker)
+                .order("report_date", desc=True)
+                .limit(1)
+                .execute_async()
+            )
+            rows = res.data if res and res.data else []
+            if rows:
+                last_audit = {
+                    "date": rows[0].get("report_date"),
+                    "recommendation": rows[0].get("recommendation"),
+                    "opportunity_score": rows[0].get("opportunity_score"),
+                    "torpedo_score": rows[0].get("torpedo_score"),
+                    "report_text": rows[0].get("report_text", "")[:500],
+                }
+    except Exception as e:
+        logger.debug(f"Research: last audit {ticker}: {e}")
+
+    # ── Sentiment-Berechnung ───────────────────────────────────────
+    ticker_sent = _calc_sentiment_from_bullets(news_mem or [])
+    mkt_cat = market_sent_data.get("category_sentiment", {})
+    mkt_scores = [v.get("score", 0.0) for v in mkt_cat.values() if v.get("score") is not None]
+    market_avg_sentiment = round(sum(mkt_scores) / len(mkt_scores), 3) if mkt_scores else 0.0
+    sentiment_divergence_calc = bool(ticker_sent["count"] > 0 and ticker_sent["avg"] > 0.1)
+
+    # ── Finale Antwort ─────────────────────────────────────────
+    response = {
+        "ticker": ticker,
+        "effective_ticker": effective_ticker,
+        "resolution": resolution,
+        "is_watchlist": is_watchlist,
+        "watchlist_item": watchlist_item,
+        "company_name": company_name or ticker,
+        "sector": sector,
+        "industry": industry,
+        "country": country,
+        "exchange": exchange,
+        "price": price,
+        "change_pct": change_pct,
+        "pre_market_price": pre_market_price,
+        "post_market_price": post_market_price,
+        "pre_market_change": pre_market_change,
+        "expected_move": {
+            "pct": expected_move_pct,
+            "usd": expected_move_usd,
+            "iv": round((getattr(options, 'implied_volatility_atm', 0) or 0) * 100, 1) if options else None,
+        },
+        "fundamentals": {
+            "pe_ratio": pe_ratio,
+            "forward_pe": forward_pe,
+            "ps_ratio": ps_ratio,
+            "peg_ratio": peg_ratio,
+            "ev_ebitda": ev_ebitda,
+            "roe": roe,
+            "roa": roa,
+            "debt_equity": debt_equity,
+            "fcf_yield": fcf_yield,
+            "current_ratio": current_ratio,
+            "market_cap": market_cap,
+            "beta": beta,
+            "dividend_yield": dividend_yield,
+            "revenue_ttm": revenue_ttm,
+            "eps_ttm": eps_ttm,
+            "ceo": ceo,
+            "employees": employees,
+            "description": description,
+            "website": website,
+            "ipo_date": ipo_date,
+            "peers": peers_list,
+        },
+        "technicals": {
+            "rsi": rsi,
+            "trend": trend,
+            "sma_50": sma_50,
+            "sma_200": sma_200,
+            "above_sma50": above_sma50,
+            "above_sma200": above_sma200,
+            "sma50_distance": sma50_distance,
+            "sma200_distance": sma200_distance,
+            "support": support,
+            "resistance": resistance,
+            "fifty_two_week_high": fifty_two_week_high,
+            "fifty_two_week_low": fifty_two_week_low,
+            "distance_52w_high": distance_52w_high,
+            "sma_20": sma_20,
+            "atr_14": atr_14,
+            "macd": macd,
+            "macd_signal": macd_signal_val,
+            "macd_histogram": macd_histogram,
+            "macd_bullish": macd_bullish,
+            "obv": obv,
+            "obv_trend": obv_trend,
+            "rvol": rvol,
+            "float_shares": float_shares,
+            "avg_volume": avg_volume,
+            "bid_ask_spread": bid_ask_spread,
+        },
+        "earnings": {
+            "next_date": earnings_date,
+            "timing": report_timing,
+            "countdown": earnings_countdown,
+            "is_today": earnings_today,
+            "eps_consensus": eps_consensus,
+            "revenue_consensus": revenue_consensus,
+            "beats_of_8": beats_of_8,
+            "avg_surprise_pct": avg_surprise,
+            "last_surprise_pct": last_surprise_pct,
+            "last_beat": last_beat,
+            "quarterly_history": quarterly_history,
+            "earnings_source": getattr(history, "source", "fmp") if history else "fmp",
+            "sector_calendar": sector_earnings,
+        },
+        "analyst": {
+            "target_avg": price_target_avg,
+            "target_high": price_target_high,
+            "target_low": price_target_low,
+            "recommendation": analyst_recommendation,
+            "analyst_count": number_of_analysts,
+            "upside_pct": round((price_target_avg - price) / price * 100, 1) if price_target_avg and price else None,
+        },
+        "sentiment": {
+            "ticker_sentiment": ticker_sent["avg"],
+            "ticker_sentiment_label": ticker_sent["trend"],
+            "ticker_article_count": ticker_sent["count"],
+            "market_avg_sentiment": market_avg_sentiment,
+            "reddit_sentiment": reddit_data.get("sentiment_score") if reddit_data else 0.0,
+            "reddit_mentions": reddit_data.get("mention_count") if reddit_data else 0,
+            "fear_greed_score": fg.get("score") if fg else 50,
+            "fear_greed_label": fg.get("label") if fg else "neutral",
+            "divergence": sentiment_divergence_calc,
+            "news": news_bullets,
+        },
+        "smart_money": {
+            "short_interest_pct": short_interest_pct,
+            "days_to_cover": days_to_cover,
+            "squeeze_risk": squeeze_risk,
+            "insider_buys": insider_buys,
+            "insider_sells": insider_sells,
+            "insider_buy_value": insider_buy_value,
+            "insider_sell_value": insider_sell_value,
+            "insider_assessment": insider_assessment,
+            "finra_short_vol_pct": finra_data.get("short_vol_pct") if finra_data else None,
+            "max_pain": oi_data.get("max_pain") if oi_data else None,
+            "pcr_volume": oi_data.get("pcr_volume") if oi_data else None,
+        },
+        "relative_strength": rel_strength,
+        "last_audit": last_audit,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    # ── Earnings Live-Modus: Cache-TTL anpassen ───────────────────
+    cache_ttl = 10 if earnings_today else 600
+    if earnings_today:
+        logger.info(f"Earnings Live-Modus: Research-Cache für {ticker} auf 10s reduziert")
+    # ── Ende Earnings Live-Modus ───────────────────────────────────
+
+    await cache_set(cache_key, response, ttl_seconds=cache_ttl)
+    return response
+
+@router.get("/earnings-radar")
+async def api_earnings_radar(days: int = 14):
+    from datetime import datetime, timedelta
+    from backend.app.data.finnhub import get_earnings_calendar
+    from backend.app.memory.watchlist import get_watchlist
+    
+    today = datetime.now()
+    end_date = today + timedelta(days=days)
+    
+    try:
+        results = await asyncio.gather(
+            get_earnings_calendar(today.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")),
+            get_watchlist(),
+            return_exceptions=True
+        )
+        
+        calendar = results[0] if not isinstance(results[0], Exception) else []
+        watchlist = results[1] if not isinstance(results[1], Exception) else []
+        
+        watchlist_tickers = {w["ticker"].upper() for w in watchlist}
+        
+        radar_items = []
+        for event in (calendar or []):
+            ticker = getattr(event, "ticker", "").upper()
+            if ticker in watchlist_tickers:
+                radar_items.append({
+                    "ticker": ticker,
+                    "date": str(getattr(event, "report_date", "")),
+                    "timing": getattr(event, "report_timing", "unknown"),
+                    "eps_est": getattr(event, "eps_consensus", None),
+                    "rev_est": getattr(event, "revenue_consensus", None),
+                })
+        
+        radar_items.sort(key=lambda x: x["date"])
+        return {"status": "success", "count": len(radar_items), "items": radar_items}
+    except Exception as e:
+        logger.error(f"Earnings Radar Fehler: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/filing-diff/{ticker}")
+async def api_filing_diff(
+    ticker: str,
+    filing_type: str = "10-Q",
+):
+    """
+    Tonalitäts-Diff zwischen letzten zwei
+    10-Q oder 10-K Berichten via Gemini Flash.
+    Cache: 24h.
+    Benötigt: GEMINI_API_KEY in .env
+    """
+    from backend.app.analysis.filing_rag import (
+        get_filing_diff
+    )
+    return await get_filing_diff(
+        ticker.upper(),
+        filing_type=filing_type.upper(),
+    )
+
+
+def _is_market_hours() -> bool:
+    """True if US market is open in Berlin time."""
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Europe/Berlin")
+    except Exception:
+        tz = None
+
+    now = datetime.now(tz) if tz is not None else datetime.now()
+    if now.weekday() >= 5:
+        return False
+    open_time = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    close_time = now.replace(hour=22, minute=0, second=0, microsecond=0)
+    return open_time <= now <= close_time
+
+
+def _signal_feed_defaults() -> dict:
+    return {
+        "torpedo_delta_min": 1.5,
+        "material_event": 1,
+        "earnings_urgent_days": 5,
+        "sma50_break_downtrend": 1,
+        "narrative_shift": 1,
+        "sentiment_break": 0.1,
+        "rvol_min": 2.0,
+        "earnings_warning_days": 14,
+        "opp_delta_min": 1.5,
+        "rsi_oversold": 30.0,
+        "rsi_overbought": 70.0,
+        "feed_max_signals": 10,
+        "dedup_hours": 24,
+        "quiet_period_pre_earnings_days": 2,
+    }
+
+
+async def _load_signal_feed_config() -> dict:
+    cfg = _signal_feed_defaults()
+    db = get_supabase_client()
+    if not db:
+        return cfg
+
+    try:
+        res = await db.table("signal_feed_config").select("key,value").execute_async()
+        rows = res.data or []
+        for row in rows:
+            key = row.get("key")
+            value = row.get("value")
+            if key in cfg and isinstance(value, dict) and value.get("enabled", True):
+                cfg[key] = value.get("value", cfg[key])
+    except Exception as exc:
+        logger.warning(f"signal_feed_config load failed: {exc}")
+    return cfg
+
+
+def _build_signal_entry(
+    ticker: str,
+    signal_type: str,
+    priority: int,
+    headline: str,
+    item: dict,
+    value: float | int | None = None,
+    threshold: float | int | None = None,
+) -> dict:
+    return {
+        "ticker": ticker,
+        "signal_type": signal_type,
+        "priority": priority,
+        "headline": headline,
+        "value": value,
+        "threshold": threshold,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "source": "watchlist",
+        "_item": item,
+    }
+
+
+def _compose_signal_bullets(item: dict, signal: dict) -> list[str]:
+    bullets = []
+    ticker = signal.get("ticker", "?")
+    opp = item.get("opportunity_score")
+    torp = item.get("torpedo_score")
+    rsi = item.get("rsi")
+    trend = item.get("trend") or "neutral"
+    rvol = item.get("rvol")
+    earnings = item.get("earnings_countdown")
+    sentiment = item.get("sentiment_trend") or item.get("finbert_sentiment")
+
+    bullets.append(f"• {ticker}: {signal.get('headline', 'Signal')[:90]}")
+    bullets.append(
+        f"• Opp {opp if opp is not None else 'n/a'} | Torpedo {torp if torp is not None else 'n/a'} | RSI {rsi if rsi is not None else 'n/a'}"
+    )
+    if earnings is not None:
+        bullets.append(f"• Earnings in {earnings}T | Trend {trend} | RVOL {rvol if rvol is not None else 'n/a'}x")
+    else:
+        bullets.append(f"• Trend {trend} | RVOL {rvol if rvol is not None else 'n/a'}x | Sentiment {sentiment if sentiment is not None else 'n/a'}")
+    return bullets[:3]
+
+
+@router.get("/signals/feed")
+async def api_signals_feed(force_refresh: bool = False):
+    """
+    Signal Feed: erzeugt aktuelle Watchlist-Anomalien + Preparation Setups.
+    Cache: 5 Minuten.
+    """
+    cache_key = "signals:feed"
+    if force_refresh:
+        await cache_invalidate(cache_key)
+
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    cfg = await _load_signal_feed_config()
+    watchlist = await get_watchlist()
+    macro = await get_macro_snapshot()
+    macro_dict = macro.model_dump() if hasattr(macro, "model_dump") else (macro or {})
+    in_market = _is_market_hours()
+    generated_at = datetime.now(timezone.utc).isoformat()
+    max_signals = int(cfg.get("feed_max_signals", 10))
+    dedup_hours = int(cfg.get("dedup_hours", 24))
+    quiet_days = int(cfg.get("quiet_period_pre_earnings_days", 2))
+
+    # ── Catalyst Clash: Makro-Events heute laden ──────────────────
+    high_impact_today: list[dict] = []
+    try:
+        from datetime import date as _date
+        today_str = _date.today().isoformat()
+        cal = await get_economic_calendar(days_back=0, days_forward=1)
+        for ev in cal:
+            ev_date = (ev.get("date") or "")[:10]
+            if ev_date == today_str and ev.get("impact") == "high":
+                high_impact_today.append({
+                    "event": ev.get("event", "Makro-Event"),
+                    "time":  (ev.get("date") or "")[:16],
+                })
+    except Exception as e:
+        logger.debug(f"Catalyst Clash Calendar: {e}")
+    # ── Ende Calendar ─────────────────────────────────────────────
+
+    # Offene Journal-Positionen für Cross-Referenz
+    open_positions: dict[str, dict] = {}  # ticker → position
+    try:
+        db_j = get_supabase_client()
+        if db_j:
+            rows = (await db_j.table("trade_journal")
+                    .select("ticker,direction,entry_price,shares,stop_price,target_price,entry_date")
+                    .is_("exit_date", "null")
+                    .execute_async()).data or []
+            for row in rows:
+                t = (row.get("ticker") or "").upper()
+                open_positions[t] = {
+                    "direction":    row.get("direction", "long"),
+                    "entry_price":  row.get("entry_price"),
+                    "shares":       row.get("shares"),
+                    "stop_price":   row.get("stop_price"),
+                    "target_price": row.get("target_price"),
+                    "entry_date":   str(row.get("entry_date", "")),
+                }
+    except Exception as e:
+        logger.warning(f"Open positions for signal feed: {e}")
+
+    raw_signals: list[dict] = []
+    preparation_setups: list[dict] = []
+
+    for item in watchlist or []:
+        if not isinstance(item, dict):
+            continue
+        ticker = str(item.get("ticker") or "").upper().strip()
+        if not ticker:
+            continue
+
+        w_torp = item.get("week_torp_delta") or 0
+        w_opp = item.get("week_opp_delta") or 0
+        rvol = item.get("rvol") or 0
+        above_sma = item.get("above_sma50")
+        trend = item.get("trend") or ""
+        has_material = bool(item.get("has_material_news"))
+        sentiment_trend = item.get("sentiment_trend") or ""
+        sentiment_score = item.get("finbert_sentiment") or 0
+        rsi = item.get("rsi") or 50
+        earnings_days = item.get("earnings_countdown")
+        in_quiet = earnings_days is not None and 0 <= earnings_days <= quiet_days
+
+        def add_signal(signal_type: str, priority: int, headline: str, value=None, threshold=None):
+            raw_signals.append(
+                _build_signal_entry(
+                    ticker=ticker,
+                    signal_type=signal_type,
+                    priority=priority,
+                    headline=headline,
+                    item=item,
+                    value=value,
+                    threshold=threshold,
+                )
+            )
+
+        if w_torp >= float(cfg.get("torpedo_delta_min", 1.5)):
+            add_signal("torpedo_rising", 1, f"Torpedo +{w_torp:.1f} diese Woche — Risiko steigt", w_torp, cfg.get("torpedo_delta_min", 1.5))
+
+        if has_material:
+            add_signal("material_event", 1, "⚡ Material Event erkannt", 1, 1)
+
+        if earnings_days is not None and 0 <= earnings_days <= int(cfg.get("earnings_urgent_days", 5)):
+            add_signal("earnings_urgent", 1, f"Earnings in {earnings_days}T — kurzfristig kritisch", earnings_days, cfg.get("earnings_urgent_days", 5))
+
+        if in_market and not in_quiet and above_sma is False and trend == "downtrend":
+            add_signal("sma50_break", 1, "Unter SMA50 gefallen — technischer Bruch", 0, 1)
+
+        if in_market and sentiment_trend == "deteriorating" and sentiment_score > float(cfg.get("sentiment_break", 0.1)):
+            add_signal("sentiment_break", 2, f"Sentiment dreht bearish bei {sentiment_score:.2f}", sentiment_score, cfg.get("sentiment_break", 0.1))
+
+        if in_market and not in_quiet and rvol >= float(cfg.get("rvol_min", 2.0)):
+            add_signal("rvol_spike", 2, f"RVOL {rvol:.1f}x — erhöhte Aktivität", rvol, cfg.get("rvol_min", 2.0))
+
+        if earnings_days is not None and int(cfg.get("earnings_urgent_days", 5)) < earnings_days <= int(cfg.get("earnings_warning_days", 14)):
+            add_signal("earnings_warning", 2, f"Earnings in {earnings_days} Tagen — vorbereiten", earnings_days, cfg.get("earnings_warning_days", 14))
+
+        if w_torp <= 0 and w_opp >= float(cfg.get("opp_delta_min", 1.5)):
+            add_signal("setup_improving", 3, f"Opp-Score +{w_opp:.1f} diese Woche", w_opp, cfg.get("opp_delta_min", 1.5))
+
+        if in_market and not in_quiet:
+            if rsi <= float(cfg.get("rsi_oversold", 30.0)):
+                add_signal("rsi_oversold", 3, f"RSI {rsi:.0f} — überverkauft", rsi, cfg.get("rsi_oversold", 30.0))
+            elif rsi >= float(cfg.get("rsi_overbought", 70.0)):
+                add_signal("rsi_overbought", 3, f"RSI {rsi:.0f} — überkauft", rsi, cfg.get("rsi_overbought", 70.0))
+
+        if not in_market and earnings_days is not None and 0 <= earnings_days <= 7:
+            preparation_setups.append(
+                {
+                    "ticker": ticker,
+                    "name": item.get("name") or item.get("company_name") or ticker,
+                    "earnings_date": item.get("earnings_date") or item.get("report_date"),
+                    "analysis": f"Vorbereitung auf Earnings in {earnings_days}T: {ticker}",
+                    "interest_score": round(float((item.get("opportunity_score") or 0) + (item.get("torpedo_score") or 0)), 1),
+                }
+            )
+
+    raw_signals.sort(key=lambda sig: (sig["priority"], -abs(float(sig.get("value") or 0))))
+
+    history_cache_key = "signals:history:24h"
+    previous_history = await cache_get(history_cache_key) or []
+    active_keys = {(sig["ticker"], sig["signal_type"]) for sig in raw_signals}
+
+    resolved_signals = []
+    for old in previous_history:
+        if not isinstance(old, dict):
+            continue
+        key = (old.get("ticker"), old.get("signal_type"))
+        if key not in active_keys:
+            resolved_signals.append({
+                **old,
+                "is_resolved": True,
+                "is_new": False,
+            })
+
+    enriched_signals = []
+    for sig in raw_signals[:max_signals]:
+        dedup_key = f"signals:dedup:{sig['ticker']}:{sig['signal_type']}"
+        is_new = await cache_get(dedup_key) is None
+        sig["is_new"] = is_new
+        sig["is_resolved"] = False
+        sig["bullets"] = _compose_signal_bullets(sig.get("_item", {}), sig)
+        
+        # ── Catalyst Clash Warning ────────────────────────────────────
+        catalyst_clash = None
+        if high_impact_today:
+            # Prüfe ob Event in den nächsten 4 Stunden ist
+            from datetime import datetime as _dt, timezone as _tz
+            now_utc = _dt.now(_tz.utc)
+            for ev in high_impact_today:
+                try:
+                    ev_time_str = ev.get("time", "")
+                    if "T" in ev_time_str:
+                        ev_time = _dt.fromisoformat(
+                            ev_time_str.replace("Z", "+00:00")
+                        ).astimezone(_tz.utc)
+                        hours_until = (ev_time - now_utc).total_seconds() / 3600
+                        if -1 <= hours_until <= 4:
+                            catalyst_clash = {
+                                "event":       ev["event"],
+                                "hours_until": round(hours_until, 1),
+                                "warning": (
+                                    f"⚠️ {ev['event']} in "
+                                    f"{'jetzt' if hours_until <= 0 else f'{hours_until:.1f}h'} "
+                                    f"— Trade-Größe reduzieren"
+                                ),
+                            }
+                            break
+                except Exception:
+                    continue
+        sig["catalyst_clash"] = catalyst_clash
+        # ── Ende Catalyst Clash ───────────────────────────────────────
+
+        # ── Short Availability Check ──────────────────────────────────
+        sig["not_shortable"] = False
+        sig["hard_to_borrow"] = False
+
+        is_short_signal = sig.get("signal_type") in (
+            "torpedo_rising", "sma50_break", "sentiment_break"
+        )
+        # Nur für Short-relevante Signale prüfen (spart API-Calls)
+        if is_short_signal:
+            try:
+                from backend.app.data.alpaca_data import get_asset_info
+                asset = await get_asset_info(sig["ticker"])
+                if asset:
+                    sig["not_shortable"]  = not asset.get("shortable", True)
+                    sig["hard_to_borrow"] = not asset.get("easy_to_borrow", True)
+            except Exception as e:
+                logger.debug(f"Short availability {sig['ticker']}: {e}")
+        # ── Ende Short Availability ───────────────────────────────────
+        
+        # Offene Position für diesen Ticker?
+        pos = open_positions.get(sig["ticker"])
+        sig["open_position"] = pos  # None wenn keine Position
+        if pos:
+            # Risiko-Kontext: Signale die eine bestehende Position betreffen sind kritischer
+            # Torpedo-Anstieg bei einer Long-Position = Warnung
+            # Torpedo-Anstieg bei keiner Position = normales Signal
+            direction = pos.get("direction", "long")
+            if sig["signal_type"] == "torpedo_rising" and direction == "long":
+                sig["position_risk"] = "high"
+            elif sig["signal_type"] == "setup_improving" and direction == "long":
+                sig["position_risk"] = "positive"
+            elif sig["signal_type"] == "sma50_break" and direction == "long":
+                sig["position_risk"] = "high"
+            else:
+                sig["position_risk"] = "neutral"
+        else:
+            sig["open_position"] = None
+            sig["position_risk"] = None
+        
+        sig.pop("_item", None)
+        enriched_signals.append(sig)
+        if is_new:
+            await cache_set(dedup_key, True, ttl_seconds=dedup_hours * 3600)
+
+    if not preparation_setups:
+        preparation_setups = [
+            {
+                "ticker": item.get("ticker"),
+                "name": item.get("name") or item.get("company_name") or item.get("ticker"),
+                "earnings_date": item.get("earnings_date") or item.get("report_date"),
+                "analysis": "Keine unmittelbaren Prep-Setups.",
+                "interest_score": round(float((item.get("opportunity_score") or 0) + (item.get("torpedo_score") or 0)), 1),
+            }
+            for item in (watchlist or [])[:3]
+            if isinstance(item, dict) and item.get("ticker")
+        ]
+
+    if enriched_signals:
+        top = enriched_signals[0]
+        today_synthesis = (
+            f"{len(enriched_signals)} aktive Signale. Schwerpunkt: {top['ticker']} / {top['signal_type']}. "
+            f"Regime: {macro_dict.get('regime', 'UNKNOWN')}."
+        )
+        action_brief = (
+            f"Priorisiere {top['ticker']} ({top['signal_type']}). "
+            f"Prüfe nur die stärksten drei Setups und meide neue Positionen in ruhigen Namen."
+        )
+    else:
+        today_synthesis = f"Keine Anomalien aktiv. Regime: {macro_dict.get('regime', 'UNKNOWN')}."
+        action_brief = "Keine aktiven Signalschwerpunkte. Monitoring fortsetzen."
+
+    current_history = [
+        {
+            "ticker": sig["ticker"],
+            "signal_type": sig["signal_type"],
+            "headline": sig["headline"],
+            "priority": sig["priority"],
+            "bullets": sig.get("bullets", []),
+            "generated_at": sig["generated_at"],
+        }
+        for sig in enriched_signals
+    ]
+    await cache_set(history_cache_key, current_history, ttl_seconds=86400)
+
+    # In api_signals_feed(), vor der finalen cache_set-Zeile:
+    has_earnings_today = any(
+        item.get("earnings_today") or item.get("earnings_countdown") == 0
+        for item in watchlist
+    )
+    _feed_ttl = 30 if has_earnings_today else 300
+
+    response = {
+        "signals": enriched_signals,
+        "resolved_signals": resolved_signals[:5],
+        "preparation_setups": preparation_setups[:3],
+        "today_synthesis": today_synthesis,
+        "action_brief": action_brief,
+        "is_market_hours": in_market,
+        "total_count": len(enriched_signals),
+        "tickers_monitored": len(watchlist or []),
+        "feed_generated_at": generated_at,
+        "oldest_data_at": generated_at,
+        "config_snapshot": cfg,
+        "macro_regime": macro_dict.get("regime", "UNKNOWN"),
+        "open_positions_count": len(open_positions),
+        "tickers_with_positions": list(open_positions.keys()),
+        "has_catalyst_clash_today": len(high_impact_today) > 0,
+        "high_impact_events_today": high_impact_today[:3],
+        "has_earnings_today_active": has_earnings_today,
+    }
+    await cache_set(cache_key, response, ttl_seconds=_feed_ttl)
+    if has_earnings_today:
+        logger.info("Earnings Live-Modus: Feed-Cache auf 30s reduziert")
+    return response
+
+
+@router.get("/signal-feed-config")
+async def api_get_signal_feed_config():
+    db = get_supabase_client()
+    if not db:
+        return {"config": _signal_feed_defaults()}
+    try:
+        res = await db.table("signal_feed_config").select("*").execute_async()
+        rows = res.data or []
+        cfg = _signal_feed_defaults()
+        for row in rows:
+            key = row.get("key")
+            value = row.get("value")
+            if key in cfg and isinstance(value, dict):
+                if value.get("enabled", True):
+                    cfg[key] = value.get("value", cfg[key])
+        return {"config": cfg}
+    except Exception as exc:
+        return {"config": _signal_feed_defaults(), "error": str(exc)}
+
+
+@router.post("/signal-feed-config")
+async def api_save_signal_feed_config(body: dict):
+    db = get_supabase_client()
+    if not db:
+        raise HTTPException(status_code=503, detail="DB nicht verfügbar")
+
+    try:
+        payload = body.get("config") if isinstance(body.get("config"), dict) else body
+        for key, value in payload.items():
+            row_value = value if isinstance(value, dict) else {"value": value, "enabled": True}
+            await db.table("signal_feed_config").upsert(
+                {
+                    "key": key,
+                    "value": row_value,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                on_conflict="key",
+            ).execute_async()
+        await cache_invalidate("signals:feed")
+        return {"success": True}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/btc/snapshot")
+async def api_btc_snapshot():
+    """
+    Vollständiger Bitcoin-Snapshot: Kurs, OI, Funding, L/S, Liquidations.
+    Cache: 15 Min (Funding/OI ändern sich langsam).
+    """
+    cache_key = "btc:full_snapshot"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+    try:
+        from backend.app.data.coinglass import get_full_btc_snapshot
+        snapshot = await get_full_btc_snapshot()
+
+        # DXY als BTC-Gegenwind-Indikator (bereits in FRED vorhanden)
+        dxy = None
+        try:
+            from backend.app.data.fred import get_macro_snapshot
+            macro = await get_macro_snapshot()
+            dxy = getattr(macro, "dxy", None) or (macro.get("dxy") if isinstance(macro, dict) else None)
+        except Exception:
+            pass
+
+        snapshot["dxy"] = dxy
+        snapshot["fetched_at"] = datetime.now(timezone.utc).isoformat()
+
+        await cache_set(cache_key, snapshot, ttl_seconds=900)
+        return snapshot
+    except Exception as e:
+        logger.error(f"BTC snapshot: {e}")
+        return {"error": str(e), "price": {}, "fetched_at": datetime.now(timezone.utc).isoformat()}
+
+
+@router.get("/watchlist-momentum")
+async def api_watchlist_momentum():
+    """
+    Relative Stärke aller Watchlist-Ticker vs. SPY.
+    Perioden: 1T, 5T, 20T.
+    Cache: 15 Min (Intraday-Update).
+    """
+    cache_key = "watchlist:momentum"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    watchlist = await get_watchlist()
+    tickers = [w["ticker"].upper() for w in watchlist if w.get("ticker")]
+    if not tickers:
+        return {"rankings": [], "spy_1d": None, "spy_5d": None, "spy_20d": None}
+
+    def _fetch_all(all_tickers: list[str]):
+        import yfinance as yf
+        hist = yf.download(
+            all_tickers + ["SPY"],
+            period="25d",
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+        )["Close"]
+        return hist
+
+    try:
+        hist = await asyncio.to_thread(_fetch_all, tickers)
+
+        # SPY Baseline
+        spy = hist["SPY"] if "SPY" in hist.columns else None
+        spy_1d  = round((float(spy.iloc[-1]) - float(spy.iloc[-2])) / float(spy.iloc[-2]) * 100, 2) if spy is not None and len(spy) >= 2 else None
+        spy_5d  = round((float(spy.iloc[-1]) - float(spy.iloc[-5])) / float(spy.iloc[-5]) * 100, 2) if spy is not None and len(spy) >= 5 else None
+        spy_20d = round((float(spy.iloc[-1]) - float(spy.iloc[-20])) / float(spy.iloc[-20]) * 100, 2) if spy is not None and len(spy) >= 20 else None
+
+        rankings = []
+        for ticker in tickers:
+            col = ticker if ticker in hist.columns else None
+            if col is None:
+                continue
+            prices = hist[col].dropna()
+            if len(prices) < 2:
+                continue
+            p_now  = float(prices.iloc[-1])
+            p_1d   = float(prices.iloc[-2]) if len(prices) >= 2 else p_now
+            p_5d   = float(prices.iloc[-5]) if len(prices) >= 5 else p_now
+            p_20d  = float(prices.iloc[-20]) if len(prices) >= 20 else p_now
+
+            chg_1d  = round((p_now - p_1d)  / p_1d  * 100, 2) if p_1d  else None
+            chg_5d  = round((p_now - p_5d)  / p_5d  * 100, 2) if p_5d  else None
+            chg_20d = round((p_now - p_20d) / p_20d * 100, 2) if p_20d else None
+
+            # Relative Stärke vs. SPY
+            rs_1d  = round(chg_1d  - spy_1d,  2) if chg_1d  is not None and spy_1d  is not None else None
+            rs_5d  = round(chg_5d  - spy_5d,  2) if chg_5d  is not None and spy_5d  is not None else None
+            rs_20d = round(chg_20d - spy_20d, 2) if chg_20d is not None and spy_20d is not None else None
+
+            # Composite Score: 50% 5T + 30% 20T + 20% 1T
+            composite = 0.0
+            weights = 0.0
+            if rs_5d is not None:  composite += rs_5d  * 0.5; weights += 0.5
+            if rs_20d is not None: composite += rs_20d * 0.3; weights += 0.3
+            if rs_1d is not None:  composite += rs_1d  * 0.2; weights += 0.2
+            composite_score = round(composite / weights, 2) if weights > 0 else 0
+
+            rankings.append({
+                "ticker":         ticker,
+                "price":          round(p_now, 2),
+                "chg_1d_pct":     chg_1d,
+                "chg_5d_pct":     chg_5d,
+                "chg_20d_pct":    chg_20d,
+                "rs_1d":          rs_1d,
+                "rs_5d":          rs_5d,
+                "rs_20d":         rs_20d,
+                "composite_score": composite_score,
+                "signal": (
+                    "strong_outperform" if composite_score > 3 else
+                    "outperform"        if composite_score > 1 else
+                    "neutral"           if composite_score > -1 else
+                    "underperform"      if composite_score > -3 else
+                    "strong_underperform"
+                ),
+            })
+
+        # Sortierung: beste relative Stärke zuerst
+        rankings.sort(key=lambda x: x["composite_score"], reverse=True)
+
+        result = {
+            "rankings": rankings,
+            "spy_1d":   spy_1d,
+            "spy_5d":   spy_5d,
+            "spy_20d":  spy_20d,
+            "calculated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await cache_set(cache_key, result, ttl_seconds=900)
+        return result
+
+    except Exception as e:
+        logger.error(f"Watchlist momentum: {e}")
+        return {"rankings": [], "error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ALPACA PAPER TRADING
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/alpaca/account")
+async def api_alpaca_account():
+    """Alpaca Paper Trading Account-Status."""
+    from backend.app.data.alpaca import get_alpaca_account
+    account = await get_alpaca_account()
+    if account is None:
+        return {"configured": False,
+                "message": "ALPACA_API_KEY nicht gesetzt"}
+    return {"configured": True, **account}
+
+
+@router.get("/alpaca/positions")
+async def api_alpaca_positions():
+    """Offene Alpaca Paper-Trading-Positionen."""
+    from backend.app.data.alpaca import get_alpaca_positions
+    positions = await get_alpaca_positions()
+    return {"positions": positions, "count": len(positions)}
+
+
+@router.post("/alpaca/paper-trade")
+async def api_alpaca_paper_trade(body: dict):
+    """
+    Alpaca Paper Trade aus Kafin-Empfehlung eröffnen.
+    Body: ticker, direction ("long"|"short"), qty, stop_loss?,
+          take_profit?, signal_type?, source_signal_id?
+    """
+    from backend.app.data.alpaca import place_market_order, _configured
+    if not _configured():
+        raise HTTPException(status_code=503,
+                            detail="Alpaca nicht konfiguriert")
+
+    ticker    = (body.get("ticker") or "").upper()
+    direction = body.get("direction", "long")
+    qty       = float(body.get("qty", 0))
+
+    if not ticker:
+        raise HTTPException(status_code=400, detail="ticker fehlt")
+    if qty <= 0:
+        raise HTTPException(status_code=400, detail="qty muss > 0 sein")
+
+    side       = "buy" if direction == "long" else "sell"
+    stop_loss  = body.get("stop_loss")
+    take_profit= body.get("take_profit")
+
+    # Client-Order-ID für Rückverfolgung
+    import uuid
+    client_id = f"kafin_{ticker}_{uuid.uuid4().hex[:8]}"
+
+    result = await place_market_order(
+        ticker      = ticker,
+        qty         = qty,
+        side        = side,
+        stop_loss   = float(stop_loss) if stop_loss else None,
+        take_profit = float(take_profit) if take_profit else None,
+        client_order_id = client_id,
+    )
+
+    # Bei Erfolg: auch als Shadow Trade loggen für Kafin-Tracking
+    if result.get("success"):
+        try:
+            from backend.app.analysis.shadow_portfolio import open_shadow_trade
+            await open_shadow_trade(
+                ticker            = ticker,
+                recommendation    = "STRONG BUY" if direction == "long" else "STRONG SHORT",
+                opportunity_score = float(body.get("opportunity_score", 7.0)),
+                torpedo_score     = float(body.get("torpedo_score", 3.0)),
+                trade_reason      = body.get("signal_type", "manual"),
+                manual_entry      = True,
+            )
+        except Exception as e:
+            logger.warning(f"Shadow sync für Alpaca trade: {e}")
+
+    return result
+
+
+def _calc_real_trade_pnl(entry: dict) -> None:
+    """Berechnet PnL für einen Real-Trade serverseitig."""
+    ep = entry.get("entry_price")
+    xp = entry.get("exit_price")
+    sh = entry.get("shares")
+    if ep and xp and sh:
+        direction = entry.get("direction", "long")
+        mult = 1 if direction == "long" else -1
+        pnl = mult * (float(xp) - float(ep)) * float(sh)
+        pnl_pct = mult * ((float(xp) - float(ep)) / float(ep)) * 100
+        entry["pnl"] = round(pnl, 2)
+        entry["pnl_pct"] = round(pnl_pct, 2)
+    else:
+        entry["pnl"] = None
+        entry["pnl_pct"] = None
+
+
+def _calc_snapshot_return(snapshot: dict, price_field: str, return_field: str) -> None:
+    """Fallback-Helfer für Snapshot-Returns, falls Werte nachträglich fehlen."""
+    base = snapshot.get("price_at_decision")
+    price = snapshot.get(price_field)
+    if base and price and snapshot.get(return_field) is None:
+        try:
+            snapshot[return_field] = round(((float(price) - float(base)) / float(base)) * 100, 4)
+        except Exception:
+            snapshot[return_field] = None
+
+
+@router.get("/real-trades")
+async def api_get_real_trades(ticker: str | None = None):
+    db = get_supabase_client()
+    if not db:
+        return {"entries": [], "total": 0}
+
+    try:
+        query = db.table("real_trades").select("*").order("entry_date", desc=True).limit(100)
+        if ticker:
+            query = query.eq("ticker", ticker.upper())
+        result = await query.execute_async()
+        entries = result.data or []
+
+        signal_map: dict[str, list[dict]] = {}
+        try:
+            feed_cache = await cache_get("signals:feed")
+            if feed_cache:
+                for sig in (feed_cache.get("signals") or []):
+                    t = (sig.get("ticker") or "").upper()
+                    if not t:
+                        continue
+                    signal_map.setdefault(t, []).append({
+                        "signal_type": sig.get("signal_type"),
+                        "priority": sig.get("priority"),
+                        "headline": sig.get("headline"),
+                    })
+        except Exception as ex:
+            logger.warning(f"Signal cache for real_trades: {ex}")
+
+        for entry in entries:
+            _calc_real_trade_pnl(entry)
+            if entry.get("exit_date") is None:
+                entry["active_signals"] = signal_map.get((entry.get("ticker") or "").upper(), [])
+            else:
+                entry["active_signals"] = []
+
+        return {"entries": entries, "total": len(entries)}
+    except Exception as ex:
+        logger.error(f"real_trades GET: {ex}")
+        return {"entries": [], "total": 0, "error": str(ex)}
+
+
+@router.post("/real-trades")
+async def api_create_real_trade(body: dict):
+    db = get_supabase_client()
+    if not db:
+        raise HTTPException(status_code=503, detail="DB nicht verfügbar")
+
+    try:
+        ticker = (body.get("ticker") or "").upper().strip()
+        if not ticker:
+            raise HTTPException(status_code=400, detail="ticker fehlt")
+
+        entry_price = float(body.get("entry_price") or 0)
+        if entry_price <= 0:
+            raise HTTPException(status_code=400, detail="entry_price muss > 0 sein")
+
+        record = {
+            "ticker": ticker,
+            "direction": body.get("direction", "long"),
+            "entry_date": str(body.get("entry_date") or datetime.now().strftime("%Y-%m-%d")),
+            "entry_price": entry_price,
+            "shares": float(body.get("shares")) if body.get("shares") not in (None, "") else None,
+            "stop_price": float(body.get("stop_price")) if body.get("stop_price") not in (None, "") else None,
+            "target_price": float(body.get("target_price")) if body.get("target_price") not in (None, "") else None,
+            "thesis": body.get("thesis"),
+            "opportunity_score": float(body.get("opportunity_score")) if body.get("opportunity_score") not in (None, "") else None,
+            "torpedo_score": float(body.get("torpedo_score")) if body.get("torpedo_score") not in (None, "") else None,
+            "recommendation": body.get("recommendation"),
+            "snapshot_id": body.get("snapshot_id"),
+            "alpaca_order_id": body.get("alpaca_order_id"),
+            "exit_date": str(body.get("exit_date")) if body.get("exit_date") not in (None, "") else None,
+            "exit_price": float(body.get("exit_price")) if body.get("exit_price") not in (None, "") else None,
+            "exit_reason": body.get("exit_reason"),
+            "notes": body.get("notes"),
+        }
+
+        result = await db.table("real_trades").insert(record).execute_async()
+        return {"success": True, "entry": (result.data or [{}])[0]}
+    except HTTPException:
+        raise
+    except Exception as ex:
+        logger.error(f"real_trades POST: {ex}")
+        raise HTTPException(status_code=500, detail=str(ex))
+
+
+@router.put("/real-trades/{trade_id}")
+async def api_update_real_trade(trade_id: int, body: dict):
+    db = get_supabase_client()
+    if not db:
+        raise HTTPException(status_code=503, detail="DB nicht verfügbar")
+
+    try:
+        update = {k: v for k, v in body.items() if v is not None}
+        if "ticker" in update and isinstance(update["ticker"], str):
+            update["ticker"] = update["ticker"].upper().strip()
+        if "entry_date" in update:
+            update["entry_date"] = str(update["entry_date"])
+        if "exit_date" in update:
+            update["exit_date"] = str(update["exit_date"])
+        update["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        result = await db.table("real_trades").update(update).eq("id", trade_id).execute_async()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Nicht gefunden")
+        return {"success": True, "entry": result.data[0]}
+    except HTTPException:
+        raise
+    except Exception as ex:
+        logger.error(f"real_trades PUT: {ex}")
+        raise HTTPException(status_code=500, detail=str(ex))
+
+
+@router.delete("/real-trades/{trade_id}")
+async def api_delete_real_trade(trade_id: int):
+    db = get_supabase_client()
+    if not db:
+        raise HTTPException(status_code=503, detail="DB nicht verfügbar")
+
+    try:
+        await db.table("real_trades").delete().eq("id", trade_id).execute_async()
+        return {"success": True}
+    except Exception as ex:
+        logger.error(f"real_trades DELETE: {ex}")
+        raise HTTPException(status_code=500, detail=str(ex))
+
+
+@router.get("/decision-snapshots")
+async def api_get_decision_snapshots(ticker: str | None = None, limit: int = 50):
+    db = get_supabase_client()
+    if not db:
+        return {"snapshots": [], "total": 0}
+
+    try:
+        query = db.table("decision_snapshots").select("*").order("created_at", desc=True).limit(limit)
+        if ticker:
+            query = query.eq("ticker", ticker.upper())
+        result = await query.execute_async()
+        snapshots = result.data or []
+
+        for snapshot in snapshots:
+            _calc_snapshot_return(snapshot, "price_t1", "return_t1_pct")
+            _calc_snapshot_return(snapshot, "price_t5", "return_t5_pct")
+            _calc_snapshot_return(snapshot, "price_t20", "return_t20_pct")
+
+        return {"snapshots": snapshots, "total": len(snapshots)}
+    except Exception as ex:
+        logger.error(f"decision_snapshots GET: {ex}")
+        return {"snapshots": [], "total": 0, "error": str(ex)}
+
+
+@router.post("/decision-snapshots/{snapshot_id}/outcome")
+async def api_update_snapshot_outcome(snapshot_id: int, body: dict):
+    db = get_supabase_client()
+    if not db:
+        raise HTTPException(status_code=503, detail="DB nicht verfügbar")
+
+    try:
+        update: dict = {}
+        for field in [
+            "price_t1",
+            "price_t5",
+            "price_t20",
+            "return_t1_pct",
+            "return_t5_pct",
+            "return_t20_pct",
+            "direction_correct_t1",
+            "direction_correct_t5",
+            "failure_hypothesis",
+            "data_quality_flag",
+        ]:
+            if field in body:
+                update[field] = body[field]
+
+        await db.table("decision_snapshots").update(update).eq("id", snapshot_id).execute_async()
+        return {"success": True}
+    except Exception as ex:
+        logger.error(f"decision_snapshots outcome: {ex}")
+        raise HTTPException(status_code=500, detail=str(ex))
+
+
+@router.post("/decision-snapshots")
+async def api_create_decision_snapshot(body: dict):
+    """
+    Erstellt einen neuen Decision Snapshot manuell.
+    Nützlich für Tests und Batch-Sammlung.
+    """
+    from backend.app.db import get_supabase_client
+    from datetime import datetime
+    
+    logger.info(f"Manueller Decision Snapshot für {body.get('ticker')}")
+    
+    db = get_supabase_client()
+    if not db:
+        raise HTTPException(status_code=500, detail="DB nicht verfügbar")
+    
+    try:
+        # Erforderliche Felder prüfen
+        required_fields = ["ticker", "opportunity_score", "torpedo_score", "recommendation", "prompt_text", "report_text"]
+        for field in required_fields:
+            if field not in body:
+                raise HTTPException(status_code=400, detail=f"Fehlendes Feld: {field}")
+        
+        # Payload mit Defaults ergänzen
+        payload = {
+            "ticker": body["ticker"].upper(),
+            "created_at": datetime.utcnow().isoformat(),
+            "opportunity_score": float(body["opportunity_score"]),
+            "torpedo_score": float(body["torpedo_score"]),
+            "recommendation": body["recommendation"],
+            "prompt_text": body["prompt_text"],
+            "report_text": body["report_text"],
+            "macro_regime": body.get("macro_regime"),
+            "vix": body.get("vix"),
+            "price_at_decision": body.get("price_at_decision"),
+            "rsi_at_decision": body.get("rsi_at_decision"),
+            "iv_atm_at_decision": body.get("iv_atm_at_decision"),
+            "earnings_date": body.get("earnings_date"),
+            "model_used": body.get("model_used", "manual"),
+            "trade_type": body.get("trade_type", "momentum"),
+            "earnings_countdown_at_decision": body.get("earnings_countdown_at_decision"),
+            "data_quality_flag": body.get("data_quality_flag", "good"),
+        }
+        
+        result = await db.table("decision_snapshots").insert(payload).execute_async()
+        logger.info(f"Decision Snapshot für {body['ticker']} manuell gespeichert")
+        
+        return {"success": True, "id": result.data[0]["id"] if result.data else None}
+    
+    except Exception as ex:
+        logger.error(f"Manueller Decision Snapshot fehlgeschlagen: {ex}")
+        raise HTTPException(status_code=500, detail=str(ex))
+
+
+@router.post("/decision-snapshots/update-outcomes")
+async def api_update_snapshot_outcomes_batch():
+    """
+    Aktualisiert T+1, T+5, T+20 Outcomes für alle Snapshots ohne Returns.
+    Lädt historische Preise via yfinance und berechnet Returns.
+    """
+    from backend.app.database import get_pool
+    import asyncio
+    import yfinance as yf
+    from datetime import datetime, timedelta
+
+    logger.info("Starte batch Outcome-Update für Decision Snapshots")
+
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            # Snapshots ohne Returns finden (älter als 1 Tag, um T+1 zu ermöglichen)
+            cutoff_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+            rows = await conn.fetch("""
+                SELECT id, ticker, decision_date, recommendation, opportunity_score, torpedo_score
+                FROM decision_snapshots
+                WHERE decision_date <= $1
+                  AND (price_t1 IS NULL OR price_t5 IS NULL OR price_t20 IS NULL)
+                ORDER BY decision_date DESC
+                LIMIT 100
+            """, cutoff_date)
+
+            if not rows:
+                return {"updated": 0, "checked": 0, "message": "Keine Snapshots zum Updaten gefunden"}
+
+            logger.info(f"Gefunden: {len(rows)} Snapshots zum Updaten")
+
+            # Preise in Batches laden (Performance)
+            tickers_set = {row["ticker"] for row in rows}
+            prices_by_ticker = {}
+
+            # Historische Preise für jeden Ticker laden
+            for ticker in tickers_set:
+                try:
+                    # yfinance synchron in asyncio.to_thread ausführen
+                    def fetch_prices(t):
+                        stock = yf.Ticker(t)
+                        # 30 Tage History für T+20 Coverage
+                        hist = stock.history(period="30d")
+                        if hist.empty:
+                            return {}
+                        return {
+                            "dates": hist.index.strftime("%Y-%m-%d").tolist(),
+                            "close": hist["Close"].tolist(),
+                        }
+
+                    price_data = await asyncio.to_thread(fetch_prices, ticker)
+                    if price_data:
+                        prices_by_ticker[ticker] = price_data
+                except Exception as e:
+                    logger.warning(f"yfinance Preis-Lade für {ticker}: {e}")
+
+            updated = 0
+            checked = 0
+
+            # Jeden Snapshot updaten
+            for row in rows:
+                checked += 1
+                ticker = row["ticker"]
+                decision_date = row["decision_date"]
+                prices = prices_by_ticker.get(ticker)
+
+                if not prices:
+                    logger.warning(f"Keine Preisdaten für {ticker}")
+                    continue
+
+                try:
+                    # Date-Index finden
+                    dates = prices["dates"]
+                    close_prices = prices["close"]
+
+                    # Decision-Date Index
+                    if decision_date not in dates:
+                        logger.warning(f"Decision Date {decision_date} nicht in Preisdaten für {ticker}")
+                        continue
+
+                    dec_idx = dates.index(decision_date)
+                    updates = {}
+
+                    # T+1 (nächster Handelstag)
+                    if dec_idx + 1 < len(dates):
+                        price_t1 = close_prices[dec_idx + 1]
+                        updates["price_t1"] = float(price_t1)
+                        # Return berechnen (wenn wir auch Decision-Preis haben)
+                        if dec_idx < len(close_prices):
+                            price_decision = close_prices[dec_idx]
+                            if price_decision > 0:
+                                updates["return_t1_pct"] = round(((price_t1 - price_decision) / price_decision) * 100, 2)
+                                # Direction correctness
+                                direction = "long" if row["recommendation"] in ["buy", "long"] else "short"
+                                if direction == "long":
+                                    updates["direction_correct_t1"] = updates["return_t1_pct"] > 0
+                                else:
+                                    updates["direction_correct_t1"] = updates["return_t1_pct"] < 0
+
+                    # T+5
+                    if dec_idx + 5 < len(dates):
+                        price_t5 = close_prices[dec_idx + 5]
+                        updates["price_t5"] = float(price_t5)
+                        if dec_idx < len(close_prices):
+                            price_decision = close_prices[dec_idx]
+                            if price_decision > 0:
+                                updates["return_t5_pct"] = round(((price_t5 - price_decision) / price_decision) * 100, 2)
+
+                    # T+20
+                    if dec_idx + 20 < len(dates):
+                        price_t20 = close_prices[dec_idx + 20]
+                        updates["price_t20"] = float(price_t20)
+                        if dec_idx < len(close_prices):
+                            price_decision = close_prices[dec_idx]
+                            if price_decision > 0:
+                                updates["return_t20_pct"] = round(((price_t20 - price_decision) / price_decision) * 100, 2)
+
+                    # DB Update
+                    if updates:
+                        set_clauses = []
+                        values = []
+                        param_idx = 1
+                        for field, value in updates.items():
+                            set_clauses.append(f"{field} = ${param_idx}")
+                            values.append(value)
+                            param_idx += 1
+
+                        values.append(row["id"])  # WHERE id
+
+                        await conn.execute(f"""
+                            UPDATE decision_snapshots
+                            SET {', '.join(set_clauses)}
+                            WHERE id = ${param_idx}
+                        """, *values)
+
+                        updated += 1
+                        logger.debug(f"Snapshot {row['id']} ({ticker}) aktualisiert: {list(updates.keys())}")
+
+                except Exception as e:
+                    logger.warning(f"Fehler beim Update von Snapshot {row['id']} ({ticker}): {e}")
+
+            logger.info(f"Batch Outcome-Update abgeschlossen: {updated}/{checked} Snapshots aktualisiert")
+            return {
+                "updated": updated,
+                "checked": checked,
+                "message": f"{updated} von {checked} Snapshots aktualisiert"
+            }
+
+    except Exception as e:
+        logger.error(f"Batch Outcome-Update Fehler: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/lernpfade-stats")
+async def api_lernpfade_stats():
+    """
+    Aggregierte Statistiken beider Lernpfade für die Performance-Unterseite.
+    Cache: 10 Min.
+    """
+    cache_key = "lernpfade:stats"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT
+                    trade_type,
+                    COUNT(*)                                          AS total,
+                    COUNT(*) FILTER (WHERE return_t5_pct IS NOT NULL) AS with_outcome,
+                    COUNT(*) FILTER (
+                        WHERE direction_correct_t5 = TRUE
+                    )                                                 AS correct_t5,
+                    AVG(return_t5_pct)
+                        FILTER (WHERE return_t5_pct IS NOT NULL)      AS avg_return_t5,
+                    COUNT(*) FILTER (
+                        WHERE data_quality_flag IS NOT NULL
+                          AND data_quality_flag != 'good'
+                    )                                                 AS data_issues
+                FROM decision_snapshots
+                GROUP BY trade_type
+            """)
+
+        def _stats(row) -> dict:
+            if not row:
+                return {
+                    "total": 0, "with_outcome": 0, "correct_t5": 0,
+                    "accuracy_t5_pct": None, "avg_return_t5": None,
+                    "data_quality_issues": 0, "by_recommendation": {},
+                }
+            total   = row["total"] or 0
+            w_out   = row["with_outcome"] or 0
+            correct = row["correct_t5"] or 0
+            return {
+                "total":          total,
+                "with_outcome":   w_out,
+                "correct_t5":     correct,
+                "accuracy_t5_pct": round((correct / w_out) * 100, 1)
+                                   if w_out > 0 else None,
+                "avg_return_t5":  round(float(row["avg_return_t5"]), 2)
+                                   if row["avg_return_t5"] else None,
+                "data_quality_issues": row["data_issues"] or 0,
+                "by_recommendation": {},
+            }
+
+        row_map = {r["trade_type"]: r for r in rows}
+        MIN_FOR_CALIBRATION = 15
+
+        result = {
+            "earnings":   _stats(row_map.get("earnings")),
+            "momentum":   _stats(row_map.get("momentum")),
+            "total_snapshots": sum(r["total"] or 0 for r in rows),
+            "min_snapshots_for_calibration": MIN_FOR_CALIBRATION,
+            "calibration_ready": (
+                (_stats(row_map.get("earnings"))["with_outcome"] >= MIN_FOR_CALIBRATION)
+                and
+                (_stats(row_map.get("momentum"))["with_outcome"] >= MIN_FOR_CALIBRATION)
+            ),
+        }
+        await cache_set(cache_key, result, ttl_seconds=600)
+        return result
+
+    except Exception as e:
+        logger.error(f"Lernpfade stats: {e}")
+        return {
+            "earnings": {"total": 0, "with_outcome": 0, "correct_t5": 0,
+                          "accuracy_t5_pct": None, "avg_return_t5": None,
+                          "data_quality_issues": 0, "by_recommendation": {}},
+            "momentum": {"total": 0, "with_outcome": 0, "correct_t5": 0,
+                          "accuracy_t5_pct": None, "avg_return_t5": None,
+                          "data_quality_issues": 0, "by_recommendation": {}},
+            "total_snapshots": 0,
+            "min_snapshots_for_calibration": 15,
+            "calibration_ready": False,
+            "error": str(e),
+        }

@@ -1,0 +1,2 @@
+-- Basis-Daten (optional, leer lassen)
+-- Watchlist wird über API befüllt

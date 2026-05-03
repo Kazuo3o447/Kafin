@@ -1,0 +1,29 @@
+{
+    "data": [
+        {
+            "date": "2026-03-01",
+            "shortInterest": 150000000,
+            "shortPercentOfFloat": 1.05,
+            "volume": 50000000
+        },
+        {
+            "date": "2026-02-15",
+            "shortInterest": 145000000,
+            "shortPercentOfFloat": 1.01,
+            "volume": 48000000
+        },
+        {
+            "date": "2026-02-01",
+            "shortInterest": 140000000,
+            "shortPercentOfFloat": 0.98,
+            "volume": 45000000
+        },
+        {
+            "date": "2026-01-15",
+            "shortInterest": 138000000,
+            "shortPercentOfFloat": 0.95,
+            "volume": 52000000
+        }
+    ],
+    "symbol": "AAPL"
+}

@@ -1,0 +1,25 @@
+# Python build / cache
+__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+venv/
+env/
+.pytest_cache/
+htmlcov/
+
+# Logs / runtime artifacts
+logs/
+*.log
+*.sqlite
+*.db
+
+# Tests / scripts not needed for image build
+tests/
+scripts/
+
+# VCS / IDE
+.git
+.github
+.vscode
+.idea

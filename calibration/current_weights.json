@@ -1,0 +1,11 @@
+{
+  "growth_market": 18,
+  "unit_economics_margins": 14,
+  "quality_moat": 18,
+  "valuation": 14,
+  "capital_discipline_dilution": 12,
+  "catalysts_revisions_sentiment": 12,
+  "risk_fragility": 12,
+  "version": "0.1.0",
+  "source": "research.md section 9.1"
+}

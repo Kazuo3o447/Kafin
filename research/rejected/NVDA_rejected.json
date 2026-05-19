@@ -1,0 +1,4 @@
+{
+  "reason": "missing required fields: revenue_5y, revenue_growth_5y, gross_margin_5y, operating_margin_5y, fcf_margin_5y, roic, share_count_trend_3y, sbc_to_revenue, sbc_to_ocf, ev_to_gross_profit",
+  "ticker": "NVDA"
+}

@@ -1,0 +1,23 @@
+Metadata-Version: 2.4
+Name: trading-research-platform
+Version: 0.1.0
+Summary: Local-first trading research and audit platform scaffold.
+Requires-Python: >=3.11
+Requires-Dist: apscheduler>=3.10
+Requires-Dist: fastapi>=0.115
+Requires-Dist: langchain-openai>=0.2
+Requires-Dist: langgraph>=0.2
+Requires-Dist: pandas>=2.2
+Requires-Dist: psycopg[binary]>=3.2
+Requires-Dist: pydantic>=2.8
+Requires-Dist: python-multipart>=0.0.9
+Requires-Dist: python-dotenv>=1.0
+Requires-Dist: redis>=5.0
+Requires-Dist: streamlit>=1.38
+Requires-Dist: torch>=2.4
+Requires-Dist: transformers>=4.46
+Requires-Dist: uvicorn[standard]>=0.30
+Requires-Dist: yfinance>=0.2
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3; extra == "dev"
+Requires-Dist: ruff>=0.6; extra == "dev"

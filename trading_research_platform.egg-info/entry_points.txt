@@ -1,0 +1,3 @@
+[console_scripts]
+platform-replay = scripts.replay:main
+platform-run = pipeline.run:main

@@ -1,0 +1,4 @@
+{
+  "reason": "missing required fields: revenue_5y, revenue_growth_5y, gross_margin_5y, operating_margin_5y, fcf_margin_5y, roic, net_debt_to_ebitda, share_count_trend_3y, sbc_to_revenue, sbc_to_ocf, forward_pe, ev_to_sales, ev_to_gross_profit, week_52_high, sma_200, sma_50, average_daily_volume_30d, next_earnings_date, last_earnings_surprise",
+  "ticker": "HIMS"
+}

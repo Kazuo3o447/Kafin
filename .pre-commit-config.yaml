@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: forbidden-trading-imports
+        name: Block broker and exchange SDK imports
+        entry: python scripts/check_forbidden_imports.py
+        language: system
+        files: "\\.py$"

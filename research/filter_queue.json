@@ -1,0 +1,21 @@
+[
+  {
+    "market_regime": "risk_off",
+    "news_count": 20,
+    "note": null,
+    "priority": "high",
+    "reason": "neutral sentiment -0.04 with 20 recent news items",
+    "sentiment": {
+      "counts": {
+        "negative": 4,
+        "neutral": 12,
+        "positive": 4
+      },
+      "label": "neutral",
+      "model": "ProsusAI/finbert",
+      "reason": null,
+      "score": -0.0352
+    },
+    "ticker": "NVDA"
+  }
+]

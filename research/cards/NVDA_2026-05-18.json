@@ -1,0 +1,214 @@
+{
+  "bear_case": [
+    "Qualitative Moat-, Wettbewerbs- und Bewertungsanalyse benoetigt DeepSeek- und Quellenlauf.",
+    "Gesamtmarkt-Sentiment ist aktuell negativ und kann das Setup belasten."
+  ],
+  "bull_case": [
+    "Kennzahlen-Snapshot ist vollstaendig genug fuer eine erste Research-Card."
+  ],
+  "catalysts": [
+    "[positive] Morgan Stanley Issues Positive Forecast for NVIDIA (NASDAQ:NVDA) Stock Price - MarketBeat",
+    "[positive] Nvidia in spotlight as GF Securities, KeyBanc up price targets ahead of Q1 results (NVDA:NASDAQ) - Seeking Alpha",
+    "[neutral] What's Going On With NVIDIA Stock Monday? - NVIDIA (NASDAQ:NVDA) - Benzinga",
+    "[positive] Why Nvidia (NVDA) Stock Is Up Today - Yahoo Finance",
+    "[neutral] NVDA Stock Price, Quote & Chart | NVIDIA CORP (NASDAQ:NVDA) - ChartMill"
+  ],
+  "category": "Too Hard",
+  "company_name": "NVIDIA Corp",
+  "company_sentiment": {
+    "counts": {
+      "negative": 4,
+      "neutral": 12,
+      "positive": 4
+    },
+    "label": "neutral",
+    "model": "ProsusAI/finbert",
+    "reason": null,
+    "score": -0.0352
+  },
+  "confidence": "low",
+  "exchange": "NASDAQ NMS - GLOBAL MARKET",
+  "falsification_tests": [
+    "Score um mindestens 20 Punkte senken, falls Umsatzwachstum oder Marge klar verfehlt.",
+    "Gate auf Red setzen, falls Verwaesserung oder SBC nicht belegt werden kann."
+  ],
+  "gate": "Yellow",
+  "growth_research_score": 65,
+  "handoff_to_trade_engine": false,
+  "hard_blockers": [
+    "fmp_profile failed: HTTP Error 403: Forbidden",
+    "fmp_income_statement failed: HTTP Error 403: Forbidden",
+    "fmp_cashflow_statement failed: HTTP Error 403: Forbidden",
+    "fmp_key_metrics failed: HTTP Error 403: Forbidden"
+  ],
+  "industry": "Semiconductors",
+  "key_metrics": {
+    "analyst_recommendation_score": 1.2535,
+    "analyst_recommendation_total": 71,
+    "average_daily_dollar_volume_30d": 30471681293.700066,
+    "average_daily_volume_30d": 170869245,
+    "bid_ask_spread_pct": 0.5663557703112668,
+    "days_since_52w_high": 4,
+    "ev_to_gross_profit": 35.344885273766316,
+    "ev_to_sales": 25.119,
+    "fcf_margin_5y": 0.37468178785940054,
+    "forward_pe": 19.569466,
+    "gross_margin_5y": 0.6892581229928632,
+    "instrument_type": "equity",
+    "last_earnings_surprise": 3.6203,
+    "market_cap_usd": 5388340035584,
+    "net_debt_to_ebitda": 7.255,
+    "next_earnings_date": "2026-05-20",
+    "operating_margin_5y": 0.4939908487518491,
+    "price": 222.475,
+    "revenue_5y": 215938000000.0,
+    "revenue_growth_5y": 1.0004509499443963,
+    "roic": 0.8266572834246297,
+    "sbc_to_ocf": 0.18566523730987478,
+    "sbc_to_revenue": 0.05613946246998441,
+    "share_count_trend_3y": 0.008651488332999113,
+    "sma_200": 186.1821726989746,
+    "sma_200_trending_up": true,
+    "sma_50": 193.9638021850586,
+    "week_52_high": 236.54
+  },
+  "llm_metadata": {
+    "error": "DeepSeek API unavailable at https://api.deepseek.com: HTTP Error 402: Payment Required",
+    "provider": "deepseek"
+  },
+  "market_sentiment": {
+    "counts": {
+      "negative": 9,
+      "neutral": 9,
+      "positive": 2
+    },
+    "label": "negative",
+    "model": "ProsusAI/finbert",
+    "reason": null,
+    "score": -0.3512
+  },
+  "moat_assessment": {
+    "evidence": [],
+    "rating": "Unknown",
+    "sources": [],
+    "threats": [
+      "Moat wurde im Scaffold noch nicht qualitativ belegt."
+    ]
+  },
+  "news_digest": [
+    {
+      "id": "CBMixgFBVV95cUxQUDJ3dnhJaVF1QmxKRW1saW5JUE1SemN6bXRKT0pIWDI3N0Yxb0dxNEN3aTRDempxbWZMQjNBdWRlcXJtdlB4encydmFpeW5BNElnSHNacDBfa2o3dDN5SHJ5SDB2T0RULWxKR2ZUeGZxemludkRiajdvdnRGSGdubHotUGVxcEhWRy0ydm5sQ3pyVkdZb3NpZXlxUWpXRjRHSzVlamhFUGV0RkEtOENWME5aa0FQV3ZXblJ1X3J5dHl5TExwR1E",
+      "published_at": "Mon, 18 May 2026 12:58:39 GMT",
+      "sentiment_label": "positive",
+      "sentiment_score": 0.8557,
+      "source": "MarketBeat",
+      "source_type": "rss",
+      "summary": "<a href=\"https://news.google.com/rss/articles/CBMixgFBVV95cUxQUDJ3dnhJaVF1QmxKRW1saW5JUE1SemN6bXRKT0pIWDI3N0Yxb0dxNEN3aTRDempxbWZMQjNBdWRlcXJtdlB4encydmFpeW5BNElnSHNacDBfa2o3dDN5SHJ5SDB2T0RULWxKR2ZUeGZxemludkRiajdvdnRGSGdubHotUGVxcEhWRy0ydm5sQ3pyVkdZb3NpZXlxUWpXRjRHSzVlamhFUGV0RkEtOENWME5aa0FQV3ZXblJ1X3J5dHl5TExwR1E?oc=5\" target=\"_blank\">Morgan Stanley Issues Positive Forecast for NVIDIA (NASDAQ:NVDA) Stock Price</a>&nbsp;&nbsp;<font color=\"#6f6f6f\">MarketBeat</font>",
+      "title": "Morgan Stanley Issues Positive Forecast for NVIDIA (NASDAQ:NVDA) Stock Price - MarketBeat",
+      "url": "https://news.google.com/rss/articles/CBMixgFBVV95cUxQUDJ3dnhJaVF1QmxKRW1saW5JUE1SemN6bXRKT0pIWDI3N0Yxb0dxNEN3aTRDempxbWZMQjNBdWRlcXJtdlB4encydmFpeW5BNElnSHNacDBfa2o3dDN5SHJ5SDB2T0RULWxKR2ZUeGZxemludkRiajdvdnRGSGdubHotUGVxcEhWRy0ydm5sQ3pyVkdZb3NpZXlxUWpXRjRHSzVlamhFUGV0RkEtOENWME5aa0FQV3ZXblJ1X3J5dHl5TExwR1E?oc=5"
+    },
+    {
+      "id": "CBMisAFBVV95cUxPeDBJdFhsNzdldHNQTkk1X0dtc3NBcm16bTVZM3JNSjlRQVdGTGFsTFUxWGRLTlNtMlhSamFTTmZYd0dtVEFhaVlJaWE1QlFyOWxxbHFjNHdEamJJUnl3czhNbHFyZDhkRXJvdFp1OC1KUXdsdHRkdGc1clRmZWpJX1g4M2doWkNyNEc4dG1tSXU0TE5pV1JLLU8zclFnVXpOcDRmOVBZUnFzZUxlM1NqVQ",
+      "published_at": "Mon, 18 May 2026 12:42:00 GMT",
+      "sentiment_label": "positive",
+      "sentiment_score": 0.606,
+      "source": "Seeking Alpha",
+      "source_type": "rss",
+      "summary": "<a href=\"https://news.google.com/rss/articles/CBMisAFBVV95cUxPeDBJdFhsNzdldHNQTkk1X0dtc3NBcm16bTVZM3JNSjlRQVdGTGFsTFUxWGRLTlNtMlhSamFTTmZYd0dtVEFhaVlJaWE1QlFyOWxxbHFjNHdEamJJUnl3czhNbHFyZDhkRXJvdFp1OC1KUXdsdHRkdGc1clRmZWpJX1g4M2doWkNyNEc4dG1tSXU0TE5pV1JLLU8zclFnVXpOcDRmOVBZUnFzZUxlM1NqVQ?oc=5\" target=\"_blank\">Nvidia in spotlight as GF Securities, KeyBanc up price targets ahead of Q1 results (NVDA:NASDAQ)</a>&nbsp;&nbsp;<font color=\"#6f6f6f\">Seeking Alpha</font>",
+      "title": "Nvidia in spotlight as GF Securities, KeyBanc up price targets ahead of Q1 results (NVDA:NASDAQ) - Seeking Alpha",
+      "url": "https://news.google.com/rss/articles/CBMisAFBVV95cUxPeDBJdFhsNzdldHNQTkk1X0dtc3NBcm16bTVZM3JNSjlRQVdGTGFsTFUxWGRLTlNtMlhSamFTTmZYd0dtVEFhaVlJaWE1QlFyOWxxbHFjNHdEamJJUnl3czhNbHFyZDhkRXJvdFp1OC1KUXdsdHRkdGc1clRmZWpJX1g4M2doWkNyNEc4dG1tSXU0TE5pV1JLLU8zclFnVXpOcDRmOVBZUnFzZUxlM1NqVQ?oc=5"
+    },
+    {
+      "id": "CBMizwFBVV95cUxNaGVneGVUa2ZJTERHTlFYMWJBYWk5N3FjOGNDRTFjSDZDYnp2bDZWNnVaQU00UkdFa3FmTGNTT0s3dUVZMEFZR3A4YWZOdHp0Ri15bjU5cVlYcWwzbGR0MktEYzJrZ1V4bmdCWHB0Q01iU2lvbUt5RDAwTUVkajN2VURpczVUWHg0SUkxOUR2VHpwZ3djVjZIRENTSmJaWklGWnpOREhPSXdzRmd0aXhmaHY5S0M1aWVOak1BUnEyQVk5MTUwY3lNNmhwTS1oRFU",
+      "published_at": "Mon, 18 May 2026 10:52:02 GMT",
+      "sentiment_label": "neutral",
+      "sentiment_score": 0.0,
+      "source": "Benzinga",
+      "source_type": "rss",
+      "summary": "<a href=\"https://news.google.com/rss/articles/CBMizwFBVV95cUxNaGVneGVUa2ZJTERHTlFYMWJBYWk5N3FjOGNDRTFjSDZDYnp2bDZWNnVaQU00UkdFa3FmTGNTT0s3dUVZMEFZR3A4YWZOdHp0Ri15bjU5cVlYcWwzbGR0MktEYzJrZ1V4bmdCWHB0Q01iU2lvbUt5RDAwTUVkajN2VURpczVUWHg0SUkxOUR2VHpwZ3djVjZIRENTSmJaWklGWnpOREhPSXdzRmd0aXhmaHY5S0M1aWVOak1BUnEyQVk5MTUwY3lNNmhwTS1oRFU?oc=5\" target=\"_blank\">What's Going On With NVIDIA Stock Monday? - NVIDIA (NASDAQ:NVDA)</a>&nbsp;&nbsp;<font color=\"#6f6f6f\">Benzinga</font>",
+      "title": "What's Going On With NVIDIA Stock Monday? - NVIDIA (NASDAQ:NVDA) - Benzinga",
+      "url": "https://news.google.com/rss/articles/CBMizwFBVV95cUxNaGVneGVUa2ZJTERHTlFYMWJBYWk5N3FjOGNDRTFjSDZDYnp2bDZWNnVaQU00UkdFa3FmTGNTT0s3dUVZMEFZR3A4YWZOdHp0Ri15bjU5cVlYcWwzbGR0MktEYzJrZ1V4bmdCWHB0Q01iU2lvbUt5RDAwTUVkajN2VURpczVUWHg0SUkxOUR2VHpwZ3djVjZIRENTSmJaWklGWnpOREhPSXdzRmd0aXhmaHY5S0M1aWVOak1BUnEyQVk5MTUwY3lNNmhwTS1oRFU?oc=5"
+    },
+    {
+      "id": "CBMilwFBVV95cUxOVENKSkFxNlRDdE9PbUNjWlFwWmJLblJpQ0ZmUUl4blhkS1haVEcwZi1oNXJyRFBwTVRPMFpTVGdnZTd3dkJoOC1qRmxLTV9ReFdqZ0RtdVE4MnliWFluVU5hTmRxVDE4YjRSRFZLYW84MUVaSldLQkVwWVJWQVlJbk12aUZPbnFXTVpNcF82SXJsb2RRRUZv",
+      "published_at": "Thu, 14 May 2026 12:04:55 GMT",
+      "sentiment_label": "positive",
+      "sentiment_score": 0.8345,
+      "source": "Yahoo Finance",
+      "source_type": "rss",
+      "summary": "<a href=\"https://news.google.com/rss/articles/CBMilwFBVV95cUxOVENKSkFxNlRDdE9PbUNjWlFwWmJLblJpQ0ZmUUl4blhkS1haVEcwZi1oNXJyRFBwTVRPMFpTVGdnZTd3dkJoOC1qRmxLTV9ReFdqZ0RtdVE4MnliWFluVU5hTmRxVDE4YjRSRFZLYW84MUVaSldLQkVwWVJWQVlJbk12aUZPbnFXTVpNcF82SXJsb2RRRUZv?oc=5\" target=\"_blank\">Why Nvidia (NVDA) Stock Is Up Today</a>&nbsp;&nbsp;<font color=\"#6f6f6f\">Yahoo Finance</font>",
+      "title": "Why Nvidia (NVDA) Stock Is Up Today - Yahoo Finance",
+      "url": "https://news.google.com/rss/articles/CBMilwFBVV95cUxOVENKSkFxNlRDdE9PbUNjWlFwWmJLblJpQ0ZmUUl4blhkS1haVEcwZi1oNXJyRFBwTVRPMFpTVGdnZTd3dkJoOC1qRmxLTV9ReFdqZ0RtdVE4MnliWFluVU5hTmRxVDE4YjRSRFZLYW84MUVaSldLQkVwWVJWQVlJbk12aUZPbnFXTVpNcF82SXJsb2RRRUZv?oc=5"
+    },
+    {
+      "id": "CBMiX0FVX3lxTFA2c2djMVlPLWJnUmFWc2haY2otdTZmUnlQZlpNNEtHbk8xNzJKRGF1eU5zR3Jod0N3eVNhcFJrVlBmbG51QWctOEZnVVhRQ3F5MEZiZTRMcTdkOWpHZWpj",
+      "published_at": "Fri, 15 May 2026 07:00:00 GMT",
+      "sentiment_label": "neutral",
+      "sentiment_score": 0.0,
+      "source": "ChartMill",
+      "source_type": "rss",
+      "summary": "<a href=\"https://news.google.com/rss/articles/CBMiX0FVX3lxTFA2c2djMVlPLWJnUmFWc2haY2otdTZmUnlQZlpNNEtHbk8xNzJKRGF1eU5zR3Jod0N3eVNhcFJrVlBmbG51QWctOEZnVVhRQ3F5MEZiZTRMcTdkOWpHZWpj?oc=5\" target=\"_blank\">NVDA Stock Price, Quote & Chart | NVIDIA CORP (NASDAQ:NVDA)</a>&nbsp;&nbsp;<font color=\"#6f6f6f\">ChartMill</font>",
+      "title": "NVDA Stock Price, Quote & Chart | NVIDIA CORP (NASDAQ:NVDA) - ChartMill",
+      "url": "https://news.google.com/rss/articles/CBMiX0FVX3lxTFA2c2djMVlPLWJnUmFWc2haY2otdTZmUnlQZlpNNEtHbk8xNzJKRGF1eU5zR3Jod0N3eVNhcFJrVlBmbG51QWctOEZnVVhRQ3F5MEZiZTRMcTdkOWpHZWpj?oc=5"
+    }
+  ],
+  "open_questions": [
+    "Welche Quellen belegen Wachstum, Moat und Bewertungsannahmen?",
+    "Welche Red-Team-Gegenbeispiele gibt es im selben Sektor?"
+  ],
+  "red_flags": [
+    "fmp_profile failed: HTTP Error 403: Forbidden",
+    "fmp_income_statement failed: HTTP Error 403: Forbidden",
+    "fmp_cashflow_statement failed: HTTP Error 403: Forbidden",
+    "fmp_key_metrics failed: HTTP Error 403: Forbidden"
+  ],
+  "research_date": "2026-05-18",
+  "score_breakdown": {
+    "capital_discipline_dilution": 10,
+    "catalysts_revisions_sentiment": 5,
+    "growth_market": 18,
+    "quality_moat": 18,
+    "risk_fragility": 0,
+    "unit_economics_margins": 14,
+    "valuation": 0
+  },
+  "sector": "Technology",
+  "source_list": [
+    {
+      "evidence_class": "B",
+      "name": "yfinance"
+    },
+    {
+      "evidence_class": "B",
+      "name": "finnhub_profile2"
+    },
+    {
+      "evidence_class": "B",
+      "name": "finnhub_earnings"
+    },
+    {
+      "evidence_class": "B",
+      "name": "finnhub_recommendation"
+    },
+    {
+      "evidence_class": "B",
+      "name": "finnhub_company_news"
+    },
+    {
+      "evidence_class": "B",
+      "name": "finnhub_earnings_calendar"
+    },
+    {
+      "evidence_class": "C",
+      "name": "google_news_rss"
+    },
+    {
+      "evidence_class": "B",
+      "name": "tavily_search"
+    }
+  ],
+  "status": "research_complete",
+  "technical_assessment": "",
+  "thesis_summary": "Lokale Phase-1-Research-Card auf Basis validierter Snapshot-Daten. Diese Card ist keine Kaufempfehlung und kein Trade-Signal.",
+  "ticker": "NVDA"
+}
